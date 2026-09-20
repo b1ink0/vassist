@@ -25,12 +25,26 @@ contextBridge.exposeInMainWorld("electron", {
     frontendReady: () => ipcRenderer.invoke("window:frontend-ready"),
     setPosition: (x: number, y: number) =>
       ipcRenderer.invoke("window:set-position", x, y),
+    setBounds: (x: number, y: number, width: number, height: number) =>
+      ipcRenderer.invoke("window:set-bounds", x, y, width, height),
     getPosition: () => ipcRenderer.invoke("window:get-position"),
     getCursorScreenPoint: () =>
       ipcRenderer.invoke("window:get-cursor-screen-point"),
     setSize: (width: number, height: number) =>
       ipcRenderer.invoke("window:set-size", width, height),
     getSize: () => ipcRenderer.invoke("window:get-size"),
+    getDesktopMode: () => ipcRenderer.invoke("window:get-desktop-mode"),
+    setDesktopMode: (
+      request:
+        | "floating-app"
+        | "app"
+        | "live-wallpaper"
+        | {
+            mode: "floating-app" | "app" | "live-wallpaper";
+            liveWallpaperInteraction?: "non-interactive" | "interactive";
+            controlPlacement?: "attached" | "detached";
+          },
+    ) => ipcRenderer.invoke("window:set-desktop-mode", request),
     updateWindowSizeForZoom: (modelWidth: number, modelHeight: number) =>
       ipcRenderer.invoke(
         "window:update-size-for-zoom",

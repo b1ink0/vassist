@@ -7,12 +7,27 @@ import type {
   IpcMainInvokeEvent,
   WebContents,
 } from "electron";
+import type {
+  DesktopMode,
+  DesktopModeRequest,
+  DesktopControlPlacement,
+  LiveWallpaperInteraction,
+} from "../windows/desktopMode";
+import {
+  isDesktopMode,
+  isDesktopControlPlacement,
+  isLiveWallpaperInteraction,
+} from "../windows/desktopMode";
 
 type WindowState = {
   mainWindow: BrowserWindowInstance | null;
+  avatarWindow: BrowserWindowInstance | null;
   inputWindow: BrowserWindowInstance | null;
   inputWindowOpen: boolean;
   uiThemeMode: string | null;
+  desktopMode: DesktopMode;
+  liveWallpaperInteraction: LiveWallpaperInteraction;
+  controlPlacement: DesktopControlPlacement;
 };
 
 type UIHandlersDeps = {
@@ -25,6 +40,7 @@ type UIHandlersDeps = {
   registerGlobalShortcuts: (shortcuts: Record<string, unknown>) => void;
   setNativeDevToolsEnabled: (enabled: boolean) => boolean;
   getNativeDevToolsEnabled: () => boolean;
+  switchDesktopMode: (request: DesktopModeRequest | DesktopMode) => void;
 };
 
 export function registerUIIPCHandlers({
@@ -37,7 +53,11 @@ export function registerUIIPCHandlers({
   registerGlobalShortcuts,
   setNativeDevToolsEnabled,
   getNativeDevToolsEnabled,
+  switchDesktopMode,
 }: UIHandlersDeps) {
+  let assistantRuntimeReadyWindow: BrowserWindowInstance | null = null;
+  let pendingAssistantRuntimeEvents: unknown[] = [];
+
   const openInputWindow = () => {
     state.inputWindowOpen = true;
 
@@ -147,16 +167,39 @@ export function registerUIIPCHandlers({
 
   ipcMain.handle(
     "window:set-position",
-    (_event: IpcMainInvokeEvent, x: number, y: number) => {
-      if (state.mainWindow) {
-        state.mainWindow.setPosition(Math.floor(x), Math.floor(y));
+    (event: IpcMainInvokeEvent, x: number, y: number) => {
+      const senderWindow = BrowserWindow.fromWebContents(event.sender);
+      if (senderWindow) {
+        senderWindow.setPosition(Math.floor(x), Math.floor(y));
       }
     },
   );
 
-  ipcMain.handle("window:get-position", () => {
-    if (state.mainWindow) {
-      const [x, y] = state.mainWindow.getPosition();
+  ipcMain.handle(
+    "window:set-bounds",
+    (
+      event: IpcMainInvokeEvent,
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+    ) => {
+      const senderWindow = BrowserWindow.fromWebContents(event.sender);
+      if (!senderWindow) return;
+
+      senderWindow.setBounds({
+        x: Math.floor(x),
+        y: Math.floor(y),
+        width: Math.floor(width),
+        height: Math.floor(height),
+      });
+    },
+  );
+
+  ipcMain.handle("window:get-position", (event: IpcMainInvokeEvent) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender);
+    if (senderWindow) {
+      const [x, y] = senderWindow.getPosition();
       return { x, y };
     }
     return { x: 0, y: 0 };
@@ -245,13 +288,59 @@ export function registerUIIPCHandlers({
     return { width: windowScaleFactorWidth, height: windowScaleFactorHeight };
   });
 
-  ipcMain.handle("window:get-size", () => {
-    if (state.mainWindow) {
-      const [width, height] = state.mainWindow.getSize();
+  ipcMain.handle("window:get-size", (event: IpcMainInvokeEvent) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender);
+    if (senderWindow) {
+      const [width, height] = senderWindow.getSize();
       return { width, height };
     }
     return { width: 0, height: 0 };
   });
+
+  ipcMain.handle("window:get-desktop-mode", () => {
+    return {
+      mode: state.desktopMode,
+      liveWallpaperInteraction: state.liveWallpaperInteraction,
+      controlPlacement: state.controlPlacement,
+    };
+  });
+
+  ipcMain.handle(
+    "window:set-desktop-mode",
+    (event: IpcMainInvokeEvent, request: DesktopModeRequest | DesktopMode) => {
+      const normalizedRequest =
+        typeof request === "string" ? { mode: request } : request;
+
+      if (!isDesktopMode(normalizedRequest?.mode)) {
+        throw new Error(
+          `Unsupported desktop mode: ${String(normalizedRequest?.mode)}`,
+        );
+      }
+
+      if (
+        normalizedRequest.liveWallpaperInteraction !== undefined &&
+        !isLiveWallpaperInteraction(normalizedRequest.liveWallpaperInteraction)
+      ) {
+        throw new Error(
+          `Unsupported live wallpaper interaction: ${String(normalizedRequest.liveWallpaperInteraction)}`,
+        );
+      }
+
+      if (
+        normalizedRequest.controlPlacement !== undefined &&
+        !isDesktopControlPlacement(normalizedRequest.controlPlacement)
+      ) {
+        throw new Error(
+          `Unsupported desktop control placement: ${String(normalizedRequest.controlPlacement)}`,
+        );
+      }
+
+      const senderWindow = BrowserWindow.fromWebContents(event.sender);
+      if (senderWindow && senderWindow !== state.mainWindow) return;
+
+      switchDesktopMode(normalizedRequest);
+    },
+  );
 
   ipcMain.handle(
     "window:set-native-devtools-enabled",
@@ -280,6 +369,123 @@ export function registerUIIPCHandlers({
       state.inputWindow.isVisible(),
     );
   });
+
+  ipcMain.on("desktop:toggle-chat-window", (event: IpcMainEvent) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!senderWindow || senderWindow === state.mainWindow) return;
+    if (!state.mainWindow || state.mainWindow.isDestroyed()) return;
+
+    state.mainWindow.show();
+    state.mainWindow.webContents.send("desktop:toggle-chat");
+  });
+
+  ipcMain.on(
+    "desktop:chat-visibility",
+    (event: IpcMainEvent, payload: unknown) => {
+      if (
+        !state.mainWindow ||
+        state.mainWindow.isDestroyed() ||
+        event.sender !== state.mainWindow.webContents ||
+        state.controlPlacement !== "detached"
+      ) {
+        return;
+      }
+
+      const visible =
+        payload &&
+        typeof payload === "object" &&
+        "visible" in payload &&
+        typeof payload.visible === "boolean"
+          ? payload.visible
+          : null;
+
+      if (visible === null) {
+        return;
+      }
+
+      state.mainWindow.showInactive();
+
+      if (state.avatarWindow && !state.avatarWindow.isDestroyed()) {
+        state.avatarWindow.webContents.send("desktop:chat-visibility", {
+          visible,
+        });
+      }
+    },
+  );
+
+  ipcMain.on(
+    "desktop:assistant-runtime",
+    (event: IpcMainEvent, payload: unknown) => {
+      if (
+        !state.mainWindow ||
+        state.mainWindow.isDestroyed() ||
+        event.sender !== state.mainWindow.webContents ||
+        !state.avatarWindow ||
+        state.avatarWindow.isDestroyed() ||
+        state.controlPlacement !== "detached"
+      ) {
+        return;
+      }
+
+      if (assistantRuntimeReadyWindow !== state.avatarWindow) {
+        if (assistantRuntimeReadyWindow !== null) {
+          pendingAssistantRuntimeEvents = [];
+        }
+        pendingAssistantRuntimeEvents = [
+          ...pendingAssistantRuntimeEvents,
+          payload,
+        ].slice(-32);
+        return;
+      }
+
+      state.avatarWindow.webContents.send("desktop:assistant-runtime", payload);
+    },
+  );
+
+  ipcMain.on("desktop:assistant-runtime-ready", (event: IpcMainEvent) => {
+    if (
+      !state.avatarWindow ||
+      state.avatarWindow.isDestroyed() ||
+      event.sender !== state.avatarWindow.webContents ||
+      state.controlPlacement !== "detached"
+    ) {
+      return;
+    }
+
+    assistantRuntimeReadyWindow = state.avatarWindow;
+    const pendingEvents = pendingAssistantRuntimeEvents;
+    pendingAssistantRuntimeEvents = [];
+
+    for (const payload of pendingEvents) {
+      if (!state.avatarWindow.isDestroyed()) {
+        state.avatarWindow.webContents.send(
+          "desktop:assistant-runtime",
+          payload,
+        );
+      }
+    }
+  });
+
+  ipcMain.on(
+    "state:desktopUIConfig",
+    (event: IpcMainEvent, config: unknown) => {
+      if (!config || typeof config !== "object") return;
+
+      for (const target of [
+        state.mainWindow,
+        state.avatarWindow,
+        state.inputWindow,
+      ]) {
+        if (
+          target &&
+          !target.isDestroyed() &&
+          target.webContents !== event.sender
+        ) {
+          target.webContents.send("state:desktopUIConfig", config);
+        }
+      }
+    },
+  );
 
   ipcMain.on("chatInput:send", (_event: IpcMainEvent, data: unknown) => {
     if (state.mainWindow && state.mainWindow.webContents) {

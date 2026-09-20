@@ -43,6 +43,28 @@ body,
   background-color: transparent !important;
 }
 
+/* App Mode is an opaque application surface. */
+html:has(.vassist-app-mode-window),
+body:has(.vassist-app-mode-window),
+#root:has(.vassist-app-mode-window) {
+  background: #252a2f !important;
+  background-color: #252a2f !important;
+}
+
+.vassist-app-mode-window {
+  background: #252a2f;
+  background-color: #252a2f;
+  color: var(--vassist-text-primary);
+}
+
+.app-region-drag {
+  -webkit-app-region: drag;
+}
+
+.app-region-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 /* Keep portaled controls aligned with the active desktop theme. */
 :root:has(
   .glass-container-dark,

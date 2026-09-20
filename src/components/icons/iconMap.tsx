@@ -8,6 +8,7 @@ import * as HeroIconsOutline from "@heroicons/react/24/outline";
 import { FaGithub } from "react-icons/fa";
 import { AiFillBulb, AiOutlineLoading3Quarters } from "react-icons/ai";
 import { LuScreenShare, LuScreenShareOff } from "react-icons/lu";
+import { HiDotsHorizontal } from "react-icons/hi";
 
 import { MdViewInAr } from "react-icons/md";
 
@@ -45,7 +46,7 @@ export const iconMap = {
   info: HeroIconsSolid.InformationCircleIcon,
   download: HeroIconsSolid.ArrowDownTrayIcon,
   volume: HeroIconsSolid.SpeakerWaveIcon,
-  chat: HeroIconsSolid.ChatBubbleLeftIcon,
+  chat: HiDotsHorizontal,
   send: HeroIconsSolid.PaperAirplaneIcon,
   microphone: HeroIconsSolid.MicrophoneIcon,
   speaker: HeroIconsSolid.SpeakerWaveIcon,

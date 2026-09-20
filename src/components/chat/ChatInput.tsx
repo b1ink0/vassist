@@ -49,7 +49,12 @@ import { useConfigStore } from "../../stores/useConfigStore";
 import { Icon } from "../icons";
 import { Button, Select } from "../ui";
 import Logger from "../../services/common/LoggerService";
-import { isAndroid, isDesktop, isInputWindow } from "../../utils/PlatformUtils";
+import {
+  isAndroid,
+  isDesktop,
+  isInputWindow,
+  isAppModeWindow,
+} from "../../utils/PlatformUtils";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
 import MicrophoneService from "../../services/audio/MicrophoneService";
 import CameraService from "../../services/media/CameraService";
@@ -2003,15 +2008,21 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
 
     return (
       <div
-        className="fixed bottom-0 left-0 right-0 z-[10001] flex justify-center pointer-events-none"
-        style={
-          shouldFollowKeyboard
+        className={cn(
+          "fixed bottom-0 z-[10001] flex pointer-events-none",
+          isAppModeWindow
+            ? "left-0 right-0 justify-center"
+            : "left-0 right-0 justify-center",
+        )}
+        style={{
+          ...(shouldFollowKeyboard
             ? {
                 transform: `translateY(-${keyboardOffset}px)`,
                 transition: "transform 0.1s ease-out",
               }
-            : undefined
-        }
+            : {}),
+          ...(isAppModeWindow ? { padding: "0 16px" } : {}),
+        }}
       >
         <div
           ref={containerRef}

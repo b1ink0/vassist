@@ -6,9 +6,16 @@ import { useEffect, useRef, type RefObject } from "react";
 import { useIsChatContainerVisible } from "./app/useChat";
 import { usePositionManagerRef } from "./app/useScene";
 import { useDesktopApi } from "./useDesktopStore";
-import { isDesktop, isInputWindow } from "../utils/PlatformUtils";
+import {
+  isDesktop,
+  isDetachedChatWindow,
+  isInputWindow,
+  isAppModeWindow,
+} from "../utils/PlatformUtils";
+import { ASSISTANT_CONTROL_CHAT_GUTTER } from "../components/chat/assistant-controls/positioning";
 
 interface DesktopResizeOptions {
+  disabled?: boolean;
   minWidth?: number;
   minHeight?: number;
   maxWidth?: number;
@@ -34,6 +41,7 @@ export function useDesktopWindowResize(
   const DEFAULT_MAIN_WINDOW_HEIGHT = 525;
 
   const {
+    disabled = false,
     minWidth = 400,
     minHeight = 400,
     maxWidth = 800,
@@ -43,7 +51,17 @@ export function useDesktopWindowResize(
   } = options;
 
   useEffect(() => {
-    if (!isDesktop || !api) return;
+    // Normal mode owns a user-resizable BrowserWindow. Its layout adapts to
+    // the current bounds; it must never resize the window in response to chat
+    // or canvas content changes.
+    if (
+      disabled ||
+      !isDesktop ||
+      isAppModeWindow ||
+      isDetachedChatWindow ||
+      !api
+    )
+      return;
 
     if (!isInputWindow) {
       const canvasWidth =
@@ -55,7 +73,9 @@ export function useDesktopWindowResize(
         window.innerHeight ||
         DEFAULT_MAIN_WINDOW_HEIGHT;
 
-      const chatContainerWidth = isChatContainerVisible ? 400 : 0;
+      const chatContainerWidth = isChatContainerVisible
+        ? 400 + ASSISTANT_CONTROL_CHAT_GUTTER
+        : 0;
 
       const width =
         canvasWidth +
@@ -101,5 +121,6 @@ export function useDesktopWindowResize(
     maxHeight,
     padding,
     windowPadding,
+    disabled,
   ]);
 }

@@ -30,6 +30,7 @@ import {
 import { createRuntimePaths } from "./main/runtime/runtimePaths";
 import { createDevToolsManager } from "./main/system/devTools";
 import { createWindowManager } from "./main/windows/windowManager";
+import { createLiveWallpaperManager } from "./main/windows/liveWallpaperManager";
 import { createTrayShortcutsManager } from "./main/windows/trayShortcutsManager";
 import {
   registerPrivilegedSchemes,
@@ -57,9 +58,13 @@ const serverBasePath = devServerUrl
 
 const state = {
   mainWindow: null,
+  avatarWindow: null,
   inputWindow: null,
   inputWindowOpen: false,
   uiThemeMode: null,
+  desktopMode: "app" as const,
+  liveWallpaperInteraction: "non-interactive" as const,
+  controlPlacement: "attached" as const,
   tray: null,
 };
 
@@ -79,6 +84,12 @@ const devToolsManager = createDevToolsManager({
   BrowserWindow,
 });
 
+const liveWallpaperManager = createLiveWallpaperManager({
+  path,
+  process,
+  require,
+});
+
 const windowManager = createWindowManager({
   BrowserWindow,
   screen,
@@ -88,6 +99,7 @@ const windowManager = createWindowManager({
   devServerUrl,
   state,
   maybeOpenDevTools: devToolsManager.maybeOpenDevTools,
+  liveWallpaper: liveWallpaperManager,
 });
 
 const trayShortcutsManager = createTrayShortcutsManager({
@@ -102,6 +114,7 @@ const trayShortcutsManager = createTrayShortcutsManager({
   process,
   __dirname,
   state,
+  requestDesktopMode: windowManager.requestDesktopMode,
 });
 
 const llmBackendManager = createLLMBackendManager({
@@ -187,6 +200,7 @@ registerUIIPCHandlers({
   registerGlobalShortcuts: trayShortcutsManager.registerGlobalShortcuts,
   setNativeDevToolsEnabled: devToolsManager.setNativeDevToolsEnabled,
   getNativeDevToolsEnabled: devToolsManager.getNativeDevToolsEnabled,
+  switchDesktopMode: windowManager.switchDesktopMode,
 });
 
 localServerManager.registerIPCHandlers(ipcMain);

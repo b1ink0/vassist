@@ -11,6 +11,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
+import { isAppModeWindow } from "../../utils/PlatformUtils";
 
 /**
  * Window controls for Electron desktop app
@@ -21,7 +22,7 @@ export default function DesktopWindowControls() {
   const [electronAvailable] = useState(!!api);
 
   // Only render in desktop mode
-  if (!__DESKTOP_MODE__) {
+  if (!__DESKTOP_MODE__ || !isAppModeWindow) {
     return null;
   }
 
@@ -50,40 +51,46 @@ export default function DesktopWindowControls() {
   };
 
   return (
-    <div
-      data-testid="desktop-window-controls"
-      data-electron-interactive="true"
-      className="fixed top-2 left-2 z-[99999] flex items-center gap-1 px-2 py-1 bg-black/20 backdrop-blur-sm rounded-full"
-    >
-      {!electronAvailable && (
-        <span className="text-xs text-red-500 mr-2">
-          Electron API not loaded
-        </span>
-      )}
-      <button
-        onClick={handleMinimize}
-        data-testid="desktop-window-minimize-button"
-        className="p-1 rounded-full hover:bg-white/10 transition-colors"
-        title="Minimize"
+    <>
+      <div
+        aria-hidden="true"
+        className="fixed inset-x-0 top-0 z-[99998] h-8 app-region-drag"
+      />
+      <div
+        data-testid="desktop-window-controls"
+        data-electron-interactive="true"
+        className="fixed top-2 right-2 z-[99999] flex items-center gap-1 px-2 py-1 bg-black/20 backdrop-blur-sm rounded-full app-region-no-drag"
       >
-        <MinusIcon className="w-3 h-3 text-white/70" />
-      </button>
-      <button
-        onClick={handleMaximize}
-        data-testid="desktop-window-maximize-button"
-        className="p-1 rounded-full hover:bg-white/10 transition-colors"
-        title="Maximize/Restore"
-      >
-        <Square2StackIcon className="w-3 h-3 text-white/70" />
-      </button>
-      <button
-        onClick={handleClose}
-        data-testid="desktop-window-close-button"
-        className="p-1 rounded-full hover:bg-red-500/30 transition-colors"
-        title="Close"
-      >
-        <XMarkIcon className="w-3 h-3 text-white/70" />
-      </button>
-    </div>
+        {!electronAvailable && (
+          <span className="text-xs text-red-500 mr-2">
+            Electron API not loaded
+          </span>
+        )}
+        <button
+          onClick={handleMinimize}
+          data-testid="desktop-window-minimize-button"
+          className="p-1 rounded-full hover:bg-white/10 transition-colors"
+          title="Minimize"
+        >
+          <MinusIcon className="w-3 h-3 text-white/70" />
+        </button>
+        <button
+          onClick={handleMaximize}
+          data-testid="desktop-window-maximize-button"
+          className="p-1 rounded-full hover:bg-white/10 transition-colors"
+          title="Maximize/Restore"
+        >
+          <Square2StackIcon className="w-3 h-3 text-white/70" />
+        </button>
+        <button
+          onClick={handleClose}
+          data-testid="desktop-window-close-button"
+          className="p-1 rounded-full hover:bg-red-500/30 transition-colors"
+          title="Close"
+        >
+          <XMarkIcon className="w-3 h-3 text-white/70" />
+        </button>
+      </div>
+    </>
   );
 }

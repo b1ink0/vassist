@@ -27,7 +27,12 @@ import {
 import { useDesktopApi } from "../../hooks/useDesktopStore";
 import { FPSLimitOptions } from "../../config/uiConfig";
 import Logger from "../../services/common/LoggerService";
-import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
+import {
+  isAndroid,
+  isDesktop,
+  isAppModeWindow,
+  isLiveWallpaperWindow,
+} from "../../utils/PlatformUtils";
 import type {
   PixelSize,
   PositionManagerLike,
@@ -231,7 +236,14 @@ const BabylonScene = ({
   const modelOverlayPos: ModelOverlayPosition = useModelOverlayPos();
 
   useEffect(() => {
-    if (!isDesktop || !desktopAPI?.window || isPreview) return;
+    if (
+      !isDesktop ||
+      isAppModeWindow ||
+      isLiveWallpaperWindow ||
+      !desktopAPI?.window ||
+      isPreview
+    )
+      return;
 
     if (modelSizePx) {
       const { width: modelWidth, height: modelHeight } = modelSizePx;
@@ -589,6 +601,11 @@ const BabylonScene = ({
 
       const handleResize = () => {
         engine.resize();
+
+        if (isAppModeWindow && activePositionManagerRef.current) {
+          activePositionManagerRef.current.updateCanvasDimensions();
+          activePositionManagerRef.current.updateCameraFrustum();
+        }
       };
       window.addEventListener("resize", handleResize);
 
@@ -726,7 +743,13 @@ const BabylonScene = ({
         canvasElementRef.current = null;
       }
     };
-  }, [sceneBuilder, fpsLimit, setShowModelLoadingOverlay, updateUIConfig]);
+  }, [
+    activePositionManagerRef,
+    fpsLimit,
+    sceneBuilder,
+    setShowModelLoadingOverlay,
+    updateUIConfig,
+  ]);
 
   useEffect(() => {
     const handleDragStart = () => setIsDragging(true);
@@ -841,15 +864,27 @@ const BabylonScene = ({
                 transition: "opacity 700ms ease-in-out",
               }
             : {
-                width: isDesktop ? `${canvasSize.width}px` : "100%",
-                height: isDesktop ? `${canvasSize.height}px` : canvasHeight,
+                width: isLiveWallpaperWindow
+                  ? "100vw"
+                  : isAppModeWindow
+                    ? "100vw"
+                    : isDesktop
+                      ? `${canvasSize.width}px`
+                      : "100%",
+                height: isLiveWallpaperWindow
+                  ? "100vh"
+                  : isAppModeWindow
+                    ? "100vh"
+                    : isDesktop
+                      ? `${canvasSize.height}px`
+                      : canvasHeight,
                 display: "block",
                 outline: "none",
                 backgroundColor: "transparent",
                 position: "fixed",
                 top: 0,
                 left: 0,
-                pointerEvents: "none",
+                pointerEvents: isAppModeWindow ? "auto" : "none",
                 zIndex: 100,
                 opacity: isReady ? 1 : 0,
                 transition: "opacity 700ms ease-in-out",

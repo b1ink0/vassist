@@ -6,7 +6,12 @@ import {
 import { useSceneRef } from "../../hooks/app/useScene";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
 import Logger from "../../services/common/LoggerService";
-import { isDesktop, isInputWindow } from "../../utils/PlatformUtils";
+import {
+  isDesktop,
+  isInputWindow,
+  isAppModeWindow,
+  isDesktopWallpaperRendererWindow,
+} from "../../utils/PlatformUtils";
 
 const ELECTRON_INTERACTIVE_SELECTOR = [
   '[data-electron-interactive="true"]',
@@ -103,7 +108,10 @@ export default function DesktopWindowInteractivityBridge() {
       const shouldCaptureDom = isDomInteractiveTarget(hoveredElement);
       const shouldCaptureModel =
         !shouldCaptureDom && isModelInteractiveAtPoint(clientX, clientY);
+      const shouldCaptureResize =
+        document.documentElement.dataset.electronResizeActive === "true";
       const shouldCaptureWindow =
+        shouldCaptureResize ||
         isDraggingModel ||
         isDraggingButton ||
         shouldCaptureDom ||
@@ -186,7 +194,12 @@ export default function DesktopWindowInteractivityBridge() {
   }, [api, evaluateInteractivity]);
 
   useEffect(() => {
-    if (!isDesktop || !api?.window?.setIgnoreMouseEvents) {
+    if (
+      !isDesktop ||
+      isAppModeWindow ||
+      isDesktopWallpaperRendererWindow ||
+      !api?.window?.setIgnoreMouseEvents
+    ) {
       return;
     }
 
@@ -239,7 +252,12 @@ export default function DesktopWindowInteractivityBridge() {
   ]);
 
   useEffect(() => {
-    if (!isDesktop || !api?.window?.setIgnoreMouseEvents) {
+    if (
+      !isDesktop ||
+      isAppModeWindow ||
+      isDesktopWallpaperRendererWindow ||
+      !api?.window?.setIgnoreMouseEvents
+    ) {
       return;
     }
 

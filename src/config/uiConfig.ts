@@ -8,6 +8,10 @@ import { isAndroid, isDesktop } from "../utils/PlatformUtils";
 
 export type BackgroundThemeMode = "adaptive" | "light" | "dark";
 
+export type DesktopMode = "floating-app" | "app" | "live-wallpaper";
+export type LiveWallpaperInteraction = "non-interactive" | "interactive";
+export type DesktopControlPlacement = "attached" | "detached";
+
 export interface PixelSize {
   width: number;
   height: number;
@@ -61,6 +65,22 @@ export interface CustomQualitySettings {
 }
 
 export interface UIConfig {
+  desktopMode: {
+    mode: DesktopMode;
+    controlPlacement: DesktopControlPlacement;
+    appMode: {
+      x: number | null;
+      y: number | null;
+      width: number;
+      height: number;
+      minWidth: number;
+      minHeight: number;
+      chatSplitPercent: number;
+    };
+    liveWallpaper: {
+      interaction: LiveWallpaperInteraction;
+    };
+  };
   enableModelLoading: boolean;
   enablePortraitMode: boolean;
   enablePhysics: boolean;
@@ -366,6 +386,23 @@ export const DefaultCustomQualitySettings: CustomQualitySettings = {
  * Default UI Configuration
  */
 export const DefaultUIConfig: UIConfig = {
+  desktopMode: {
+    mode: "app",
+    controlPlacement: "attached",
+    appMode: {
+      x: null,
+      y: null,
+      width: 1200,
+      height: 760,
+      minWidth: 900,
+      minHeight: 600,
+      chatSplitPercent: 38,
+    },
+    liveWallpaper: {
+      interaction: "non-interactive",
+    },
+  },
+
   enableModelLoading: true,
 
   enablePortraitMode: false,

@@ -17,6 +17,8 @@ interface ZoomControlProps {
   isLeftSide?: boolean;
   isLightBackground?: boolean;
   isVisible?: boolean;
+  isExpanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 /**
@@ -42,11 +44,18 @@ const ZoomControl = ({
   isLeftSide = false,
   isLightBackground = false,
   isVisible = true,
+  isExpanded: controlledExpanded,
+  onExpandedChange,
 }: ZoomControlProps) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const isExpanded = controlledExpanded ?? internalExpanded;
 
   const handleToggle = () => {
-    setIsExpanded(!isExpanded);
+    const nextExpanded = !isExpanded;
+    if (controlledExpanded === undefined) {
+      setInternalExpanded(nextExpanded);
+    }
+    onExpandedChange?.(nextExpanded);
   };
 
   return (
@@ -94,7 +103,6 @@ const ZoomControl = ({
               className={cn(
                 "w-12 h-12 rounded-full hover:scale-110 active:scale-95 transition-all",
                 isLightBackground ? "hover:bg-black/30" : "hover:bg-white/30",
-                "animate-fade-in",
               )}
               title="Zoom In"
             >
@@ -115,10 +123,8 @@ const ZoomControl = ({
               className={cn(
                 "w-12 h-12 rounded-full hover:scale-110 active:scale-95 transition-all",
                 isLightBackground ? "hover:bg-black/30" : "hover:bg-white/30",
-                "animate-fade-in",
               )}
               title="Reset Zoom and Rotation"
-              style={{ animationDelay: "50ms" }}
             >
               <Icon
                 name="refresh"
@@ -138,7 +144,7 @@ const ZoomControl = ({
               disabled={isZoomOutDisabled}
               variant={isLightBackground ? "dark" : "default"}
               className={cn(
-                "w-12 h-12 rounded-full transition-all animate-fade-in",
+                "w-12 h-12 rounded-full transition-all",
                 isZoomOutDisabled
                   ? "opacity-40 cursor-not-allowed"
                   : cn(
@@ -149,7 +155,6 @@ const ZoomControl = ({
                     ),
               )}
               title={isZoomOutDisabled ? "At minimum size" : "Zoom Out"}
-              style={{ animationDelay: "100ms" }}
             >
               <Icon
                 name="minus"
@@ -167,12 +172,11 @@ const ZoomControl = ({
               onClick={onRotateLeft}
               variant={isLightBackground ? "dark" : "default"}
               className={cn(
-                "h-12 w-12 animate-fade-in rounded-full transition-all hover:scale-110 active:scale-95",
+                "h-12 w-12 rounded-full transition-all hover:scale-110 active:scale-95",
                 isLightBackground ? "hover:bg-black/30" : "hover:bg-white/30",
               )}
               title="Rotate Left 10 degrees"
               aria-label="Rotate avatar left 10 degrees"
-              style={{ animationDelay: "150ms" }}
             >
               <Icon
                 name="rotate-left"
@@ -187,12 +191,11 @@ const ZoomControl = ({
               onClick={onRotateRight}
               variant={isLightBackground ? "dark" : "default"}
               className={cn(
-                "h-12 w-12 animate-fade-in rounded-full transition-all hover:scale-110 active:scale-95",
+                "h-12 w-12 rounded-full transition-all hover:scale-110 active:scale-95",
                 isLightBackground ? "hover:bg-black/30" : "hover:bg-white/30",
               )}
               title="Rotate Right 10 degrees"
               aria-label="Rotate avatar right 10 degrees"
-              style={{ animationDelay: "200ms" }}
             >
               <Icon
                 name="rotate-right"

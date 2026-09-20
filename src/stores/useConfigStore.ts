@@ -329,6 +329,74 @@ const normalizeAIConfig = (
   },
 });
 
+const normalizeUIConfig = (
+  savedConfig: Partial<UIConfig> | null | undefined,
+): UIConfig => {
+  const savedDesktopMode = savedConfig?.desktopMode;
+  const normalizedMode =
+    savedDesktopMode?.mode === "app" ||
+    savedDesktopMode?.mode === "floating-app" ||
+    savedDesktopMode?.mode === "live-wallpaper"
+      ? savedDesktopMode.mode
+      : DefaultUIConfig.desktopMode.mode;
+  const normalizedControlPlacement =
+    savedDesktopMode?.controlPlacement === "attached" ||
+    savedDesktopMode?.controlPlacement === "detached"
+      ? savedDesktopMode.controlPlacement
+      : DefaultUIConfig.desktopMode.controlPlacement;
+
+  return {
+    ...DefaultUIConfig,
+    ...(savedConfig ?? {}),
+    desktopMode: {
+      ...DefaultUIConfig.desktopMode,
+      ...(savedDesktopMode ?? {}),
+      mode: normalizedMode,
+      controlPlacement: normalizedControlPlacement,
+      appMode: {
+        ...DefaultUIConfig.desktopMode.appMode,
+        ...(savedDesktopMode?.appMode ?? {}),
+      },
+      liveWallpaper: {
+        ...DefaultUIConfig.desktopMode.liveWallpaper,
+        ...(savedDesktopMode?.liveWallpaper ?? {}),
+      },
+    },
+    aiToolbar: {
+      ...DefaultUIConfig.aiToolbar,
+      ...(savedConfig?.aiToolbar ?? {}),
+    },
+    emotePlayback: {
+      ...DefaultUIConfig.emotePlayback,
+      ...(savedConfig?.emotePlayback ?? {}),
+    },
+    position: {
+      ...DefaultUIConfig.position,
+      ...(savedConfig?.position ?? {}),
+    },
+    camera: {
+      ...DefaultUIConfig.camera,
+      ...(savedConfig?.camera ?? {}),
+      saved3D: {
+        ...DefaultUIConfig.camera.saved3D,
+        ...(savedConfig?.camera?.saved3D ?? {}),
+      },
+      saved2D: {
+        ...DefaultUIConfig.camera.saved2D,
+        ...(savedConfig?.camera?.saved2D ?? {}),
+      },
+    },
+    backgroundDetection: {
+      ...DefaultUIConfig.backgroundDetection,
+      ...(savedConfig?.backgroundDetection ?? {}),
+    },
+    shortcuts: {
+      ...DefaultUIConfig.shortcuts,
+      ...(savedConfig?.shortcuts ?? {}),
+    },
+  };
+};
+
 const normalizeTTSConfig = (
   savedConfig: Partial<TTSConfig> | null | undefined,
 ): TTSConfig => ({
@@ -1142,10 +1210,7 @@ export const useConfigStore = create<ConfigStoreState>()(
           const savedUiConfig = (await StorageServiceProxy.configLoad(
             "uiConfig",
           )) as Partial<UIConfig> | null;
-          const mergedUiConfig = {
-            ...DefaultUIConfig,
-            ...(savedUiConfig ?? {}),
-          };
+          const mergedUiConfig = normalizeUIConfig(savedUiConfig);
 
           savedAiConfig = normalizeAIConfig(
             (await StorageServiceProxy.configLoad(

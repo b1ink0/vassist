@@ -144,6 +144,9 @@ const LazyDesktopWindowInteractivityBridge = lazy(
 const LazyDesktopScreenShareDialog = lazy(
   () => import("./components/desktop/DesktopScreenShareDialog"),
 );
+const LazyDesktopModeHost = lazy(
+  () => import("./components/desktop/DesktopModeHost"),
+);
 const LazyAndroidContent = lazy(() => import("../android-src/AndroidContent"));
 const LazyAndroidBackground = lazy(
   () => import("./components/android/AndroidBackground"),
@@ -421,23 +424,25 @@ function App({
         <SetupProvider embedConfig={resolvedEmbedConfig}>
           <AnimationProvider>
             <Suspense fallback={null}>
-              <LazyDesktopWindowInteractivityBridge />
+              <LazyDesktopModeHost>
+                <AppWithSetup
+                  mode="desktop"
+                  showDeferredSetup={showDeferredSetup}
+                  onStartSetup={() => setShowDeferredSetup(false)}
+                  onMinimizeSetup={() => setShowDeferredSetup(true)}
+                  embedConfig={resolvedEmbedConfig}
+                />
+                <Suspense fallback={null}>
+                  {shouldRenderCameraPreview && (
+                    <LazyVideoPreview service={CameraService} type="camera" />
+                  )}
+                  <LazyVideoPreview
+                    service={ScreenShareService}
+                    type="screen"
+                  />
+                </Suspense>
+              </LazyDesktopModeHost>
             </Suspense>
-            <div className="relative w-full h-screen overflow-hidden">
-              <AppWithSetup
-                mode="desktop"
-                showDeferredSetup={showDeferredSetup}
-                onStartSetup={() => setShowDeferredSetup(false)}
-                onMinimizeSetup={() => setShowDeferredSetup(true)}
-                embedConfig={resolvedEmbedConfig}
-              />
-              <Suspense fallback={null}>
-                {shouldRenderCameraPreview && (
-                  <LazyVideoPreview service={CameraService} type="camera" />
-                )}
-                <LazyVideoPreview service={ScreenShareService} type="screen" />
-              </Suspense>
-            </div>
           </AnimationProvider>
         </SetupProvider>
       </StoreBootstrap>

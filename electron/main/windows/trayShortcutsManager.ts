@@ -6,11 +6,20 @@ import type {
 } from "electron";
 import type * as fsType from "fs";
 import type * as pathType from "path";
+import type {
+  DesktopControlPlacement,
+  DesktopMode,
+  DesktopModeRequest,
+  LiveWallpaperInteraction,
+} from "./desktopMode";
 
 type WindowState = {
   mainWindow: BrowserWindow | null;
   inputWindow: BrowserWindow | null;
   inputWindowOpen: boolean;
+  desktopMode: DesktopMode;
+  liveWallpaperInteraction: LiveWallpaperInteraction;
+  controlPlacement: DesktopControlPlacement;
   tray: ElectronTray | null;
 };
 
@@ -33,6 +42,7 @@ type TrayShortcutsDeps = {
   process: NodeJS.Process;
   __dirname: string;
   state: WindowState;
+  requestDesktopMode: (request: DesktopModeRequest | DesktopMode) => void;
 };
 
 export function createTrayShortcutsManager({
@@ -47,6 +57,7 @@ export function createTrayShortcutsManager({
   process,
   __dirname,
   state,
+  requestDesktopMode,
 }: TrayShortcutsDeps) {
   function convertToElectronAccelerator(
     browserCombo: string | undefined | null,
@@ -286,7 +297,71 @@ export function createTrayShortcutsManager({
       },
       {
         label: "Reset Window Position",
-        click: resetMainWindowPosition,
+        click: () => {
+          resetMainWindowPosition();
+          requestDesktopMode("app");
+        },
+      },
+      {
+        label: "Modes",
+        submenu: [
+          {
+            label: "Floating App",
+            click: () => requestDesktopMode("floating-app"),
+          },
+          {
+            label: "App Mode",
+            click: () => requestDesktopMode("app"),
+          },
+          {
+            label: "Live Wallpaper",
+            submenu: [
+              {
+                label: "Non-interactive",
+                click: () =>
+                  requestDesktopMode({
+                    mode: "live-wallpaper",
+                    liveWallpaperInteraction: "non-interactive",
+                  }),
+              },
+              {
+                label: "Interactive",
+                click: () =>
+                  requestDesktopMode({
+                    mode: "live-wallpaper",
+                    liveWallpaperInteraction: "interactive",
+                  }),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        label: "Controls",
+        submenu: [
+          {
+            label: "Attached",
+            type: "radio",
+            checked: state.controlPlacement === "attached",
+            click: () =>
+              requestDesktopMode({
+                mode: state.desktopMode,
+                liveWallpaperInteraction: state.liveWallpaperInteraction,
+                controlPlacement: "attached",
+              }),
+          },
+          {
+            label: "Detached",
+            type: "radio",
+            checked: state.controlPlacement === "detached",
+            click: () =>
+              requestDesktopMode({
+                mode: state.desktopMode,
+                liveWallpaperInteraction: state.liveWallpaperInteraction,
+                controlPlacement: "detached",
+              }),
+          },
+        ],
       },
       { type: "separator" },
       {

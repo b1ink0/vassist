@@ -23,6 +23,42 @@ export const isInputWindow =
   typeof window !== "undefined" &&
   window.location.search.includes("window=input");
 
+export const isAppModeWindow =
+  isDesktop &&
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).get("desktop-mode") === "app";
+
+export const isLiveWallpaperWindow =
+  isDesktop &&
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).get("desktop-mode") ===
+    "live-wallpaper";
+
+export const isDetachedDesktopWindow =
+  isDesktop &&
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).get("desktop-controls") ===
+    "detached";
+
+export const isDetachedChatWindow =
+  isDetachedDesktopWindow &&
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).get("desktop-role") === "chat";
+
+export const isDetachedAvatarWindow =
+  isDetachedDesktopWindow &&
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).get("desktop-role") === "avatar";
+
+export const isDesktopWallpaperRendererWindow =
+  isLiveWallpaperWindow && !isDetachedChatWindow;
+
+export const isInteractiveLiveWallpaperWindow =
+  isLiveWallpaperWindow &&
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).get("wallpaper-interaction") ===
+    "interactive";
+
 export const isScreenPicker =
   isDesktop &&
   typeof window !== "undefined" &&

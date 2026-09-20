@@ -29,6 +29,7 @@ import {
   useUIConfig,
 } from "../../hooks/config/useConfigUI";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
+import { isDetachedAvatarWindow } from "../../utils/PlatformUtils";
 import Logger from "../../services/common/LoggerService";
 import emotePlayerService from "../../services/mmd/EmotePlayerService";
 import liveLipSyncService, {
@@ -108,6 +109,40 @@ interface PositionManagerWithPreset extends PositionManagerLike {
 
 type AssistantStateValue = (typeof AssistantState)[keyof typeof AssistantState];
 
+type DesktopAssistantRuntimeEvent =
+  | { type: "set-state"; state: string }
+  | { type: "trigger-action"; action: string }
+  | { type: "idle" }
+  | {
+      type: "speak";
+      text: string;
+      audioUrl?: string;
+      audioData?: ArrayBuffer;
+      audioMimeType?: string;
+      bvmdUrl?: string;
+      sessionId?: string | null;
+    }
+  | { type: "audio-end"; sessionId?: string | null }
+  | { type: "stop" };
+
+const isDesktopAssistantRuntimeEvent = (
+  value: unknown,
+): value is DesktopAssistantRuntimeEvent => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as { type?: unknown };
+  return (
+    candidate.type === "set-state" ||
+    candidate.type === "trigger-action" ||
+    candidate.type === "idle" ||
+    candidate.type === "speak" ||
+    candidate.type === "audio-end" ||
+    candidate.type === "stop"
+  );
+};
+
 /**
  * Virtual assistant component with 3D model, animations, and TTS integration.
  *
@@ -153,6 +188,8 @@ const VirtualAssistant = forwardRef<AssistantHandle, VirtualAssistantProps>(
     const [loadingProgress, setLoadingProgress] = useState(0);
     const initializedSceneRef = useRef<SceneWithMetadata | null>(null);
     const positionManagerRef = useRef<PositionManagerWithPreset | null>(null);
+    const remoteLipSyncAudioRef = useRef<HTMLAudioElement | null>(null);
+    const remoteLipSyncObjectUrlRef = useRef<string | null>(null);
 
     /**
      * Handles model loading progress updates.
@@ -274,6 +311,20 @@ const VirtualAssistant = forwardRef<AssistantHandle, VirtualAssistantProps>(
         liveLipSyncService.detach();
         const state = animationManager.getCurrentState();
         if (
+          state === AssistantState.BUSY ||
+          state === AssistantState.COMPOSITE ||
+          state === AssistantState.SPEAKING ||
+          state === AssistantState.SPEAKING_HOLD
+        ) {
+          void animationManager.returnToIdle();
+        }
+      };
+
+      const handleAudioEnd = () => {
+        liveLipSyncService.detach();
+        const state = animationManager.getCurrentState();
+        if (
+          state === AssistantState.BUSY ||
           state === AssistantState.COMPOSITE ||
           state === AssistantState.SPEAKING ||
           state === AssistantState.SPEAKING_HOLD
@@ -284,15 +335,152 @@ const VirtualAssistant = forwardRef<AssistantHandle, VirtualAssistantProps>(
 
       liveLipSyncService.setAnimationTarget(animationManager);
       TTSServiceProxy.addEventListener("speak", handleSpeak);
+      TTSServiceProxy.addEventListener("audioEnd", handleAudioEnd);
       TTSServiceProxy.addEventListener("stop", handleStop);
       Logger.log("VirtualAssistant", "Live TTS lip sync target connected");
 
       return () => {
         TTSServiceProxy.removeEventListener("speak", handleSpeak);
+        TTSServiceProxy.removeEventListener("audioEnd", handleAudioEnd);
         TTSServiceProxy.removeEventListener("stop", handleStop);
         liveLipSyncService.clearAnimationTarget(animationManager);
       };
     }, [animationManager, isPreview]);
+
+    useEffect(() => {
+      if (
+        !isDetachedAvatarWindow ||
+        !animationManager ||
+        !desktopAPI?.ipc?.on
+      ) {
+        return;
+      }
+
+      const stopRemoteLipSyncAudio = () => {
+        const audio = remoteLipSyncAudioRef.current;
+        if (!audio) return;
+
+        liveLipSyncService.detach(audio);
+        audio.pause();
+        audio.removeAttribute("src");
+        audio.load();
+        remoteLipSyncAudioRef.current = null;
+        if (remoteLipSyncObjectUrlRef.current) {
+          URL.revokeObjectURL(remoteLipSyncObjectUrlRef.current);
+          remoteLipSyncObjectUrlRef.current = null;
+        }
+      };
+
+      const unsubscribe = desktopAPI.ipc.on(
+        "desktop:assistant-runtime",
+        (payload: unknown) => {
+          if (!isDesktopAssistantRuntimeEvent(payload)) {
+            return;
+          }
+
+          switch (payload.type) {
+            case "set-state": {
+              if (
+                Object.values(AssistantState).includes(
+                  payload.state as AssistantStateValue,
+                )
+              ) {
+                void animationManager.transitionToState(payload.state);
+                return;
+              }
+
+              const emotionAnimation = getAnimationForEmotion(payload.state);
+              if (emotionAnimation) {
+                void animationManager.playAnimation(emotionAnimation);
+              }
+              return;
+            }
+            case "trigger-action":
+              void animationManager.triggerAction(payload.action);
+              return;
+            case "idle":
+            case "stop":
+              stopRemoteLipSyncAudio();
+              liveLipSyncService.detach();
+              void animationManager.returnToIdle();
+              return;
+            case "audio-end":
+              stopRemoteLipSyncAudio();
+              liveLipSyncService.detach();
+              void animationManager.returnToIdle();
+              return;
+            case "speak":
+              stopRemoteLipSyncAudio();
+              if (payload.bvmdUrl) {
+                void animationManager.speak(
+                  payload.text,
+                  payload.bvmdUrl,
+                  "talking",
+                );
+                return;
+              }
+
+              if (payload.audioData || payload.audioUrl) {
+                let audioUrl = payload.audioUrl;
+                if (payload.audioData) {
+                  const audioBlob = new Blob([payload.audioData], {
+                    type: payload.audioMimeType || "audio/mpeg",
+                  });
+                  audioUrl = URL.createObjectURL(audioBlob);
+                  remoteLipSyncObjectUrlRef.current = audioUrl;
+                }
+
+                if (!audioUrl) return;
+
+                const remoteAudio = new Audio(audioUrl);
+                remoteAudio.preload = "auto";
+                remoteLipSyncAudioRef.current = remoteAudio;
+                remoteAudio.addEventListener(
+                  "ended",
+                  () => {
+                    if (remoteLipSyncAudioRef.current === remoteAudio) {
+                      stopRemoteLipSyncAudio();
+                    }
+                  },
+                  { once: true },
+                );
+                void liveLipSyncService
+                  .attach(remoteAudio, { output: false })
+                  .then((usingAccurateLipSync) => {
+                    if (!usingAccurateLipSync) {
+                      remoteAudio.muted = true;
+                    }
+                    return remoteAudio.play();
+                  })
+                  .catch((error) => {
+                    Logger.warn(
+                      "VirtualAssistant",
+                      "Detached live lip sync audio playback failed:",
+                      error,
+                    );
+                    remoteAudio.muted = true;
+                    animationManager.setGenericLipSyncAudio(remoteAudio);
+                    void remoteAudio.play().catch(() => undefined);
+                  });
+              }
+
+              void animationManager.triggerAction("speak");
+              return;
+          }
+        },
+      );
+
+      Logger.log(
+        "VirtualAssistant",
+        "Detached avatar runtime animation bridge connected",
+      );
+      desktopAPI.ipc.send("desktop:assistant-runtime-ready");
+
+      return () => {
+        unsubscribe();
+        stopRemoteLipSyncAudio();
+      };
+    }, [animationManager, desktopAPI]);
 
     /**
      * Save position when model is dragged

@@ -14,6 +14,7 @@ interface AssistantControlPanelsProps {
   layout: AssistantControlLayout;
   isAndroid: boolean;
   isDesktop: boolean;
+  isNormalDesktop: boolean;
   isLightBackground: boolean;
   isChatOpen: boolean;
   modelDisabled: boolean;
@@ -436,6 +437,7 @@ export function AssistantControlPanels({
   layout,
   isAndroid,
   isDesktop,
+  isNormalDesktop,
   isLightBackground,
   isChatOpen,
   modelDisabled,
@@ -487,49 +489,55 @@ export function AssistantControlPanels({
         onSeekEnd={onSeekEnd}
       />
 
-      {isEmotePanelOpen && !isChatOpen && !modelDisabled && (
-        <EmotePanel
-          layout={layout}
-          isAndroid={isAndroid}
-          isDesktop={isDesktop}
-          isLightBackground={isLightBackground}
-          emotes={emotes}
-          filteredEmotes={filteredEmotes}
-          selectedAutoPlayCategory={selectedAutoPlayCategory}
-          autoPlayCategoryOptions={autoPlayCategoryOptions}
-          isAutoPlayActive={isAutoPlayActive}
-          currentPlayingEmoteId={currentPlayingEmoteId}
-          actions={actions}
-        />
-      )}
-
-      {isAvatarPanelOpen && !isChatOpen && !modelDisabled && (
-        <>
-          <AvatarPanel
+      {isEmotePanelOpen &&
+        !isAvatarPanelOpen &&
+        (!isChatOpen || isNormalDesktop) &&
+        !modelDisabled && (
+          <EmotePanel
             layout={layout}
             isAndroid={isAndroid}
             isDesktop={isDesktop}
             isLightBackground={isLightBackground}
-            panelMode={panelMode}
-            models={models}
-            stages={stages}
-            selectedModelId={selectedModelId}
-            selectedStageId={selectedStageId}
+            emotes={emotes}
+            filteredEmotes={filteredEmotes}
+            selectedAutoPlayCategory={selectedAutoPlayCategory}
+            autoPlayCategoryOptions={autoPlayCategoryOptions}
+            isAutoPlayActive={isAutoPlayActive}
+            currentPlayingEmoteId={currentPlayingEmoteId}
             actions={actions}
           />
-          <CameraControlsPanel
-            layout={layout}
-            isAndroid={isAndroid}
-            isLightBackground={isLightBackground}
-            cameraMode={cameraMode}
-            cameraLocked={cameraLocked}
-            cameraSaveEnabled={cameraSaveEnabled}
-            actions={actions}
-            isAvatarPanelOpen={isAvatarPanelOpen}
-            panelMode={panelMode}
-          />
-        </>
-      )}
+        )}
+
+      {isAvatarPanelOpen &&
+        !isEmotePanelOpen &&
+        (!isChatOpen || isNormalDesktop) &&
+        !modelDisabled && (
+          <>
+            <AvatarPanel
+              layout={layout}
+              isAndroid={isAndroid}
+              isDesktop={isDesktop}
+              isLightBackground={isLightBackground}
+              panelMode={panelMode}
+              models={models}
+              stages={stages}
+              selectedModelId={selectedModelId}
+              selectedStageId={selectedStageId}
+              actions={actions}
+            />
+            <CameraControlsPanel
+              layout={layout}
+              isAndroid={isAndroid}
+              isLightBackground={isLightBackground}
+              cameraMode={cameraMode}
+              cameraLocked={cameraLocked}
+              cameraSaveEnabled={cameraSaveEnabled}
+              actions={actions}
+              isAvatarPanelOpen={isAvatarPanelOpen}
+              panelMode={panelMode}
+            />
+          </>
+        )}
     </>
   );
 }

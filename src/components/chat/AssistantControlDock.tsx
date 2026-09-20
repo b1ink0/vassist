@@ -29,7 +29,12 @@ import emotePlayerService from "../../services/mmd/EmotePlayerService";
 import { modelStorageService } from "../../services/storage/ModelStorageService";
 import { stageStorageService } from "../../services/storage/StageStorageService";
 import { ARPlacementGuide } from "../ar/ARPlacementGuide";
-import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
+import {
+  isAndroid,
+  isDesktop,
+  isAppModeWindow,
+  isDetachedChatWindow,
+} from "../../utils/PlatformUtils";
 import {
   PositionPresets,
   AndroidPresetOverride,
@@ -151,6 +156,7 @@ const AssistantControlDock = ({
   const wasPausedBeforeSeekRef = useRef(false);
   const autoPlaySyncSignatureRef = useRef("");
   const [isAvatarPanelOpen, setIsAvatarPanelOpen] = useState(false);
+  const [isZoomExpanded, setIsZoomExpanded] = useState(false);
   const [models, setModels] = useState<StoredModelItem[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [panelMode, setPanelMode] = useState("avatar"); // 'avatar' or 'stage'
@@ -288,9 +294,10 @@ const AssistantControlDock = ({
   }, [isAvatarPanelOpen, panelMode]);
 
   useEffect(() => {
-    if (isChatOpen || modelDisabled) {
+    if ((isChatOpen && !isAppModeWindow) || modelDisabled) {
       setIsEmotePanelOpen(false);
       setIsAvatarPanelOpen(false);
+      setIsZoomExpanded(false);
     }
   }, [isChatOpen, modelDisabled]);
 
@@ -358,8 +365,12 @@ const AssistantControlDock = ({
 
         let targetPos = defaultPos;
 
-        // If preset is 'last-location' and we have saved coordinates
-        if (preset === "last-location" && positionConfig.lastLocation) {
+        if (isDetachedChatWindow) {
+          targetPos = calculatePresetPosition("bottom-center", {
+            width: window.innerWidth,
+            height: window.innerHeight,
+          });
+        } else if (preset === "last-location" && positionConfig.lastLocation) {
           const { x, y } = positionConfig.lastLocation;
           targetPos = { x, y };
           Logger.log(
@@ -438,6 +449,17 @@ const AssistantControlDock = ({
   // Handle window resize - keep button within bounds when in chat-only mode
   const handleResize = useCallback(async () => {
     const buttonSize = 48;
+
+    if (isDetachedChatWindow) {
+      const centeredPosition = calculatePresetPosition("bottom-center", {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+      setButtonPos(centeredPosition);
+      buttonPosRef.current = centeredPosition;
+      return;
+    }
+
     const boundedX = Math.max(
       10,
       Math.min(buttonPos.x, window.innerWidth - buttonSize - 10),
@@ -466,6 +488,7 @@ const AssistantControlDock = ({
     setButtonPos,
     uiConfig.position?.preset,
     updateUIConfig,
+    buttonPosRef,
   ]);
 
   useEffect(() => {
@@ -1228,19 +1251,16 @@ const AssistantControlDock = ({
     (maxListLength + 1) * ASSISTANT_CONTROL_ROW_HEIGHT,
     ASSISTANT_CONTROL_PANEL_MAX_HEIGHT,
   );
-  const avatarListHeight = Math.min(
-    (models.length + 1) * ASSISTANT_CONTROL_ROW_HEIGHT,
-    ASSISTANT_CONTROL_PANEL_MAX_HEIGHT,
-  );
-  const showUtilityButtons = !isChatOpen && !modelDisabled;
+  const showUtilityButtons =
+    (!isChatOpen || isAppModeWindow || isDesktop) && !modelDisabled;
   const layout = getAssistantControlLayout({
     viewport: { width: window.innerWidth, height: window.innerHeight },
     buttonPosition: renderedButtonPos,
     emoteHeight: emotePanelHeight,
     avatarHeight: avatarPanelHeight,
-    avatarListHeight,
     isAndroid,
     isDesktop,
+    isNormalDesktop: isAppModeWindow,
     showUtilityButtons,
   });
 
@@ -1274,6 +1294,7 @@ const AssistantControlDock = ({
     onCameraLockToggle: handleCameraLockToggle,
     onCameraSaveToggle: handleCameraSaveToggle,
     onToggleStagePanel: () => {
+      setIsZoomExpanded(false);
       if (isEmotePanelOpen) setIsEmotePanelOpen(false);
       if (isAvatarPanelOpen && panelMode === "stage") {
         setPanelMode("avatar");
@@ -1294,6 +1315,7 @@ const AssistantControlDock = ({
         layout={layout}
         isAndroid={isAndroid}
         isDesktop={isDesktop}
+        isNormalDesktop={isAppModeWindow}
         isLightBackground={isLightBackground}
         isChatOpen={isChatOpen}
         modelDisabled={modelDisabled}
@@ -1342,6 +1364,7 @@ const AssistantControlDock = ({
         isDragging={isDragging}
         isDragOverButton={isDragOverButton}
         showUtilityButtons={showUtilityButtons}
+        isZoomExpanded={isZoomExpanded}
         isEmotePlaying={isEmotePlaying}
         isAvatarPanelOpen={isAvatarPanelOpen}
         panelMode={panelMode as "avatar" | "stage"}
@@ -1350,10 +1373,12 @@ const AssistantControlDock = ({
         isZoomOutDisabled={isAtDefaultSize()}
         onReload={reloadScene}
         onToggleEmotes={() => {
+          setIsZoomExpanded(false);
           if (isAvatarPanelOpen) setIsAvatarPanelOpen(false);
           setIsEmotePanelOpen((open) => !open);
         }}
         onToggleAvatar={() => {
+          setIsZoomExpanded(false);
           if (isEmotePanelOpen) setIsEmotePanelOpen(false);
           setIsAvatarPanelOpen((open) => !open);
         }}
@@ -1361,6 +1386,13 @@ const AssistantControlDock = ({
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
         onZoomReset={handleZoomReset}
+        onZoomExpandedChange={(expanded) => {
+          if (expanded) {
+            setIsEmotePanelOpen(false);
+            setIsAvatarPanelOpen(false);
+          }
+          setIsZoomExpanded(expanded);
+        }}
         onRotateLeft={handleRotateLeft}
         onRotateRight={handleRotateRight}
         onClick={handleClick}

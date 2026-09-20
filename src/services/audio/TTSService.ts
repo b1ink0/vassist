@@ -1227,10 +1227,12 @@ class TTSService {
         () => {
           Logger.log("TTSService", "Audio playback started");
 
-          // Dispatch speak event for animation synchronization
-          if (bvmdUrl) {
-            this._dispatchEvent("speak", { text, bvmdUrl, sessionId });
-          }
+          this._dispatchEvent("speak", {
+            text,
+            audioUrl,
+            ...(bvmdUrl ? { bvmdUrl } : {}),
+            sessionId,
+          });
 
           // Dispatch audioStart event ONLY for first audio in current session
           if (this.currentPlaybackSession && !this.hasSessionStarted) {

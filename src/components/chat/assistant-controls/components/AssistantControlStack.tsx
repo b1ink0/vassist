@@ -17,6 +17,7 @@ interface AssistantControlStackProps {
   isDragging: boolean;
   isDragOverButton: boolean;
   showUtilityButtons: boolean;
+  isZoomExpanded: boolean;
   isEmotePlaying: boolean;
   isAvatarPanelOpen: boolean;
   panelMode: "avatar" | "stage";
@@ -30,6 +31,7 @@ interface AssistantControlStackProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
+  onZoomExpandedChange: (expanded: boolean) => void;
   onRotateLeft: () => void;
   onRotateRight: () => void;
   onClick: (event?: ReactMouseEvent<HTMLElement>) => void;
@@ -57,6 +59,7 @@ export function AssistantControlStack({
   isDragging,
   isDragOverButton,
   showUtilityButtons,
+  isZoomExpanded,
   isEmotePlaying,
   isAvatarPanelOpen,
   panelMode,
@@ -70,6 +73,7 @@ export function AssistantControlStack({
   onZoomIn,
   onZoomOut,
   onZoomReset,
+  onZoomExpandedChange,
   onRotateLeft,
   onRotateRight,
   onClick,
@@ -196,6 +200,8 @@ export function AssistantControlStack({
             isLeftSide={layout.isLeftSide}
             isLightBackground={isLightBackground}
             isVisible={isVisible}
+            isExpanded={isZoomExpanded}
+            onExpandedChange={onZoomExpandedChange}
           />
         </>
       )}
@@ -235,7 +241,15 @@ export function AssistantControlStack({
           }
         >
           <Icon
-            name={isDragOverButton ? "attachment" : isChatOpen ? "close" : "ai"}
+            name={
+              isDragOverButton
+                ? "attachment"
+                : isChatOpen
+                  ? "close"
+                  : modelDisabled
+                    ? "chat"
+                    : "ai"
+            }
             size={24}
             className={cn(
               isLightBackground ? "glass-text" : "glass-text-black",

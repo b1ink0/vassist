@@ -60,9 +60,18 @@ import { useDesktopWindowResize } from "../../hooks/useDesktopWindowResize";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
 import { useConfigAIActions } from "../../hooks/config/useConfigAI";
 import Logger from "../../services/common/LoggerService";
-import { isAndroid, isDesktop, isInputWindow } from "../../utils/PlatformUtils";
+import {
+  isAndroid,
+  isDesktop,
+  isInputWindow,
+  isLiveWallpaperWindow,
+  isAppModeWindow,
+  isDetachedAvatarWindow,
+  isDetachedChatWindow,
+} from "../../utils/PlatformUtils";
 import MicrophoneService from "../../services/audio/MicrophoneService";
 import CameraService from "../../services/media/CameraService";
+import DetachedChatResizeHandle from "../desktop/DetachedChatResizeHandle";
 import ScreenShareService from "../../services/media/ScreenShareService";
 
 type ConversationState =
@@ -70,6 +79,7 @@ type ConversationState =
 
 interface ChatControllerProps {
   modelDisabled?: boolean;
+  avatarOnly?: boolean;
   requireSetupOnChatClick?: boolean;
   onRequireSetup?: () => void;
   embedConfig: ResolvedVAssistEmbedConfig;
@@ -158,12 +168,34 @@ interface TTSServiceLike {
     sessionId?: string,
   ) => void;
   getQueueLength: () => number;
-  addEventListener: (eventName: string, callback: () => void) => void;
-  removeEventListener: (eventName: string, callback: () => void) => void;
+  addEventListener: (
+    eventName: string,
+    callback: (...args: unknown[]) => void,
+  ) => void;
+  removeEventListener: (
+    eventName: string,
+    callback: (...args: unknown[]) => void,
+  ) => void;
   resetSessionFlags: () => void;
   markSessionComplete: (sessionId: string) => void;
   isStopped?: boolean;
 }
+
+type DesktopAssistantRuntimeEvent =
+  | { type: "set-state"; state: string }
+  | { type: "trigger-action"; action: string }
+  | { type: "idle" }
+  | {
+      type: "speak";
+      text: string;
+      audioUrl?: string;
+      audioData?: ArrayBuffer;
+      audioMimeType?: string;
+      bvmdUrl?: string;
+      sessionId?: string | null;
+    }
+  | { type: "audio-end"; sessionId?: string | null }
+  | { type: "stop" };
 
 interface STTServiceLike {
   isConfigured: () => boolean;
@@ -326,6 +358,7 @@ const toHostMessagePayload = (
  */
 const ChatController = ({
   modelDisabled = false,
+  avatarOnly = false,
   requireSetupOnChatClick = false,
   onRequireSetup,
   embedConfig,
@@ -336,8 +369,10 @@ const ChatController = ({
   const chatInputRef = useRef<HTMLElement | null>(null);
   const streamAbortControllerRef = useRef<AbortController | null>(null); // Track current stream to allow cancellation
   const hasAutoOpenedAndroidChatRef = useRef(false);
+  const hasAutoOpenedNormalChatRef = useRef(false);
   const inputWindowSttRecordingRef = useRef(false);
   const inputWindowSttProcessingRef = useRef(false);
+  const detachedSpeakTransferRef = useRef(Promise.resolve());
   const historyService =
     chatHistoryService as unknown as ChatHistoryServiceLike;
 
@@ -373,9 +408,21 @@ const ChatController = ({
   );
   const chatEnabled = embedConfig.features.chat;
   const toolbarEnabled = embedConfig.features.aiToolbar;
+  const isNormalDesktop = isAppModeWindow;
 
   const assistantRef =
     appAssistantRef as MutableRefObject<AssistantHandle | null>;
+
+  const sendAssistantRuntimeEvent = useCallback(
+    (event: DesktopAssistantRuntimeEvent) => {
+      if (!isDetachedChatWindow || !api?.ipc) {
+        return;
+      }
+
+      api.ipc.send("desktop:assistant-runtime", event);
+    },
+    [api],
+  );
 
   useEffect(() => {
     const isChatOpen = isChatContainerVisible || isChatInputVisible;
@@ -416,10 +463,171 @@ const ChatController = ({
   }, [chatMessages, embedConfig.mount.hostId]);
 
   const canUseAssistant = useCallback((): boolean => {
-    return assistantRef.current?.isReady?.() === true;
+    return isDetachedChatWindow || assistantRef.current?.isReady?.() === true;
   }, [assistantRef]);
 
-  useDesktopWindowResize();
+  const setAssistantState = useCallback(
+    async (state: string) => {
+      if (isDetachedChatWindow) {
+        sendAssistantRuntimeEvent({ type: "set-state", state });
+        return;
+      }
+
+      await assistantRef.current?.setState(state);
+    },
+    [assistantRef, sendAssistantRuntimeEvent],
+  );
+
+  const triggerAssistantAction = useCallback(
+    async (action: string) => {
+      if (isDetachedChatWindow) {
+        sendAssistantRuntimeEvent({ type: "trigger-action", action });
+        return;
+      }
+
+      await assistantRef.current?.triggerAction(action);
+    },
+    [assistantRef, sendAssistantRuntimeEvent],
+  );
+
+  const idleAssistant = useCallback(async () => {
+    if (isDetachedChatWindow) {
+      sendAssistantRuntimeEvent({ type: "idle" });
+      return;
+    }
+
+    await assistantRef.current?.idle();
+  }, [assistantRef, sendAssistantRuntimeEvent]);
+
+  useEffect(() => {
+    if (!isDetachedChatWindow || !api?.ipc) {
+      return;
+    }
+
+    const getEventDetail = (args: unknown[]): Record<string, unknown> => {
+      const candidate = args[0];
+      if (!candidate || typeof candidate !== "object") {
+        return {};
+      }
+
+      if (
+        "detail" in candidate &&
+        typeof candidate.detail === "object" &&
+        candidate.detail !== null
+      ) {
+        return candidate.detail as Record<string, unknown>;
+      }
+
+      return candidate as Record<string, unknown>;
+    };
+
+    const handleSpeak = (...args: unknown[]) => {
+      const detail = getEventDetail(args);
+      if (typeof detail.text !== "string") {
+        return;
+      }
+
+      detachedSpeakTransferRef.current = detachedSpeakTransferRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          const event: DesktopAssistantRuntimeEvent = {
+            type: "speak",
+            text: detail.text as string,
+            ...(typeof detail.bvmdUrl === "string"
+              ? { bvmdUrl: detail.bvmdUrl }
+              : {}),
+            ...(typeof detail.sessionId === "string"
+              ? { sessionId: detail.sessionId }
+              : {}),
+          };
+
+          if (typeof detail.audioUrl === "string" && !event.bvmdUrl) {
+            try {
+              const response = await fetch(detail.audioUrl);
+              if (response.ok) {
+                const audioData = await response.arrayBuffer();
+                if (audioData.byteLength > 0) {
+                  event.audioData = audioData;
+                  event.audioMimeType =
+                    response.headers.get("content-type") || "audio/mpeg";
+                }
+              }
+            } catch (error) {
+              Logger.warn(
+                "ChatController",
+                "Detached audio transfer failed; falling back to audio URL:",
+                error,
+              );
+            }
+
+            if (!event.audioData) {
+              event.audioUrl = detail.audioUrl;
+            }
+          }
+
+          sendAssistantRuntimeEvent(event);
+        });
+    };
+
+    const handleStop = () => {
+      sendAssistantRuntimeEvent({ type: "stop" });
+    };
+
+    const handleAudioEnd = (...args: unknown[]) => {
+      const detail = getEventDetail(args);
+      sendAssistantRuntimeEvent({
+        type: "audio-end",
+        ...(typeof detail.sessionId === "string"
+          ? { sessionId: detail.sessionId }
+          : {}),
+      });
+    };
+
+    ttsService.addEventListener("speak", handleSpeak);
+    ttsService.addEventListener("audioEnd", handleAudioEnd);
+    ttsService.addEventListener("stop", handleStop);
+
+    return () => {
+      ttsService.removeEventListener("speak", handleSpeak);
+      ttsService.removeEventListener("audioEnd", handleAudioEnd);
+      ttsService.removeEventListener("stop", handleStop);
+    };
+  }, [api, sendAssistantRuntimeEvent]);
+
+  useEffect(() => {
+    if (!isDetachedChatWindow || !api?.ipc) {
+      return;
+    }
+
+    api.ipc.send("desktop:chat-visibility", {
+      visible: isChatContainerVisible || isChatInputVisible,
+    });
+  }, [api, isChatContainerVisible, isChatInputVisible]);
+
+  useEffect(() => {
+    if (!isDetachedAvatarWindow || !api?.ipc) {
+      return;
+    }
+
+    return api.ipc.on("desktop:chat-visibility", (payload: unknown) => {
+      const visible =
+        payload &&
+        typeof payload === "object" &&
+        "visible" in payload &&
+        typeof payload.visible === "boolean"
+          ? payload.visible
+          : null;
+
+      if (visible === null) {
+        return;
+      }
+
+      setIsChatInputVisible(visible);
+      setIsChatContainerVisible(visible);
+    });
+  }, [api, setIsChatContainerVisible, setIsChatInputVisible]);
+
+  useDesktopWindowResize(null, { disabled: avatarOnly });
 
   /**
    * Handles AI response in voice mode.
@@ -453,7 +661,7 @@ const ChatController = ({
         "ChatController",
         "[Voice] Starting BUSY state (thinking animation)",
       );
-      await assistantRef.current?.setState("BUSY");
+      await setAssistantState("BUSY");
       Logger.log("ChatController", "[Voice] BUSY state set successfully");
     } else {
       Logger.warn(
@@ -725,7 +933,7 @@ const ChatController = ({
             "ChatController",
             "[Voice] Starting speaking animation (no TTS)",
           );
-          assistantRef.current?.triggerAction("speak");
+          await triggerAssistantAction("speak");
           hasSwitchedToSpeaking = true;
         }
 
@@ -758,7 +966,7 @@ const ChatController = ({
       Logger.log("ChatController", "Voice generation cancelled by user");
       voiceConversationService.changeState(ConversationStates.LISTENING);
       if (canUseAssistant()) {
-        assistantRef.current?.idle();
+        await idleAssistant();
       }
       streamAbortControllerRef.current = null;
       setIsProcessing(false);
@@ -772,7 +980,7 @@ const ChatController = ({
       setChatMessages(toChatMessageItems(chatService.getMessages()));
       voiceConversationService.changeState(ConversationStates.LISTENING);
       if (canUseAssistant()) {
-        assistantRef.current?.idle();
+        await idleAssistant();
       }
       streamAbortControllerRef.current = null;
       setIsProcessing(false);
@@ -832,6 +1040,9 @@ const ChatController = ({
     setChatMessages,
     assistantRef,
     canUseAssistant,
+    idleAssistant,
+    setAssistantState,
+    triggerAssistantAction,
     chatService,
   ]);
 
@@ -1373,6 +1584,10 @@ const ChatController = ({
     }
 
     Logger.log("ChatController", "Chat button clicked");
+    if (avatarOnly && api?.ipc) {
+      api.ipc.send("desktop:toggle-chat-window");
+      return;
+    }
     if (requireSetupOnChatClick) {
       Logger.log(
         "ChatController",
@@ -1410,7 +1625,17 @@ const ChatController = ({
     isChatInputVisible,
     setIsChatInputVisible,
     setIsChatContainerVisible,
+    avatarOnly,
+    api,
   ]);
+
+  useEffect(() => {
+    if (!isDetachedChatWindow || !api?.ipc) return;
+
+    return api.ipc.on("desktop:toggle-chat", () => {
+      handleAssistantControlClick();
+    });
+  }, [api, handleAssistantControlClick]);
 
   /**
    * Handles chat open from drag-drop.
@@ -1482,6 +1707,35 @@ const ChatController = ({
     setIsChatInputVisible,
     setIsChatContainerVisible,
     chatEnabled,
+  ]);
+
+  useEffect(() => {
+    if (
+      !chatEnabled ||
+      !isNormalDesktop ||
+      requireSetupOnChatClick ||
+      hasAutoOpenedNormalChatRef.current
+    ) {
+      return;
+    }
+
+    if (isChatContainerVisible || isChatInputVisible) {
+      hasAutoOpenedNormalChatRef.current = true;
+      return;
+    }
+
+    hasAutoOpenedNormalChatRef.current = true;
+    Logger.log("ChatController", "Auto-opening chat in normal desktop mode");
+    setIsChatInputVisible(true);
+    setIsChatContainerVisible(true);
+  }, [
+    chatEnabled,
+    isChatContainerVisible,
+    isChatInputVisible,
+    isNormalDesktop,
+    requireSetupOnChatClick,
+    setIsChatContainerVisible,
+    setIsChatInputVisible,
   ]);
 
   /**
@@ -1901,7 +2155,7 @@ const ChatController = ({
           fullResponse.length > 10 &&
           canUseAssistant()
         ) {
-          assistantRef.current?.triggerAction("speak");
+          await triggerAssistantAction("speak");
           hasSwitchedToSpeaking = true;
         }
 
@@ -1941,7 +2195,7 @@ const ChatController = ({
       ttsService.stopPlayback();
       ttsService.removeEventListener("audioFinished", handleAudioFinished);
       if (canUseAssistant()) {
-        assistantRef.current?.idle();
+        await idleAssistant();
       }
       streamAbortControllerRef.current = null;
       setIsProcessing(false);
@@ -1963,7 +2217,7 @@ const ChatController = ({
 
       // Reset assistant animation
       if (canUseAssistant()) {
-        assistantRef.current?.idle();
+        await idleAssistant();
       }
 
       streamAbortControllerRef.current = null;
@@ -1990,6 +2244,16 @@ const ChatController = ({
         Logger.log(
           "ChatController",
           "TTS chunk generation aborted while waiting for completion",
+        );
+      } else {
+        // The normal text-chat path must explicitly close its TTS session.
+        // Without this, the final short clip leaves the animation bridge
+        // waiting forever because TTSService intentionally withholds
+        // `audioEnd` until every generated chunk is marked complete.
+        ttsService.markSessionComplete(autoTTSSessionId);
+        Logger.log(
+          "ChatController",
+          `[TTS] Session ${autoTTSSessionId} marked complete`,
         );
       }
     }
@@ -2064,7 +2328,7 @@ const ChatController = ({
 
     if (canUseAssistant()) {
       Logger.log("ChatController", "Starting BUSY state (thinking animation)");
-      await assistantRef.current?.setState("BUSY");
+      await setAssistantState("BUSY");
       Logger.log("ChatController", "BUSY state set successfully");
     } else {
       Logger.warn("ChatController", "Assistant not ready, skipping BUSY state");
@@ -2396,7 +2660,7 @@ const ChatController = ({
     ttsService.stopPlayback();
 
     if (canUseAssistant()) {
-      await assistantRef.current?.setState("BUSY");
+      await setAssistantState("BUSY");
     }
 
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -2419,7 +2683,9 @@ const ChatController = ({
   return (
     <>
       {/* Desktop input window manager */}
-      {isDesktop && <InputWindowManager />}
+      {!avatarOnly && !isInputWindow && isDesktop && !isNormalDesktop && (
+        <InputWindowManager />
+      )}
 
       {/* AI Toolbar - appears on text/image selection */}
       {toolbarEnabled ? <AIToolbar /> : null}
@@ -2429,37 +2695,54 @@ const ChatController = ({
           {/* Assistant control dock visibility logic:
               - Model enabled: visible when model ready, HIDE when chat opens (model is anchor)
               - Model disabled: ALWAYS visible (button is anchor, needed for dragging) */}
-          <AssistantControlDock
-            onClick={handleAssistantControlClick}
-            isVisible={
-              modelDisabled
-                ? true
-                : isAssistantReady &&
-                  !(isChatContainerVisible || isChatInputVisible)
-            }
-            modelDisabled={modelDisabled}
-            isChatOpen={isChatContainerVisible || isChatInputVisible}
-            chatInputRef={chatInputRef}
-          />
+          {(!avatarOnly || !modelDisabled) && (
+            <AssistantControlDock
+              onClick={handleAssistantControlClick}
+              isVisible={
+                modelDisabled
+                  ? true
+                  : isDesktop || isNormalDesktop
+                    ? true
+                    : isAssistantReady &&
+                      !(isChatContainerVisible || isChatInputVisible)
+              }
+              modelDisabled={modelDisabled}
+              isChatOpen={isChatContainerVisible || isChatInputVisible}
+              chatInputRef={chatInputRef}
+            />
+          )}
 
           {/* Chat Input - bottom screen */}
-          {!isDesktop && (
-            <ChatInputTyped
-              ref={chatInputRef}
-              onSend={handleMessageSend}
-              onClose={handleChatInputClose}
-              onVoiceTranscription={handleVoiceTranscription}
-              onVoiceMode={handleVoiceModeChange}
+          {(!isDesktop ||
+            isNormalDesktop ||
+            (isLiveWallpaperWindow && !isDetachedChatWindow)) &&
+            !avatarOnly && (
+              <ChatInputTyped
+                ref={chatInputRef}
+                onSend={handleMessageSend}
+                onClose={handleChatInputClose}
+                onVoiceTranscription={handleVoiceTranscription}
+                onVoiceMode={handleVoiceModeChange}
+                embedConfig={embedConfig}
+              />
+            )}
+
+          {/* Chat Container - message bubbles */}
+          {!avatarOnly && (
+            <ChatContainer
+              modelDisabled={modelDisabled}
+              normalDesktop={isNormalDesktop}
+              chatInputRef={chatInputRef}
+              onDragDrop={handleDragDrop}
               embedConfig={embedConfig}
             />
           )}
 
-          {/* Chat Container - message bubbles */}
-          <ChatContainer
-            modelDisabled={modelDisabled}
-            onDragDrop={handleDragDrop}
-            embedConfig={embedConfig}
-          />
+          {isDetachedChatWindow &&
+            !avatarOnly &&
+            (isChatContainerVisible || isChatInputVisible) && (
+              <DetachedChatResizeHandle />
+            )}
         </>
       ) : null}
     </>

@@ -19,6 +19,11 @@ import {
 import type { ResolvedVAssistEmbedConfig } from "../embed/config";
 import { emitEmbedHostEvent } from "../embed/runtimeStore";
 import { useVisibilityUnmount } from "../hooks/useVisibilityUnmount";
+import AppModeSplitter from "./desktop/AppModeSplitter";
+import {
+  isDetachedAvatarWindow,
+  isDetachedChatWindow,
+} from "../utils/PlatformUtils";
 
 interface AppContentProps {
   mode?: string;
@@ -60,17 +65,20 @@ function AppContent({
   const chatEnabled = embedConfig.features.chat;
   const enableModelLoading = isConfigLoading
     ? null
-    : liveAssistantEnabled
+    : liveAssistantEnabled && !isDetachedChatWindow
       ? enableModelLoadingSetting
       : false;
   const chatControllerProps = onRequireSetup ? { onRequireSetup } : {};
 
   const shouldMountModel = useVisibilityUnmount(
-    liveAssistantEnabled && enableModelLoading === true,
+    liveAssistantEnabled &&
+      enableModelLoading === true &&
+      !isDetachedChatWindow,
   );
 
   const shouldWaitForKokoro =
     liveAssistantEnabled &&
+    !isDetachedChatWindow &&
     ttsConfig.enabled &&
     ttsConfig.provider === "kokoro" &&
     ttsConfig.kokoro?.keepModelLoaded !== false &&
@@ -109,6 +117,7 @@ function AppContent({
 
   return (
     <div className="relative">
+      <AppModeSplitter />
       {shouldShowBlockingLoading ? (
         <LoadingIndicator isVisible={true} />
       ) : (
@@ -133,7 +142,8 @@ function AppContent({
             )}
           >
             <ChatController
-              modelDisabled={!enableModelLoading}
+              modelDisabled={!enableModelLoading || isDetachedChatWindow}
+              avatarOnly={isDetachedAvatarWindow}
               requireSetupOnChatClick={requireSetupOnChatClick}
               embedConfig={embedConfig}
               {...chatControllerProps}

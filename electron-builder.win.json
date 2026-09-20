@@ -6,6 +6,12 @@
     "buildResources": "build"
   },
   "asarUnpack": ["electron/assets/runtime/**"],
+  "extraResources": [
+    {
+      "from": "electron/native/desktop-host/build/Release/desktop_host.node",
+      "to": "native/desktop-host/desktop_host.node"
+    }
+  ],
   "files": [
     "dist-desktop/**/*",
     "electron/server/build/Release/server.node",

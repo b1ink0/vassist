@@ -36,6 +36,11 @@ export interface LiveLipSyncAnimationTarget {
   setGenericLipSyncAudio(audio: HTMLAudioElement | null): void;
 }
 
+export interface LiveLipSyncAttachOptions {
+  /** Keep the analyser connected without producing a second audible output. */
+  output?: boolean;
+}
+
 type ActiveAudioGraph = {
   audio: HTMLAudioElement;
   source: MediaElementAudioSourceNode;
@@ -155,7 +160,12 @@ class LiveLipSyncService {
     }
   }
 
-  async attach(audio: HTMLAudioElement): Promise<boolean> {
+  async attach(
+    audio: HTMLAudioElement,
+    options: LiveLipSyncAttachOptions = {},
+  ): Promise<boolean> {
+    const outputEnabled = options.output !== false;
+
     if (!this.accurateLipSyncEnabled || this.legacyLipSyncEnabled) {
       this.attachGeneric(audio);
       return false;
@@ -174,6 +184,7 @@ class LiveLipSyncService {
         await this.context.resume();
       }
       if (this.context.state !== "running") {
+        this.attachGeneric(audio);
         return false;
       }
 
@@ -182,13 +193,17 @@ class LiveLipSyncService {
       meter = this.context.createAnalyser();
       meter.fftSize = 256;
       meter.smoothingTimeConstant = 0.25;
-      delay = this.context.createDelay(1);
-      delay.delayTime.value = OUTPUT_DELAY_SECONDS;
+      if (outputEnabled) {
+        delay = this.context.createDelay(1);
+        delay.delayTime.value = OUTPUT_DELAY_SECONDS;
+      }
 
       source.connect(this.analyzer);
       source.connect(meter);
-      meter.connect(delay);
-      delay.connect(this.context.destination);
+      if (delay) {
+        meter.connect(delay);
+        delay.connect(this.context.destination);
+      }
 
       this.graph = { audio, source, meter, delay };
       this.visemes.clear();
@@ -196,7 +211,10 @@ class LiveLipSyncService {
       this.analyzer.resetAll();
       this.analyzer.start();
       this.startAnimationLoop();
-      Logger.log("LiveLipSync", "Live TTS lip sync attached");
+      Logger.log(
+        "LiveLipSync",
+        `Live TTS lip sync attached${outputEnabled ? "" : " (analysis only)"}`,
+      );
       return true;
     } catch (error) {
       Logger.warn(
@@ -211,7 +229,9 @@ class LiveLipSyncService {
           source.disconnect();
           meter?.disconnect();
           delay?.disconnect();
-          source.connect(this.context.destination);
+          if (outputEnabled) {
+            source.connect(this.context.destination);
+          }
           const fallbackMeter = meter ?? this.context.createAnalyser();
           this.graph = {
             audio,
@@ -337,7 +357,7 @@ class LiveLipSyncService {
 
   private updateSpeechLevel(): void {
     const meter = this.graph?.meter;
-    if (!meter || !this.graph?.delay) return;
+    if (!meter) return;
 
     if (this.meterSamples.length !== meter.fftSize) {
       this.meterSamples = new Float32Array(meter.fftSize);

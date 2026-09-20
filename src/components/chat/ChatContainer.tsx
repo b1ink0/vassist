@@ -12,6 +12,7 @@ import {
   useCallback,
   type Dispatch,
   type MutableRefObject,
+  type RefObject,
   type SetStateAction,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -81,12 +82,23 @@ import {
 import { useAndroidApi } from "../../hooks/useAndroidStore";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
 import Logger from "../../services/common/LoggerService";
-import { isDesktop, isAndroid } from "../../utils/PlatformUtils";
+import {
+  isDesktop,
+  isAndroid,
+  isAppModeWindow,
+  isDetachedChatWindow,
+} from "../../utils/PlatformUtils";
 import type { PositionManagerLike } from "../../babylon/types";
 import type { ComponentType } from "react";
+import {
+  ASSISTANT_CONTROL_CHAT_GUTTER,
+  getButtonPositionFromPreset,
+} from "./assistant-controls/positioning";
 
 interface ChatContainerProps {
   modelDisabled?: boolean;
+  normalDesktop?: boolean;
+  chatInputRef?: RefObject<HTMLElement | null>;
   embedConfig: ResolvedVAssistEmbedConfig;
   onDragDrop?: (data: {
     text?: string;
@@ -147,6 +159,7 @@ const CHAT_MESSAGE_GAP = 12;
 const CHAT_LIST_PADDING = 50;
 const CHAT_SCROLL_END_THRESHOLD = 120;
 const CHAT_ESTIMATED_ROW_HEIGHT = 128;
+const DETACHED_CHAT_BOTTOM_CLEARANCE = 100;
 
 interface ChatHistoryPanelPropsLike {
   isLightBackground: boolean;
@@ -326,6 +339,8 @@ const ANDROID_CHAT_TOP_OFFSET = 32;
  */
 const ChatContainer = ({
   modelDisabled = false,
+  normalDesktop = isAppModeWindow,
+  chatInputRef: externalChatInputRef,
   embedConfig,
   onDragDrop,
 }: ChatContainerProps) => {
@@ -355,6 +370,7 @@ const ChatContainer = ({
   const buttonPosition = useButtonPosition();
   const isDraggingButton = useIsDraggingButton();
   const isDraggingModel = useIsDraggingModel();
+  const [isResizingDetachedChat, setIsResizingDetachedChat] = useState(false);
   const {
     setIsDragOverChat: setIsDragOver,
     startButtonDrag,
@@ -398,7 +414,9 @@ const ChatContainer = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const [debugMarkers, setDebugMarkers] = useState<DebugMarker[]>([]);
-  const chatInputRef = useRef<HTMLDivElement | null>(null);
+  const localChatInputRef = useRef<HTMLDivElement | null>(null);
+  const chatInputRef = externalChatInputRef ?? localChatInputRef;
+  const [normalChatInputHeight, setNormalChatInputHeight] = useState(140);
   const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(
     null,
   );
@@ -406,6 +424,46 @@ const ChatContainer = ({
   const [isSettingsPanelClosing, setIsSettingsPanelClosing] = useState(false);
   const [isQuickPanelClosing, setIsQuickPanelClosing] = useState(false);
   const [isHistoryPanelClosing, setIsHistoryPanelClosing] = useState(false);
+
+  useEffect(() => {
+    if (!isDetachedChatWindow) return;
+
+    const handleResizeStart = () => setIsResizingDetachedChat(true);
+    const handleResizeEnd = () => setIsResizingDetachedChat(false);
+
+    window.addEventListener("detachedChatResizeStart", handleResizeStart);
+    window.addEventListener("detachedChatResizeEnd", handleResizeEnd);
+
+    return () => {
+      window.removeEventListener("detachedChatResizeStart", handleResizeStart);
+      window.removeEventListener("detachedChatResizeEnd", handleResizeEnd);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!normalDesktop) return;
+
+    let frameId: number | null = null;
+    const updateInputHeight = () => {
+      const element = chatInputRef.current;
+      if (!element) return;
+
+      const nextHeight = Math.ceil(element.getBoundingClientRect().height);
+      if (nextHeight > 0) {
+        setNormalChatInputHeight(nextHeight);
+      }
+    };
+
+    frameId = window.requestAnimationFrame(updateInputHeight);
+    const element = chatInputRef.current;
+    const observer = element ? new ResizeObserver(updateInputHeight) : null;
+    if (element && observer) observer.observe(element);
+
+    return () => {
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+      observer?.disconnect();
+    };
+  }, [chatInputRef, normalDesktop]);
 
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editingChatTitle, setEditingChatTitle] = useState("");
@@ -609,6 +667,25 @@ const ChatContainer = ({
       return { x: 8, y: ANDROID_CHAT_TOP_OFFSET };
     }
 
+    if (isDetachedChatWindow) {
+      return { x: 16, y: 16 };
+    }
+
+    if (normalDesktop) {
+      const splitPercent = Math.min(
+        60,
+        Math.max(28, uiConfig.desktopMode.appMode.chatSplitPercent),
+      );
+      const containerWidth = Math.max(
+        360,
+        Math.floor((window.innerWidth * splitPercent) / 100) - 24,
+      );
+      return {
+        x: Math.max(16, window.innerWidth - containerWidth - 16),
+        y: 16,
+      };
+    }
+
     if (isSmallScreen) {
       const containerWidth = Math.min(400, window.innerWidth - 16);
       const containerHeight = modelDisabled ? 400 : 500;
@@ -659,7 +736,7 @@ const ChatContainer = ({
         const modelPos = positionManagerRef.current.getPositionPixels();
         const containerWidth = Math.min(400, window.innerWidth - 16);
         const containerHeight = 500;
-        const offsetX = 15;
+        const offsetX = 15 + (isDesktop ? ASSISTANT_CONTROL_CHAT_GUTTER : 0);
         const windowWidth = window.innerWidth;
         const windowHeight = window.innerHeight;
         const availableHeight = windowHeight - chatInputHeight;
@@ -707,13 +784,28 @@ const ChatContainer = ({
 
     return { x: 0, y: 0 };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelDisabled]);
+  }, [
+    modelDisabled,
+    normalDesktop,
+    isDetachedChatWindow,
+    uiConfig.desktopMode.appMode.chatSplitPercent,
+  ]);
 
   useEffect(() => {
     if (!modelDisabled || buttonInitializedRef.current) return;
 
     const initButton = async () => {
       try {
+        if (isDetachedChatWindow) {
+          buttonPosRef.current = getButtonPositionFromPreset("bottom-center", {
+            width: window.innerWidth,
+            height: window.innerHeight,
+          });
+          buttonInitializedRef.current = true;
+          setContainerPos(calculateContainerPosition());
+          return;
+        }
+
         const defaultPos = {
           x: window.innerWidth - 68,
           y: window.innerHeight - 68,
@@ -743,6 +835,7 @@ const ChatContainer = ({
 
   useEffect(() => {
     if (!isVisible) return;
+    if (normalDesktop) return;
 
     const handleModelPosition = () => {
       if (isAndroid) {
@@ -787,7 +880,7 @@ const ChatContainer = ({
           const modelPos = positionManagerRef.current.getPositionPixels();
           const containerWidth = Math.min(400, window.innerWidth - 16);
           const containerHeight = 500;
-          const offsetX = 15;
+          const offsetX = 15 + (isDesktop ? ASSISTANT_CONTROL_CHAT_GUTTER : 0);
           const windowWidth = window.innerWidth;
           const windowHeight = window.innerHeight;
           const availableHeight = windowHeight - chatInputHeight;
@@ -837,19 +930,20 @@ const ChatContainer = ({
         window.removeEventListener("modelPositionChange", handleModelPosition);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isVisible, modelDisabled]);
+  }, [isVisible, modelDisabled, normalDesktop]);
 
   useEffect(() => {
     if (!isVisible) return;
 
     const handleResize = () => {
+      if (normalDesktop) return;
       const newPos = calculateContainerPosition();
       setContainerPos(newPos);
     };
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [isVisible, calculateContainerPosition]);
+  }, [isVisible, calculateContainerPosition, normalDesktop]);
 
   useEffect(() => {
     const handleButtonMoved = (event: Event) => {
@@ -861,12 +955,12 @@ const ChatContainer = ({
       setContainerPos(newPos);
     };
 
-    if (modelDisabled) {
+    if (modelDisabled && !normalDesktop) {
       window.addEventListener("chatButtonMoved", handleButtonMoved);
       return () =>
         window.removeEventListener("chatButtonMoved", handleButtonMoved);
     }
-  }, [modelDisabled, calculateContainerPosition]);
+  }, [modelDisabled, calculateContainerPosition, normalDesktop]);
 
   useEffect(() => {
     if (!isVisible) {
@@ -2055,7 +2149,12 @@ const ChatContainer = ({
 
   if (modelDisabled && !buttonInitializedRef.current) return null;
 
-  if (!modelDisabled && containerPos.x === 0 && containerPos.y === 0)
+  if (
+    !normalDesktop &&
+    !modelDisabled &&
+    containerPos.x === 0 &&
+    containerPos.y === 0
+  )
     return null;
 
   const ttsEnabled = ttsConfig.enabled;
@@ -2162,27 +2261,64 @@ const ChatContainer = ({
         data-electron-interactive="true"
         style={{
           position: "fixed",
-          left: `${containerPos.x}px`,
+          left: normalDesktop
+            ? "auto"
+            : isDetachedChatWindow
+              ? "16px"
+              : `${containerPos.x}px`,
+          right: normalDesktop ? "16px" : undefined,
           top: isAndroid
             ? `${ANDROID_CHAT_TOP_OFFSET}px`
-            : `${containerPos.y}px`,
-          height: isAndroid ? `${androidContainerHeight}px` : undefined,
-          maxHeight: isAndroid ? `${androidContainerHeight}px` : undefined,
+            : normalDesktop
+              ? "16px"
+              : isDetachedChatWindow
+                ? "16px"
+                : `${containerPos.y}px`,
+          height: isAndroid
+            ? `${androidContainerHeight}px`
+            : normalDesktop
+              ? `calc(100vh - ${normalChatInputHeight + 32}px)`
+              : isDetachedChatWindow
+                ? `calc(100vh - ${DETACHED_CHAT_BOTTOM_CLEARANCE}px)`
+                : undefined,
+          maxHeight: isAndroid
+            ? `${androidContainerHeight}px`
+            : normalDesktop
+              ? `calc(100vh - ${normalChatInputHeight + 32}px)`
+              : isDetachedChatWindow
+                ? `calc(100vh - ${DETACHED_CHAT_BOTTOM_CLEARANCE}px)`
+                : undefined,
+          width: normalDesktop
+            ? `calc(${Math.min(
+                60,
+                Math.max(28, uiConfig.desktopMode.appMode.chatSplitPercent),
+              )}vw - 24px)`
+            : isDetachedChatWindow
+              ? "calc(100vw - 32px)"
+              : undefined,
+          maxWidth: normalDesktop || isDetachedChatWindow ? "none" : undefined,
           zIndex: 9999,
           borderColor: isDragOver
             ? "rgba(59, 130, 246, 0.6)"
-            : isDraggingButton || isDraggingModel
+            : isDraggingButton || isDraggingModel || isResizingDetachedChat
               ? "rgba(255, 255, 255, 0.4)"
               : undefined,
           boxShadow: isDragOver
             ? "0 4px 20px rgba(59, 130, 246, 0.3)"
-            : isDraggingButton || isDraggingModel
+            : isDraggingButton || isDraggingModel || isResizingDetachedChat
               ? "0 4px 20px rgba(255, 255, 255, 0.2)"
               : undefined,
         }}
         className={cn(
-          "flex flex-col-reverse gap-3 w-[calc(100vw-16px)] max-w-[400px] rounded-[10px] border-2 border-transparent p-[5px]",
-          modelDisabled ? "h-[450px]" : "h-[500px]",
+          "flex flex-col-reverse gap-3 rounded-[10px] border-2 border-transparent p-[5px]",
+          normalDesktop
+            ? "h-full"
+            : isDetachedChatWindow
+              ? ""
+              : "w-[calc(100vw-16px)] max-w-[400px]",
+          !normalDesktop &&
+            !isDetachedChatWindow &&
+            (modelDisabled ? "h-[450px]" : "h-[500px]"),
         )}
       >
         {/* Drag overlay indicator - always rendered, visibility controlled by opacity */}

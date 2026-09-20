@@ -15,10 +15,32 @@ export interface ElectronWindow {
   ) => Promise<void>;
   frontendReady: () => Promise<void>;
   setPosition: (x: number, y: number) => Promise<void>;
+  setBounds: (
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ) => Promise<void>;
   getPosition: () => Promise<{ x: number; y: number }>;
   getCursorScreenPoint?: () => Promise<{ x: number; y: number }>;
   setSize: (width: number, height: number) => Promise<void>;
   getSize: () => Promise<{ width: number; height: number }>;
+  getDesktopMode: () => Promise<{
+    mode: "floating-app" | "app" | "live-wallpaper";
+    liveWallpaperInteraction: "non-interactive" | "interactive";
+    controlPlacement: "attached" | "detached";
+  }>;
+  setDesktopMode: (
+    request:
+      | "floating-app"
+      | "app"
+      | "live-wallpaper"
+      | {
+          mode: "floating-app" | "app" | "live-wallpaper";
+          liveWallpaperInteraction?: "non-interactive" | "interactive";
+          controlPlacement?: "attached" | "detached";
+        },
+  ) => Promise<void>;
   updateWindowSizeForZoom?: (width: number, height: number) => Promise<void>;
   setNativeDevToolsEnabled?: (enabled: boolean) => Promise<boolean>;
   getNativeDevToolsEnabled?: () => Promise<boolean>;

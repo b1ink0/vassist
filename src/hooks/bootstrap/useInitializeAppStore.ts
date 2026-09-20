@@ -10,6 +10,8 @@ import { useConfigStore } from "../../stores/useConfigStore";
 import { useDesktopStore } from "../../stores/useDesktopStore";
 import {
   isDesktop,
+  isDetachedAvatarWindow,
+  isDetachedChatWindow,
   isInputWindow,
   isScreenPicker,
 } from "../../utils/PlatformUtils";
@@ -50,6 +52,7 @@ export function useInitializeAppStore(
       if (
         !__DESKTOP_MODE__ ||
         isInputWindow ||
+        isDetachedAvatarWindow ||
         isScreenPicker ||
         !api?.window?.frontendReady ||
         hasNotifiedFrontendReadyRef.current
@@ -82,7 +85,7 @@ export function useInitializeAppStore(
       return;
     }
 
-    if (uiConfig.enableModelLoading !== false) {
+    if (uiConfig.enableModelLoading !== false && !isDetachedChatWindow) {
       return;
     }
 
@@ -217,7 +220,12 @@ export function useInitializeAppStore(
   }, [embedConfig, uiConfig?.shortcuts?.enabled]);
 
   useEffect(() => {
-    if (!isDesktop || !api?.shortcuts || isInputWindow) {
+    if (
+      !isDesktop ||
+      !api?.shortcuts ||
+      isInputWindow ||
+      isDetachedAvatarWindow
+    ) {
       return;
     }
 

@@ -17,6 +17,7 @@ export class CanvasInteractionManager {
   private readonly modelMesh: Mesh | AbstractMesh | null;
   private readonly isDesktop: boolean;
   private readonly desktopAPI: DesktopApiLike | null;
+  private readonly allowDesktopWindowDrag: boolean;
 
   private isDragging: boolean;
   private dragStartX: number;
@@ -46,12 +47,14 @@ export class CanvasInteractionManager {
     modelMesh: Mesh | AbstractMesh | null,
     isDesktop = false,
     desktopAPI: DesktopApiLike | null = null,
+    allowDesktopWindowDrag = true,
   ) {
     this.scene = scene;
     this.canvas = canvas;
     this.modelMesh = modelMesh;
     this.isDesktop = isDesktop;
     this.desktopAPI = desktopAPI;
+    this.allowDesktopWindowDrag = allowDesktopWindowDrag;
 
     // Drag state
     this.isDragging = false;
@@ -80,7 +83,7 @@ export class CanvasInteractionManager {
 
     Logger.log(
       "CanvasInteractionManager",
-      `Initialized (${isDesktop ? "Desktop" : "Web"} mode)`,
+      `Initialized (${isDesktop ? "Desktop" : "Web"} mode, window drag ${allowDesktopWindowDrag ? "enabled" : "disabled"})`,
     );
   }
 
@@ -173,6 +176,12 @@ export class CanvasInteractionManager {
   async handleCanvasPointerDown(event: PointerEvent): Promise<void> {
     // Only left button
     if (event.button !== 0) return;
+
+    // A live-wallpaper HWND is desktop content, not a movable application
+    // window. Keep this guard here so the normal floating-window drag path is
+    // unchanged while live wallpaper cannot move the native window through
+    // model dragging.
+    if (this.isDesktop && !this.allowDesktopWindowDrag) return;
 
     if (!this.isCameraLocked()) return;
 

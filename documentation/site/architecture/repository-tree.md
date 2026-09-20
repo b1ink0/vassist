@@ -4,30 +4,31 @@ VAssist repository tree and file metrics.
 
 ## Totals
 
-- Directories: 180
-- Files: 598
-- Text files counted for metrics: 511
-- Total text lines: 159572
-- Code files counted for metrics: 409
-- Total code lines: 143934
+- Directories: 182
+- Files: 610
+- Text files counted for metrics: 523
+- Total text lines: 162655
+- Code files counted for metrics: 419
+- Total code lines: 146921
 
 ## Line Counts by File Type
 
 | File Type    | Extensions              | Files | Lines |
 | ------------ | ----------------------- | ----: | ----: |
 | Batch Script | .bat                    |     1 |    94 |
-| C and C++    | .c, .cc, .cpp, .h, .hpp |     6 |  1477 |
-| CSS          | .css, .scss, .less      |     7 |  2729 |
+| C and C++    | .c, .cc, .cpp, .h, .hpp |     7 |  2003 |
+| CSS          | .css, .scss, .less      |     7 |  2751 |
 | HTML         | .html                   |     5 |   191 |
 | Java         | .java                   |     4 |   215 |
+| JavaScript   | .js, .mjs, .cjs         |     1 |    32 |
 | Kotlin       | .kt                     |    20 | 10988 |
 | Shell Script | (no extension)          |     5 |   654 |
-| TSX          | .tsx                    |   105 | 50949 |
-| TypeScript   | .ts, .mts, .cts         |   256 | 76637 |
+| TSX          | .tsx                    |   111 | 52307 |
+| TypeScript   | .ts, .mts, .cts         |   258 | 77686 |
 | Gradle       | .gradle                 |     7 |   579 |
-| JSON         | .json                   |    17 |   573 |
-| Markdown     | .md                     |    35 |  6109 |
-| Other Text   | mixed                   |    14 |  3561 |
+| JSON         | .json                   |    17 |   580 |
+| Markdown     | .md                     |    36 |  6166 |
+| Other Text   | mixed                   |    15 |  3593 |
 | Plain Text   | (no extension)          |    11 |  4015 |
 | Properties   | .properties             |     2 |    29 |
 | SVG          | .svg                    |     4 |   342 |
@@ -39,12 +40,12 @@ VAssist repository tree and file metrics.
 - android/: 64 directories, 92 files
 - android-src/: 1 directories, 3 files
 - documentation/: 13 directories, 50 files
-- electron/: 15 directories, 54 files
+- electron/: 17 directories, 60 files
 - embed/: 1 directories, 1 files
 - extension/: 6 directories, 19 files
 - packages/: 5 directories, 12 files
 - public/: 5 directories, 20 files
-- src/: 58 directories, 254 files
+- src/: 58 directories, 260 files
 - tests/: 9 directories, 56 files
 - tools/: 2 directories, 7 files
 - .gitignore: file
@@ -343,8 +344,16 @@ vassist/
 │   │   │   ├── devTools.ts
 │   │   │   └── permissionsProtocol.ts
 │   │   └── windows/
+│   │       ├── desktopMode.ts
+│   │       ├── liveWallpaperManager.ts
 │   │       ├── trayShortcutsManager.ts
 │   │       └── windowManager.ts
+│   ├── native/
+│   │   └── desktop-host/
+│   │       ├── binding.gyp
+│   │       ├── build.mjs
+│   │       ├── desktop_host.cc
+│   │       └── README.md
 │   ├── server/
 │   │   ├── gpt-sovits/
 │   │   │   ├── utils/
@@ -521,9 +530,15 @@ vassist/
 │   │   ├── DemoSite/
 │   │   │   └── DocumentInteractionDemo.tsx
 │   │   ├── desktop/
+│   │   │   ├── AppModeSplitter.tsx
+│   │   │   ├── DesktopModeController.tsx
+│   │   │   ├── DesktopModeHost.tsx
+│   │   │   ├── DesktopModeSurface.tsx
+│   │   │   ├── DesktopRendererStateBridge.tsx
 │   │   │   ├── DesktopScreenShareDialog.tsx
 │   │   │   ├── DesktopWindowControls.tsx
 │   │   │   ├── DesktopWindowInteractivityBridge.tsx
+│   │   │   ├── DetachedChatResizeHandle.tsx
 │   │   │   ├── InputWindowManager.tsx
 │   │   │   └── VideoPreview.tsx
 │   │   ├── icons/

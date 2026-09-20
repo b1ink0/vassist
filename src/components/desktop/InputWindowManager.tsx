@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import { useIsChatInputVisible } from "../../hooks/app/useChat";
 import { useUIConfig } from "../../hooks/config/useConfigUI";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
-import { isDesktop } from "../../utils/PlatformUtils";
+import { isAppModeWindow, isDesktop } from "../../utils/PlatformUtils";
 import Logger from "../../services/common/LoggerService";
 
 export function InputWindowManager() {
@@ -16,7 +16,7 @@ export function InputWindowManager() {
   const themeMode = uiConfig.backgroundDetection?.mode;
 
   useEffect(() => {
-    if (!isDesktop || !api?.inputWindow) return;
+    if (isAppModeWindow || !isDesktop || !api?.inputWindow) return;
 
     const manageInputWindow = async () => {
       try {
@@ -38,7 +38,7 @@ export function InputWindowManager() {
   }, [isChatInputVisible, api]);
 
   useEffect(() => {
-    if (!isDesktop || !api?.ipc || !themeMode) return;
+    if (isAppModeWindow || !isDesktop || !api?.ipc || !themeMode) return;
 
     Logger.log("InputWindowManager", "Broadcasting desktop theme mode", {
       mode: themeMode,

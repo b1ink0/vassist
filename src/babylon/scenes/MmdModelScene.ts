@@ -51,7 +51,12 @@ import { VmdLoader } from "babylon-mmd";
 import { pmxConverterService } from "../../services/mmd/PMXConverterService";
 import { modelStorageService } from "../../services/storage/ModelStorageService";
 import { stageStorageService } from "../../services/storage/StageStorageService";
-import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
+import {
+  isAndroid,
+  isDesktop,
+  isLiveWallpaperWindow,
+  isAppModeWindow,
+} from "../../utils/PlatformUtils";
 import { ARSessionController } from "../ar/ARSessionController";
 import { NativeAndroidARProvider } from "../ar/NativeAndroidARProvider";
 import {
@@ -1488,9 +1493,11 @@ export const buildMmdModelScene = async (
 
   // Get position preset BEFORE initializing AnimationManager
   // so intro animation can be flipped if model is on left side
-  const positionConfig = finalConfig.uiConfig?.position || {
-    preset: "bottom-right",
-  };
+  const positionConfig = isAppModeWindow
+    ? { ...(finalConfig.uiConfig?.position ?? {}), preset: "center" }
+    : finalConfig.uiConfig?.position || {
+        preset: "bottom-right",
+      };
   const preset = positionConfig.preset || "bottom-right";
   // Use the actual preset directly (last-location preset now exists in config)
   const actualPreset = preset;
@@ -1588,6 +1595,7 @@ export const buildMmdModelScene = async (
   // savedModelPosition persists across unmount/remount (tab visibility changes)
   const shouldUseSavedPosition =
     !isAndroid &&
+    !isAppModeWindow &&
     Boolean(
       finalConfig.savedModelPosition ||
       (preset === "last-location" && positionConfig.lastLocation),
@@ -1815,6 +1823,7 @@ export const buildMmdModelScene = async (
     modelMesh,
     isDesktop,
     finalConfig.desktopAPI,
+    !isDesktop || !isLiveWallpaperWindow,
   );
   interactionManager.initialize();
 
