@@ -3,6 +3,8 @@
  */
 
 import {
+  lazy,
+  Suspense,
   useState,
   useEffect,
   useRef,
@@ -28,11 +30,14 @@ import emoteStorageService from "../../services/storage/EmoteStorageService";
 import emotePlayerService from "../../services/mmd/EmotePlayerService";
 import { modelStorageService } from "../../services/storage/ModelStorageService";
 import { stageStorageService } from "../../services/storage/StageStorageService";
-import { ARPlacementGuide } from "../ar/ARPlacementGuide";
+const ARPlacementGuide = lazy(async () => {
+  const module = await import("../ar/ARPlacementGuide");
+  return { default: module.ARPlacementGuide };
+});
 import {
   isAndroid,
   isDesktop,
-  isAppModeWindow,
+  isDesktopAttachedModeWindow,
   isDetachedChatWindow,
 } from "../../utils/PlatformUtils";
 import {
@@ -149,11 +154,6 @@ const AssistantControlDock = ({
   const [emoteCurrentTime, setEmoteCurrentTime] = useState(0);
   const [emoteDuration, setEmoteDuration] = useState(0);
   const [emoteProgress, setEmoteProgress] = useState(0);
-  const [isEmotePaused, setIsEmotePaused] = useState(false);
-  const [modelAnchorPos, setModelAnchorPos] = useState<PositionPixels | null>(
-    null,
-  );
-  const wasPausedBeforeSeekRef = useRef(false);
   const autoPlaySyncSignatureRef = useRef("");
   const [isAvatarPanelOpen, setIsAvatarPanelOpen] = useState(false);
   const [isZoomExpanded, setIsZoomExpanded] = useState(false);
@@ -294,7 +294,7 @@ const AssistantControlDock = ({
   }, [isAvatarPanelOpen, panelMode]);
 
   useEffect(() => {
-    if ((isChatOpen && !isAppModeWindow) || modelDisabled) {
+    if ((isChatOpen && !isDesktop) || modelDisabled) {
       setIsEmotePanelOpen(false);
       setIsAvatarPanelOpen(false);
       setIsZoomExpanded(false);
@@ -311,14 +311,12 @@ const AssistantControlDock = ({
       const currentEmoteId = emotePlayerService.getCurrentEmoteId();
       setCurrentPlayingEmoteId(currentEmoteId);
 
-      const currentTime = emotePlayerService.getPlaybackCurrentTime();
       const duration = emotePlayerService.getPlaybackDuration();
+      const currentTime = emotePlayerService.getPlaybackCurrentTime();
       const progress = emotePlayerService.getPlaybackProgress();
-      const isPaused = emotePlayerService.isPlaybackPaused();
       setEmoteCurrentTime(currentTime);
       setEmoteDuration(duration);
       setEmoteProgress(progress);
-      setIsEmotePaused(isPaused);
 
       // Update auto-play active state
       const autoPlayActive = emotePlayerService.isAutoPlayActive();
@@ -513,7 +511,9 @@ const AssistantControlDock = ({
         }
       } else return;
 
-      setModelAnchorPos(modelPos);
+      // Attached app/live-wallpaper windows use the fixed full-window dock.
+      // Do not move the dock with the avatar in those layouts.
+      if (isDesktopAttachedModeWindow) return;
 
       try {
         const buttonSize = 48;
@@ -603,12 +603,6 @@ const AssistantControlDock = ({
       window.removeEventListener("resize", updateFromModel);
     };
   }, [modelDisabled, positionManagerRef, setButtonPos, desktopAPI]);
-
-  useEffect(() => {
-    if (modelDisabled) {
-      setModelAnchorPos(null);
-    }
-  }, [modelDisabled]);
 
   const handleClick = useCallback(
     (e?: ReactMouseEvent<HTMLElement>) => {
@@ -978,31 +972,8 @@ const AssistantControlDock = ({
     }
   }, [isAutoPlayActive, emotes, uiConfig.emotePlayback?.autoPlayCategory]);
 
-  const handleEmoteSeek = useCallback(
-    (nextProgress: number) => {
-      emotePlayerService.seekToProgress(nextProgress);
-      setEmoteProgress(nextProgress);
-      setEmoteCurrentTime(nextProgress * emoteDuration);
-    },
-    [emoteDuration],
-  );
-
-  const handleEmoteSeekStart = useCallback(() => {
-    wasPausedBeforeSeekRef.current = emotePlayerService.isPlaybackPaused();
-    if (!wasPausedBeforeSeekRef.current) {
-      emotePlayerService.pausePlayback();
-    }
-  }, []);
-
-  const handleEmoteSeekEnd = useCallback(() => {
-    if (!wasPausedBeforeSeekRef.current) {
-      emotePlayerService.resumePlayback();
-    }
-    wasPausedBeforeSeekRef.current = false;
-  }, []);
-
-  const handleEmotePauseToggle = useCallback(() => {
-    emotePlayerService.togglePlayback();
+  const handleEmoteSeek = useCallback((nextProgress: number) => {
+    emotePlayerService.seekToProgress(nextProgress);
   }, []);
 
   const handleModelSelect = useCallback(
@@ -1252,7 +1223,8 @@ const AssistantControlDock = ({
     ASSISTANT_CONTROL_PANEL_MAX_HEIGHT,
   );
   const showUtilityButtons =
-    (!isChatOpen || isAppModeWindow || isDesktop) && !modelDisabled;
+    (!isChatOpen || isDesktopAttachedModeWindow || isDesktop) && !modelDisabled;
+  const canOpenControlPanels = !isChatOpen || isDesktop;
   const layout = getAssistantControlLayout({
     viewport: { width: window.innerWidth, height: window.innerHeight },
     buttonPosition: renderedButtonPos,
@@ -1260,16 +1232,21 @@ const AssistantControlDock = ({
     avatarHeight: avatarPanelHeight,
     isAndroid,
     isDesktop,
-    isNormalDesktop: isAppModeWindow,
+    isNormalDesktop: isDesktopAttachedModeWindow,
     showUtilityButtons,
+    forcePanelToLeft:
+      isChatOpen && isDesktop && !isAndroid && !isDesktopAttachedModeWindow,
   });
 
   const showEmotePlaybackBar =
     !modelDisabled &&
     uiConfig.emotePlayback?.showDurationBar !== false &&
     isEmotePlaying &&
-    emoteDuration > 0;
+    emoteDuration > 0 &&
+    uiConfig.emotePlayback?.buttonProgress !== "ring";
   const showEmotePlaybackTime = uiConfig.emotePlayback?.showTime !== false;
+  const emoteButtonProgressMode =
+    uiConfig.emotePlayback?.buttonProgress ?? "none";
 
   const assistantControlActions = {
     onModelSelect: handleModelSelect,
@@ -1309,13 +1286,17 @@ const AssistantControlDock = ({
 
   return (
     <>
-      {isAndroid && <ARPlacementGuide />}
+      {isAndroid && (
+        <Suspense fallback={null}>
+          <ARPlacementGuide />
+        </Suspense>
+      )}
 
       <AssistantControlPanels
         layout={layout}
         isAndroid={isAndroid}
         isDesktop={isDesktop}
-        isNormalDesktop={isAppModeWindow}
+        isNormalDesktop={isDesktopAttachedModeWindow}
         isLightBackground={isLightBackground}
         isChatOpen={isChatOpen}
         modelDisabled={modelDisabled}
@@ -1332,14 +1313,11 @@ const AssistantControlDock = ({
         autoPlayCategoryOptions={autoPlayCategoryOptions}
         isAutoPlayActive={isAutoPlayActive}
         currentPlayingEmoteId={currentPlayingEmoteId}
-        isEmotePlaying={isEmotePlaying}
         emoteProgress={emoteProgress}
         emoteCurrentTime={emoteCurrentTime}
         emoteDuration={emoteDuration}
-        isEmotePaused={isEmotePaused}
-        showEmotePlaybackBar={showEmotePlaybackBar}
         showEmotePlaybackTime={showEmotePlaybackTime}
-        modelAnchorPos={modelAnchorPos}
+        showEmotePlaybackBar={showEmotePlaybackBar}
         cameraMode={sceneRef.current?.metadata?.getCameraMode?.() ?? "2D"}
         cameraLocked={sceneRef.current?.metadata?.isCameraLocked?.() ?? false}
         cameraSaveEnabled={
@@ -1347,9 +1325,6 @@ const AssistantControlDock = ({
         }
         actions={assistantControlActions}
         onSeek={handleEmoteSeek}
-        onTogglePause={handleEmotePauseToggle}
-        onSeekStart={handleEmoteSeekStart}
-        onSeekEnd={handleEmoteSeekEnd}
       />
 
       <AssistantControlStack
@@ -1358,6 +1333,7 @@ const AssistantControlDock = ({
         isAndroid={isAndroid}
         isLightBackground={isLightBackground}
         isChatOpen={isChatOpen}
+        isNormalDesktop={isDesktopAttachedModeWindow}
         modelDisabled={modelDisabled}
         isVisible={isVisible}
         isAppearing={isAppearing}
@@ -1366,6 +1342,8 @@ const AssistantControlDock = ({
         showUtilityButtons={showUtilityButtons}
         isZoomExpanded={isZoomExpanded}
         isEmotePlaying={isEmotePlaying}
+        emoteProgress={emoteProgress}
+        emoteButtonProgressMode={emoteButtonProgressMode}
         isAvatarPanelOpen={isAvatarPanelOpen}
         panelMode={panelMode as "avatar" | "stage"}
         isARMode={isARMode}
@@ -1373,11 +1351,13 @@ const AssistantControlDock = ({
         isZoomOutDisabled={isAtDefaultSize()}
         onReload={reloadScene}
         onToggleEmotes={() => {
+          if (!canOpenControlPanels) return;
           setIsZoomExpanded(false);
           if (isAvatarPanelOpen) setIsAvatarPanelOpen(false);
           setIsEmotePanelOpen((open) => !open);
         }}
         onToggleAvatar={() => {
+          if (!canOpenControlPanels) return;
           setIsZoomExpanded(false);
           if (isEmotePanelOpen) setIsEmotePanelOpen(false);
           setIsAvatarPanelOpen((open) => !open);

@@ -3,6 +3,7 @@ import { Button } from "../../../../components/ui";
 import { Icon } from "../../../../components/icons";
 import ZoomControl from "../../../common/ZoomControl";
 import { cn } from "../../../../utils/cn";
+import type { EmoteButtonProgressMode } from "../../../../config/uiConfig";
 import type { AssistantControlLayout } from "../types";
 
 interface AssistantControlStackProps {
@@ -11,6 +12,7 @@ interface AssistantControlStackProps {
   isAndroid: boolean;
   isLightBackground: boolean;
   isChatOpen: boolean;
+  isNormalDesktop: boolean;
   modelDisabled: boolean;
   isVisible: boolean;
   isAppearing: boolean;
@@ -19,6 +21,8 @@ interface AssistantControlStackProps {
   showUtilityButtons: boolean;
   isZoomExpanded: boolean;
   isEmotePlaying: boolean;
+  emoteProgress: number;
+  emoteButtonProgressMode: EmoteButtonProgressMode;
   isAvatarPanelOpen: boolean;
   panelMode: "avatar" | "stage";
   isARMode: boolean;
@@ -53,6 +57,7 @@ export function AssistantControlStack({
   isAndroid,
   isLightBackground,
   isChatOpen,
+  isNormalDesktop,
   modelDisabled,
   isVisible,
   isAppearing,
@@ -61,6 +66,8 @@ export function AssistantControlStack({
   showUtilityButtons,
   isZoomExpanded,
   isEmotePlaying,
+  emoteProgress,
+  emoteButtonProgressMode,
   isAvatarPanelOpen,
   panelMode,
   isARMode,
@@ -117,25 +124,53 @@ export function AssistantControlStack({
             />
           </Button>
 
-          <Button
-            onClick={onToggleEmotes}
-            variant={variant}
-            className={cn(
-              utilityButtonClass(isLightBackground),
-              visibilityClass,
-            )}
-            title="Emotes"
-          >
-            <Icon
-              name="music"
-              size={24}
-              className={cn(
-                isLightBackground ? "glass-text" : "glass-text-black",
-                "drop-shadow-lg",
-                isEmotePlaying && "animate-[spin_2s_linear_infinite]",
+          <div className="relative">
+            {isEmotePlaying &&
+              (emoteButtonProgressMode === "ring" ||
+                emoteButtonProgressMode === "both") && (
+                <svg
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -inset-1 z-0 h-14 w-14 -rotate-90"
+                  viewBox="0 0 56 56"
+                >
+                  <circle
+                    cx="28"
+                    cy="28"
+                    r="25"
+                    fill="none"
+                    pathLength="1"
+                    stroke="currentColor"
+                    strokeDasharray="1"
+                    strokeDashoffset={
+                      1 - Math.min(1, Math.max(0, emoteProgress))
+                    }
+                    strokeLinecap="round"
+                    strokeWidth="2.5"
+                    className="text-white"
+                  />
+                </svg>
               )}
-            />
-          </Button>
+            <Button
+              onClick={onToggleEmotes}
+              variant={variant}
+              className={cn(
+                utilityButtonClass(isLightBackground),
+                visibilityClass,
+                "relative z-10",
+              )}
+              title="Emotes"
+            >
+              <Icon
+                name="music"
+                size={24}
+                className={cn(
+                  isLightBackground ? "glass-text" : "glass-text-black",
+                  "drop-shadow-lg",
+                  isEmotePlaying && "animate-[spin_2s_linear_infinite]",
+                )}
+              />
+            </Button>
+          </div>
 
           <Button
             onClick={onToggleAvatar}
@@ -197,7 +232,13 @@ export function AssistantControlStack({
             onRotateLeft={onRotateLeft}
             onRotateRight={onRotateRight}
             isZoomOutDisabled={isZoomOutDisabled}
-            isLeftSide={layout.isLeftSide}
+            isLeftSide={
+              isNormalDesktop
+                ? layout.isLeftSide
+                : isChatOpen
+                  ? !layout.isLeftSide
+                  : layout.isLeftSide
+            }
             isLightBackground={isLightBackground}
             isVisible={isVisible}
             isExpanded={isZoomExpanded}

@@ -23,12 +23,14 @@ import {
 } from "../hooks/config/useConfigSTT";
 import { useUIConfig, useConfigUIActions } from "../hooks/config/useConfigUI";
 import { useChatActions, useIsTempChat } from "../hooks/app/useChat";
+import { useDesktopApi } from "../hooks/useDesktopStore";
 import { isAndroid, isDesktop } from "../utils/PlatformUtils";
 import { cn } from "../utils/cn";
 import Toggle from "./common/Toggle";
 import { Icon } from "./icons";
 import { Select, SettingsRow } from "./ui";
 import RemoteModelPicker from "./settings/shared/RemoteModelPicker";
+import DesktopModeSettings from "./settings/DesktopModeSettings";
 
 type ProviderValue =
   | "openai"
@@ -112,6 +114,7 @@ const QuickAccessPanel = ({
   const { updateSTTConfig } = useConfigSTTActions();
   const uiConfig = useUIConfig();
   const { updateUIConfig } = useConfigUIActions();
+  const desktopAPI = useDesktopApi();
   const isTempChat = useIsTempChat();
   const { setIsTempChat } = useChatActions();
 
@@ -373,6 +376,19 @@ const QuickAccessPanel = ({
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-glass px-4 md:px-6 py-3 md:py-4 space-y-4">
+        {isDesktop && desktopAPI?.window?.setDesktopMode ? (
+          <div className="space-y-4">
+            <SectionHeader
+              label="Mode"
+              onMore={() => onOpenSettings?.({ tab: "ui" })}
+            />
+            <DesktopModeSettings
+              isLightBackground={isLightBackground}
+              compact
+            />
+          </div>
+        ) : null}
+
         {/* LLM Provider */}
         <div className="flex flex-col gap-4">
           <SectionHeader

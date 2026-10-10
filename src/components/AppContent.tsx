@@ -4,7 +4,6 @@
 
 import { lazy, Suspense, useEffect, useRef } from "react";
 import { cn } from "../utils/cn";
-import ChatController from "./chat/ChatController";
 import LoadingIndicator from "./common/LoadingIndicator";
 import {
   useIsAssistantReady,
@@ -33,9 +32,8 @@ interface AppContentProps {
   embedConfig: ResolvedVAssistEmbedConfig;
 }
 
-const LazyLiveAssistantShell = lazy(
-  () => import("./assistant/LiveAssistantShell"),
-);
+const LiveAssistantShell = lazy(() => import("./assistant/LiveAssistantShell"));
+const ChatController = lazy(() => import("./chat/ChatController"));
 
 /**
  * Main application content component shared between development and extension modes.
@@ -124,7 +122,7 @@ function AppContent({
         <>
           {liveAssistantEnabled && enableModelLoading && shouldMountModel ? (
             <Suspense fallback={<LoadingIndicator isVisible={true} />}>
-              <LazyLiveAssistantShell
+              <LiveAssistantShell
                 mode={mode}
                 forcePortraitMode={forcePortraitMode}
               />
@@ -141,13 +139,15 @@ function AppContent({
                 : "opacity-100",
             )}
           >
-            <ChatController
-              modelDisabled={!enableModelLoading || isDetachedChatWindow}
-              avatarOnly={isDetachedAvatarWindow}
-              requireSetupOnChatClick={requireSetupOnChatClick}
-              embedConfig={embedConfig}
-              {...chatControllerProps}
-            />
+            <Suspense fallback={null}>
+              <ChatController
+                modelDisabled={!enableModelLoading || isDetachedChatWindow}
+                avatarOnly={isDetachedAvatarWindow}
+                requireSetupOnChatClick={requireSetupOnChatClick}
+                embedConfig={embedConfig}
+                {...chatControllerProps}
+              />
+            </Suspense>
           </div>
 
           {chatEnabled && !enableModelLoading && !isChatUIReady && (

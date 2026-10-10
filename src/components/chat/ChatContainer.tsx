@@ -4,6 +4,8 @@
  */
 
 import {
+  lazy,
+  Suspense,
   useState,
   useEffect,
   useLayoutEffect,
@@ -34,10 +36,6 @@ import { DefaultTTSConfig } from "../../config/aiConfig";
 import BackgroundDetector from "../../utils/BackgroundDetector";
 import DragDropService from "../../services/media/DragDropService";
 import UtilService from "../../services/common/UtilService";
-import SettingsPanel from "../SettingsPanel";
-import QuickAccessPanel from "../QuickAccessPanel";
-import ChatHistoryPanel from "./ChatHistoryPanel";
-import Dialog from "../common/Dialog";
 import ChatMessage from "./ChatMessage";
 import { modelStorageService } from "../../services/storage/ModelStorageService";
 import { motionStorageService } from "../../services/storage/MotionStorageService";
@@ -85,7 +83,7 @@ import Logger from "../../services/common/LoggerService";
 import {
   isDesktop,
   isAndroid,
-  isAppModeWindow,
+  isDesktopAttachedModeWindow,
   isDetachedChatWindow,
 } from "../../utils/PlatformUtils";
 import type { PositionManagerLike } from "../../babylon/types";
@@ -94,6 +92,11 @@ import {
   ASSISTANT_CONTROL_CHAT_GUTTER,
   getButtonPositionFromPreset,
 } from "./assistant-controls/positioning";
+
+const SettingsPanel = lazy(() => import("../SettingsPanel"));
+const QuickAccessPanel = lazy(() => import("../QuickAccessPanel"));
+const ChatHistoryPanel = lazy(() => import("./ChatHistoryPanel"));
+const Dialog = lazy(() => import("../common/Dialog"));
 
 interface ChatContainerProps {
   modelDisabled?: boolean;
@@ -339,7 +342,7 @@ const ANDROID_CHAT_TOP_OFFSET = 32;
  */
 const ChatContainer = ({
   modelDisabled = false,
-  normalDesktop = isAppModeWindow,
+  normalDesktop = isDesktopAttachedModeWindow,
   chatInputRef: externalChatInputRef,
   embedConfig,
   onDragDrop,
@@ -2739,345 +2742,355 @@ const ChatContainer = ({
         {/* Settings Panel - renders inside ChatContainer */}
         {settingsEnabled && isQuickPanelOpen && (
           <div className="absolute inset-0 z-10">
-            <QuickAccessPanel
-              onClose={handleQuickPanelClose}
-              isLightBackground={isLightBackground}
-              embedConfig={embedConfig}
-              animationClass={
-                isQuickPanelClosing
-                  ? "animate-fade-out"
-                  : "animate-slide-up-fade-in"
-              }
-              onOpenSettings={(options) => {
-                setRequestedSettingsView(options ?? {});
-                setIsQuickPanelOpen(false);
-                setIsHistoryPanelOpen(false);
-                setIsSettingsPanelOpen(true);
-              }}
-            />
+            <Suspense fallback={null}>
+              <QuickAccessPanel
+                onClose={handleQuickPanelClose}
+                isLightBackground={isLightBackground}
+                embedConfig={embedConfig}
+                animationClass={
+                  isQuickPanelClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                onOpenSettings={(options) => {
+                  setRequestedSettingsView(options ?? {});
+                  setIsQuickPanelOpen(false);
+                  setIsHistoryPanelOpen(false);
+                  setIsSettingsPanelOpen(true);
+                }}
+              />
+            </Suspense>
           </div>
         )}
 
         {/* Settings Panel - renders inside ChatContainer */}
         {settingsEnabled && isSettingsPanelOpen && (
           <div className="absolute inset-0 z-10">
-            <SettingsPanel
-              onClose={handleSettingsPanelClose}
-              isLightBackground={isLightBackground}
-              embedConfig={embedConfig}
-              requestedView={requestedSettingsView}
-              onActiveTargetChange={setActiveSettingsTarget}
-              animationClass={
-                isSettingsPanelClosing
-                  ? "animate-fade-out"
-                  : "animate-slide-up-fade-in"
-              }
-              onRequestDeleteModelDialog={handleRequestDeleteModelDialog}
-              onRequestDeleteMotionDialog={handleRequestDeleteMotionDialog}
-              onRequestDeleteStageDialog={handleRequestDeleteStageDialog}
-              onRequestDeleteEmoteDialog={handleRequestDeleteEmoteDialog}
-              onRequestDeleteVoiceDialog={handleRequestDeleteVoiceDialog}
-              onRequestDeleteLLMModel={handleRequestDeleteLLMModel}
-              onRequestDeleteSttModel={handleRequestDeleteSttModel}
-              onRequestDeleteTtsPack={handleRequestDeleteTtsPack}
-              sttExternalDeleteTick={sttExternalDeleteTick}
-              ttsExternalDeleteTick={ttsExternalDeleteTick}
-              onRequestResetSetupDialog={handleRequestResetSetupDialog}
-              onRequestSettingsErrorDialog={handleRequestSettingsErrorDialog}
-              refreshTrigger={settingsRefreshTrigger}
-            />
+            <Suspense fallback={null}>
+              <SettingsPanel
+                onClose={handleSettingsPanelClose}
+                isLightBackground={isLightBackground}
+                embedConfig={embedConfig}
+                requestedView={requestedSettingsView}
+                onActiveTargetChange={setActiveSettingsTarget}
+                animationClass={
+                  isSettingsPanelClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                onRequestDeleteModelDialog={handleRequestDeleteModelDialog}
+                onRequestDeleteMotionDialog={handleRequestDeleteMotionDialog}
+                onRequestDeleteStageDialog={handleRequestDeleteStageDialog}
+                onRequestDeleteEmoteDialog={handleRequestDeleteEmoteDialog}
+                onRequestDeleteVoiceDialog={handleRequestDeleteVoiceDialog}
+                onRequestDeleteLLMModel={handleRequestDeleteLLMModel}
+                onRequestDeleteSttModel={handleRequestDeleteSttModel}
+                onRequestDeleteTtsPack={handleRequestDeleteTtsPack}
+                sttExternalDeleteTick={sttExternalDeleteTick}
+                ttsExternalDeleteTick={ttsExternalDeleteTick}
+                onRequestResetSetupDialog={handleRequestResetSetupDialog}
+                onRequestSettingsErrorDialog={handleRequestSettingsErrorDialog}
+                refreshTrigger={settingsRefreshTrigger}
+              />
+            </Suspense>
           </div>
         )}
 
         {/* Chat History Panel - renders inside ChatContainer */}
         {historyEnabled && isHistoryPanelOpen && (
           <div className="absolute inset-0 z-10">
-            <TypedChatHistoryPanel
-              isLightBackground={isLightBackground}
-              onClose={handleHistoryClose}
-              onSelectChat={handleSelectChat}
-              onRequestEditDialog={handleRequestEditDialog}
-              onRequestDeleteDialog={handleRequestDeleteDialog}
-              refreshTrigger={historyRefreshTrigger}
-              animationClass={
-                isHistoryPanelClosing
-                  ? "animate-fade-out"
-                  : "animate-slide-up-fade-in"
-              }
-            />
+            <Suspense fallback={null}>
+              <TypedChatHistoryPanel
+                isLightBackground={isLightBackground}
+                onClose={handleHistoryClose}
+                onSelectChat={handleSelectChat}
+                onRequestEditDialog={handleRequestEditDialog}
+                onRequestDeleteDialog={handleRequestDeleteDialog}
+                refreshTrigger={historyRefreshTrigger}
+                animationClass={
+                  isHistoryPanelClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+              />
+            </Suspense>
           </div>
         )}
 
-        {/* Edit Dialog - renders outside ChatHistoryPanel to avoid backdrop-filter issues */}
-        {editingChatId && (
-          <div className="absolute inset-0 z-20">
-            <TypedDialog
-              type="edit"
-              title="Edit Chat Title"
-              message=""
-              itemId={editingChatId}
-              initialValue={editingChatTitle}
-              inputPlaceholder="Enter new title..."
-              inputMaxLength={100}
-              isLightBackground={isLightBackground}
-              animationClass={
-                isEditDialogClosing
-                  ? "animate-fade-out"
-                  : "animate-slide-up-fade-in"
-              }
-              confirmLabel="Save"
-              onConfirm={handleEditDialogSave}
-              onCancel={handleEditDialogCancel}
-            />
-          </div>
-        )}
+        <Suspense fallback={null}>
+          {/* Edit Dialog - renders outside ChatHistoryPanel to avoid backdrop-filter issues */}
+          {editingChatId && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="edit"
+                title="Edit Chat Title"
+                message=""
+                itemId={editingChatId}
+                initialValue={editingChatTitle}
+                inputPlaceholder="Enter new title..."
+                inputMaxLength={100}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isEditDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Save"
+                onConfirm={handleEditDialogSave}
+                onCancel={handleEditDialogCancel}
+              />
+            </div>
+          )}
 
-        {/* Delete Dialog - renders outside ChatHistoryPanel to avoid backdrop-filter issues */}
-        {deletingChatId && (
-          <div className="absolute inset-0 z-20">
-            <TypedDialog
-              type="delete"
-              title="Delete Chat?"
-              message="This will permanently delete this chat and all associated messages, images, and audio files. This cannot be undone."
-              itemId={deletingChatId}
-              isLightBackground={isLightBackground}
-              animationClass={
-                isDeleteDialogClosing
-                  ? "animate-fade-out"
-                  : "animate-slide-up-fade-in"
-              }
-              confirmLabel="Delete"
-              confirmStyle="error"
-              onConfirm={handleDeleteDialogConfirm}
-              onCancel={handleDeleteDialogCancel}
-            />
-          </div>
-        )}
+          {/* Delete Dialog - renders outside ChatHistoryPanel to avoid backdrop-filter issues */}
+          {deletingChatId && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="delete"
+                title="Delete Chat?"
+                message="This will permanently delete this chat and all associated messages, images, and audio files. This cannot be undone."
+                itemId={deletingChatId}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isDeleteDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Delete"
+                confirmStyle="error"
+                onConfirm={handleDeleteDialogConfirm}
+                onCancel={handleDeleteDialogCancel}
+              />
+            </div>
+          )}
 
-        {/* Model Delete Dialog - renders outside SettingsPanel */}
-        {deletingModelId && (
-          <div className="absolute inset-0 z-20">
-            <TypedDialog
-              type="delete"
-              title="Delete Model?"
-              message="This will permanently delete this custom model. This cannot be undone."
-              itemId={deletingModelId}
-              isLightBackground={isLightBackground}
-              animationClass={
-                isDeleteModelDialogClosing
-                  ? "animate-fade-out"
-                  : "animate-slide-up-fade-in"
-              }
-              confirmLabel="Delete"
-              confirmStyle="error"
-              onConfirm={handleDeleteModelConfirm}
-              onCancel={handleDeleteModelCancel}
-            />
-          </div>
-        )}
+          {/* Model Delete Dialog - renders outside SettingsPanel */}
+          {deletingModelId && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="delete"
+                title="Delete Model?"
+                message="This will permanently delete this custom model. This cannot be undone."
+                itemId={deletingModelId}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isDeleteModelDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Delete"
+                confirmStyle="error"
+                onConfirm={handleDeleteModelConfirm}
+                onCancel={handleDeleteModelCancel}
+              />
+            </div>
+          )}
 
-        {/* Motion Delete Dialog - renders outside SettingsPanel */}
-        {deletingMotionId && (
-          <div className="absolute inset-0 z-20">
-            <TypedDialog
-              type="delete"
-              title="Delete Animation?"
-              message="This will permanently delete this custom animation. This cannot be undone."
-              itemId={deletingMotionId}
-              isLightBackground={isLightBackground}
-              animationClass={
-                isDeleteMotionDialogClosing
-                  ? "animate-fade-out"
-                  : "animate-slide-up-fade-in"
-              }
-              confirmLabel="Delete"
-              confirmStyle="error"
-              onConfirm={handleDeleteMotionConfirm}
-              onCancel={handleDeleteMotionCancel}
-            />
-          </div>
-        )}
+          {/* Motion Delete Dialog - renders outside SettingsPanel */}
+          {deletingMotionId && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="delete"
+                title="Delete Animation?"
+                message="This will permanently delete this custom animation. This cannot be undone."
+                itemId={deletingMotionId}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isDeleteMotionDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Delete"
+                confirmStyle="error"
+                onConfirm={handleDeleteMotionConfirm}
+                onCancel={handleDeleteMotionCancel}
+              />
+            </div>
+          )}
 
-        {/* Stage Delete Dialog - renders outside SettingsPanel */}
-        {deletingStageId && (
-          <div className="absolute inset-0 z-20">
-            <TypedDialog
-              type="delete"
-              title="Delete Stage?"
-              message="This will permanently delete this stage. This cannot be undone."
-              itemId={deletingStageId}
-              isLightBackground={isLightBackground}
-              animationClass={
-                isDeleteStageDialogClosing
-                  ? "animate-fade-out"
-                  : "animate-slide-up-fade-in"
-              }
-              confirmLabel="Delete"
-              confirmStyle="error"
-              onConfirm={handleDeleteStageConfirm}
-              onCancel={handleDeleteStageCancel}
-            />
-          </div>
-        )}
+          {/* Stage Delete Dialog - renders outside SettingsPanel */}
+          {deletingStageId && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="delete"
+                title="Delete Stage?"
+                message="This will permanently delete this stage. This cannot be undone."
+                itemId={deletingStageId}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isDeleteStageDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Delete"
+                confirmStyle="error"
+                onConfirm={handleDeleteStageConfirm}
+                onCancel={handleDeleteStageCancel}
+              />
+            </div>
+          )}
 
-        {/* Emote Delete Dialog - renders outside SettingsPanel */}
-        {(deletingEmoteId || deletingEmoteCategory) && (
-          <div className="absolute inset-0 z-20">
-            <TypedDialog
-              type="delete"
-              title={deletingEmoteCategory ? "Delete Emotes?" : "Delete Emote?"}
-              message={
-                deletingEmoteCategory
-                  ? deletingEmoteCategory === "all"
-                    ? "Delete all emotes? This cannot be undone."
-                    : `Delete all emotes in category "${deletingEmoteCategory}"? This cannot be undone.`
-                  : "This will permanently delete this emote. This cannot be undone."
-              }
-              itemId={deletingEmoteId || deletingEmoteCategory || "emotes"}
-              isLightBackground={isLightBackground}
-              animationClass={
-                isDeleteEmoteDialogClosing
-                  ? "animate-fade-out"
-                  : "animate-slide-up-fade-in"
-              }
-              confirmLabel="Delete"
-              confirmStyle="error"
-              onConfirm={handleDeleteEmoteConfirm}
-              onCancel={handleDeleteEmoteCancel}
-            />
-          </div>
-        )}
+          {/* Emote Delete Dialog - renders outside SettingsPanel */}
+          {(deletingEmoteId || deletingEmoteCategory) && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="delete"
+                title={
+                  deletingEmoteCategory ? "Delete Emotes?" : "Delete Emote?"
+                }
+                message={
+                  deletingEmoteCategory
+                    ? deletingEmoteCategory === "all"
+                      ? "Delete all emotes? This cannot be undone."
+                      : `Delete all emotes in category "${deletingEmoteCategory}"? This cannot be undone.`
+                    : "This will permanently delete this emote. This cannot be undone."
+                }
+                itemId={deletingEmoteId || deletingEmoteCategory || "emotes"}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isDeleteEmoteDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Delete"
+                confirmStyle="error"
+                onConfirm={handleDeleteEmoteConfirm}
+                onCancel={handleDeleteEmoteCancel}
+              />
+            </div>
+          )}
 
-        {/* Voice Delete Dialog - renders outside SettingsPanel */}
-        {deletingVoiceId && (
-          <div className="absolute inset-0 z-20">
-            <TypedDialog
-              type="delete"
-              title="Delete Voice?"
-              message="This will permanently delete this reference voice. This cannot be undone."
-              itemId={deletingVoiceId}
-              isLightBackground={isLightBackground}
-              animationClass={
-                isDeleteVoiceDialogClosing
-                  ? "animate-fade-out"
-                  : "animate-slide-up-fade-in"
-              }
-              confirmLabel="Delete"
-              confirmStyle="error"
-              onConfirm={handleDeleteVoiceConfirm}
-              onCancel={handleDeleteVoiceCancel}
-            />
-          </div>
-        )}
+          {/* Voice Delete Dialog - renders outside SettingsPanel */}
+          {deletingVoiceId && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="delete"
+                title="Delete Voice?"
+                message="This will permanently delete this reference voice. This cannot be undone."
+                itemId={deletingVoiceId}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isDeleteVoiceDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Delete"
+                confirmStyle="error"
+                onConfirm={handleDeleteVoiceConfirm}
+                onCancel={handleDeleteVoiceCancel}
+              />
+            </div>
+          )}
 
-        {/* LLM Model Delete Dialog - renders outside SettingsPanel */}
-        {deletingLLMModel && (
-          <div className="absolute inset-0 z-20">
-            <TypedDialog
-              type="delete"
-              title="Delete Model?"
-              message={`This will permanently delete "${deletingLLMModel}". This cannot be undone.`}
-              itemId={deletingLLMModel}
-              isLightBackground={isLightBackground}
-              animationClass={
-                isDeleteLLMModelDialogClosing
-                  ? "animate-fade-out"
-                  : "animate-slide-up-fade-in"
-              }
-              confirmLabel="Delete"
-              confirmStyle="error"
-              onConfirm={handleDeleteLLMModelConfirm}
-              onCancel={handleDeleteLLMModelCancel}
-            />
-          </div>
-        )}
+          {/* LLM Model Delete Dialog - renders outside SettingsPanel */}
+          {deletingLLMModel && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="delete"
+                title="Delete Model?"
+                message={`This will permanently delete "${deletingLLMModel}". This cannot be undone.`}
+                itemId={deletingLLMModel}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isDeleteLLMModelDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Delete"
+                confirmStyle="error"
+                onConfirm={handleDeleteLLMModelConfirm}
+                onCancel={handleDeleteLLMModelCancel}
+              />
+            </div>
+          )}
 
-        {/* STT Model Delete Dialog - renders outside SettingsPanel */}
-        {deletingSttModelId && (
-          <div className="absolute inset-0 z-20">
-            <TypedDialog
-              type="delete"
-              title="Delete Model?"
-              message="This will delete this STT model and free up storage on your device. The model can be re-downloaded later if needed."
-              itemId={deletingSttModelId}
-              isLightBackground={isLightBackground}
-              animationClass={
-                isDeleteSttModelDialogClosing
-                  ? "animate-fade-out"
-                  : "animate-slide-up-fade-in"
-              }
-              confirmLabel="Delete"
-              confirmStyle="error"
-              onConfirm={handleDeleteSttModelConfirm}
-              onCancel={handleDeleteSttModelCancel}
-            />
-          </div>
-        )}
+          {/* STT Model Delete Dialog - renders outside SettingsPanel */}
+          {deletingSttModelId && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="delete"
+                title="Delete Model?"
+                message="This will delete this STT model and free up storage on your device. The model can be re-downloaded later if needed."
+                itemId={deletingSttModelId}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isDeleteSttModelDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Delete"
+                confirmStyle="error"
+                onConfirm={handleDeleteSttModelConfirm}
+                onCancel={handleDeleteSttModelCancel}
+              />
+            </div>
+          )}
 
-        {/* TTS Voice Pack Delete Dialog - renders outside SettingsPanel */}
-        {deletingTtsPackId && (
-          <div className="absolute inset-0 z-20">
-            <TypedDialog
-              type="delete"
-              title="Delete Voice Pack?"
-              message="This will delete this voice pack and free up storage on your device. The voice pack can be re-downloaded later if needed."
-              itemId={deletingTtsPackId}
-              isLightBackground={isLightBackground}
-              animationClass={
-                isDeleteTtsPackDialogClosing
-                  ? "animate-fade-out"
-                  : "animate-slide-up-fade-in"
-              }
-              confirmLabel="Delete"
-              confirmStyle="error"
-              onConfirm={handleDeleteTtsPackConfirm}
-              onCancel={handleDeleteTtsPackCancel}
-            />
-          </div>
-        )}
+          {/* TTS Voice Pack Delete Dialog - renders outside SettingsPanel */}
+          {deletingTtsPackId && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="delete"
+                title="Delete Voice Pack?"
+                message="This will delete this voice pack and free up storage on your device. The voice pack can be re-downloaded later if needed."
+                itemId={deletingTtsPackId}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isDeleteTtsPackDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Delete"
+                confirmStyle="error"
+                onConfirm={handleDeleteTtsPackConfirm}
+                onCancel={handleDeleteTtsPackCancel}
+              />
+            </div>
+          )}
 
-        {/* Settings Confirm Dialog - renders outside SettingsPanel */}
-        {pendingSettingsConfirmAction && (
-          <div className="absolute inset-0 z-20">
-            <TypedDialog
-              type="confirm"
-              title="Reset Setup Wizard?"
-              message="This will reset the setup wizard and take you back to the beginning."
-              itemId="settings-reset-setup"
-              isLightBackground={isLightBackground}
-              animationClass={
-                isSettingsConfirmDialogClosing
-                  ? "animate-fade-out"
-                  : "animate-slide-up-fade-in"
-              }
-              confirmLabel="Reset"
-              confirmStyle="error"
-              onConfirm={handleSettingsConfirmConfirm}
-              onCancel={handleSettingsConfirmCancel}
-            />
-          </div>
-        )}
+          {/* Settings Confirm Dialog - renders outside SettingsPanel */}
+          {pendingSettingsConfirmAction && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="confirm"
+                title="Reset Setup Wizard?"
+                message="This will reset the setup wizard and take you back to the beginning."
+                itemId="settings-reset-setup"
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isSettingsConfirmDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Reset"
+                confirmStyle="error"
+                onConfirm={handleSettingsConfirmConfirm}
+                onCancel={handleSettingsConfirmCancel}
+              />
+            </div>
+          )}
 
-        {/* Settings Error Dialog - renders outside SettingsPanel */}
-        {settingsErrorMessage && (
-          <div className="absolute inset-0 z-20">
-            <TypedDialog
-              type="confirm"
-              title="Error"
-              message={settingsErrorMessage}
-              itemId="settings-error"
-              isLightBackground={isLightBackground}
-              animationClass={
-                isSettingsErrorDialogClosing
-                  ? "animate-fade-out"
-                  : "animate-slide-up-fade-in"
-              }
-              confirmLabel="OK"
-              onConfirm={handleSettingsErrorClose}
-              onCancel={handleSettingsErrorClose}
-            />
-          </div>
-        )}
+          {/* Settings Error Dialog - renders outside SettingsPanel */}
+          {settingsErrorMessage && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="confirm"
+                title="Error"
+                message={settingsErrorMessage}
+                itemId="settings-error"
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isSettingsErrorDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="OK"
+                onConfirm={handleSettingsErrorClose}
+                onCancel={handleSettingsErrorClose}
+              />
+            </div>
+          )}
+        </Suspense>
       </div>
     </>
   );

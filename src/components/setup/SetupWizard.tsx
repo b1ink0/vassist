@@ -7,16 +7,17 @@
 
 import { useSetup } from "../../contexts/SetupContext";
 import { Icon } from "../icons";
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { cn } from "../../utils/cn";
 import { Button } from "../ui";
 
-// Import step components
-import WelcomeStep from "./steps/WelcomeStep";
-import CharacterIntroStep from "./steps/CharacterIntroStep";
-import LLMProviderStep from "./steps/LLMProviderStep";
-import TTSProviderStep from "./steps/TTSProviderStep";
-import AIFeaturesOverviewStep from "./steps/AIFeaturesOverviewStep";
+const WelcomeStep = lazy(() => import("./steps/WelcomeStep"));
+const CharacterIntroStep = lazy(() => import("./steps/CharacterIntroStep"));
+const LLMProviderStep = lazy(() => import("./steps/LLMProviderStep"));
+const TTSProviderStep = lazy(() => import("./steps/TTSProviderStep"));
+const AIFeaturesOverviewStep = lazy(
+  () => import("./steps/AIFeaturesOverviewStep"),
+);
 // import TutorialStep from './steps/TutorialStep'; // Disabled - no GIFs yet
 
 interface SetupWizardProps {
@@ -167,7 +168,19 @@ const SetupWizard = ({ onMinimizeSetup }: SetupWizardProps) => {
             "flex-1 overflow-y-auto p-2 md:p-4 sm:p-6 scrollbar-glass hover-scrollbar",
           )}
         >
-          {getStepComponent()}
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center">
+                <Icon
+                  name="loading-2"
+                  size={32}
+                  className="animate-spin text-white/75"
+                />
+              </div>
+            }
+          >
+            {getStepComponent()}
+          </Suspense>
         </div>
 
         {/* Compact Navigation footer */}

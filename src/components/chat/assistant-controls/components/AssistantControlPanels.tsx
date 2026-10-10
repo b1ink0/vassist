@@ -31,27 +31,16 @@ interface AssistantControlPanelsProps {
   autoPlayCategoryOptions: Array<{ value: string; label: string }>;
   isAutoPlayActive: boolean;
   currentPlayingEmoteId: string | null;
-  isEmotePlaying: boolean;
   emoteProgress: number;
   emoteCurrentTime: number;
   emoteDuration: number;
-  isEmotePaused: boolean;
-  showEmotePlaybackBar: boolean;
   showEmotePlaybackTime: boolean;
-  modelAnchorPos: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | null;
+  showEmotePlaybackBar: boolean;
   cameraMode: "2D" | "3D";
   cameraLocked: boolean;
   cameraSaveEnabled: boolean;
   actions: AssistantControlActions;
   onSeek: (progress: number) => void;
-  onTogglePause: () => void;
-  onSeekStart: () => void;
-  onSeekEnd: () => void;
 }
 
 const panelClassName =
@@ -96,6 +85,7 @@ function EmotePanel({
         left: `${layout.emote.left}px`,
         top: `${layout.emote.top}px`,
         zIndex: isAndroid ? 201 : 10001,
+        maxHeight: "min(300px, calc(100vh - 20px))",
       }}
       variant="none"
       className={cn(
@@ -285,6 +275,7 @@ function AvatarPanel({
         left: `${layout.avatar.left}px`,
         top: `${layout.avatar.top}px`,
         zIndex: isAndroid ? 201 : 10001,
+        maxHeight: "min(300px, calc(100vh - 20px))",
       }}
       variant="none"
       className={cn(
@@ -457,19 +448,16 @@ export function AssistantControlPanels({
   emoteProgress,
   emoteCurrentTime,
   emoteDuration,
-  isEmotePaused,
-  showEmotePlaybackBar,
   showEmotePlaybackTime,
-  modelAnchorPos,
+  showEmotePlaybackBar,
   cameraMode,
   cameraLocked,
   cameraSaveEnabled,
   actions,
   onSeek,
-  onTogglePause,
-  onSeekStart,
-  onSeekEnd,
 }: AssistantControlPanelsProps) {
+  const canShowPanels = !isChatOpen || isDesktop || isNormalDesktop;
+
   return (
     <>
       <EmotePlaybackBar
@@ -477,21 +465,13 @@ export function AssistantControlPanels({
         progress={emoteProgress}
         currentTime={emoteCurrentTime}
         duration={emoteDuration}
-        isPaused={isEmotePaused}
         showTime={showEmotePlaybackTime}
-        isLightBackground={isLightBackground}
-        isAndroidPlatform={isAndroid}
-        isChatOpen={isChatOpen}
-        modelAnchor={modelAnchorPos}
         onSeek={onSeek}
-        onTogglePause={onTogglePause}
-        onSeekStart={onSeekStart}
-        onSeekEnd={onSeekEnd}
       />
 
       {isEmotePanelOpen &&
         !isAvatarPanelOpen &&
-        (!isChatOpen || isNormalDesktop) &&
+        canShowPanels &&
         !modelDisabled && (
           <EmotePanel
             layout={layout}
@@ -510,7 +490,7 @@ export function AssistantControlPanels({
 
       {isAvatarPanelOpen &&
         !isEmotePanelOpen &&
-        (!isChatOpen || isNormalDesktop) &&
+        canShowPanels &&
         !modelDisabled && (
           <>
             <AvatarPanel

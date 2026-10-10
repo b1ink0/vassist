@@ -4,12 +4,12 @@ VAssist repository tree and file metrics.
 
 ## Totals
 
-- Directories: 182
-- Files: 610
-- Text files counted for metrics: 523
-- Total text lines: 162655
-- Code files counted for metrics: 419
-- Total code lines: 146921
+- Directories: 183
+- Files: 615
+- Text files counted for metrics: 528
+- Total text lines: 163880
+- Code files counted for metrics: 424
+- Total code lines: 148146
 
 ## Line Counts by File Type
 
@@ -23,8 +23,8 @@ VAssist repository tree and file metrics.
 | JavaScript   | .js, .mjs, .cjs         |     1 |    32 |
 | Kotlin       | .kt                     |    20 | 10988 |
 | Shell Script | (no extension)          |     5 |   654 |
-| TSX          | .tsx                    |   111 | 52307 |
-| TypeScript   | .ts, .mts, .cts         |   258 | 77686 |
+| TSX          | .tsx                    |   115 | 53267 |
+| TypeScript   | .ts, .mts, .cts         |   259 | 77951 |
 | Gradle       | .gradle                 |     7 |   579 |
 | JSON         | .json                   |    17 |   580 |
 | Markdown     | .md                     |    36 |  6166 |
@@ -45,7 +45,7 @@ VAssist repository tree and file metrics.
 - extension/: 6 directories, 19 files
 - packages/: 5 directories, 12 files
 - public/: 5 directories, 20 files
-- src/: 58 directories, 260 files
+- src/: 59 directories, 265 files
 - tests/: 9 directories, 56 files
 - tools/: 2 directories, 7 files
 - .gitignore: file
@@ -480,6 +480,8 @@ vassist/
 │   │   │   ├── AnimationManager.ts
 │   │   │   ├── CanvasInteractionManager.ts
 │   │   │   └── PositionManager.ts
+│   │   ├── rendering/
+│   │   │   └── StickerBorder.ts
 │   │   ├── scenes/
 │   │   │   └── MmdModelScene.ts
 │   │   └── types.ts
@@ -572,11 +574,14 @@ vassist/
 │   │   │   │   └── VitsModelDownloader.tsx
 │   │   │   ├── AIFeaturesSettings.tsx
 │   │   │   ├── BackgroundSettings.tsx
+│   │   │   ├── DesktopModeSettings.tsx
 │   │   │   ├── LLMSettings.tsx
+│   │   │   ├── SettingsSubTabContent.tsx
 │   │   │   ├── STTSettings.tsx
 │   │   │   ├── ThreeDSettings.tsx
 │   │   │   ├── TTSSettings.tsx
-│   │   │   └── UISettings.tsx
+│   │   │   ├── UISettings.tsx
+│   │   │   └── UISettingsTabs.tsx
 │   │   ├── setup/
 │   │   │   ├── shared/
 │   │   │   │   └── ProviderSelection.tsx
@@ -602,7 +607,8 @@ vassist/
 │   │   │   ├── Input.tsx
 │   │   │   ├── Select.tsx
 │   │   │   ├── SettingsRow.tsx
-│   │   │   └── TabBar.tsx
+│   │   │   ├── TabBar.tsx
+│   │   │   └── Tooltip.tsx
 │   │   ├── AppContent.tsx
 │   │   ├── DemoSite.tsx
 │   │   ├── ModelLoadingOverlay.tsx

@@ -1,6 +1,7 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { cn } from "../../utils/cn";
+import { Tooltip, type TooltipVariant } from "./Tooltip";
 
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
@@ -30,22 +31,32 @@ interface ButtonProps
     VariantProps<typeof buttonVariants> {
   className?: string;
   children?: ReactNode;
+  tooltipVariant?: TooltipVariant;
 }
 
-const Button = ({
-  variant,
-  size,
-  className,
-  children,
-  ...props
-}: ButtonProps) => (
-  <button
-    className={cn(buttonVariants({ variant, size }), className)}
-    {...props}
-  >
-    {children}
-  </button>
-);
+const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  { variant, size, className, children, title, tooltipVariant, ...props },
+  ref,
+) {
+  const button = (
+    <button
+      ref={ref}
+      className={cn(buttonVariants({ variant, size }), className)}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+
+  return (
+    <Tooltip
+      content={title}
+      variant={tooltipVariant ?? (variant === "dark" ? "dark" : "default")}
+    >
+      {button}
+    </Tooltip>
+  );
+});
 
 export { Button, buttonVariants };
 export default Button;

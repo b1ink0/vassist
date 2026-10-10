@@ -813,7 +813,9 @@ const LLMProviderStep = ({
                             <code className="text-xs text-white/70 break-all flex-1">
                               chrome://on-device-internals/
                             </code>
-                            <button
+                            <Button
+                              variant="unstyled"
+                              tooltipVariant="default"
                               onClick={() => {
                                 navigator.clipboard.writeText(
                                   "chrome://on-device-internals/",
@@ -827,7 +829,7 @@ const LLMProviderStep = ({
                                 size={14}
                                 className="text-white/80"
                               />
-                            </button>
+                            </Button>
                           </div>
                           <p className="text-xs text-white/50">
                             Copy the URL above and paste it into your browser's

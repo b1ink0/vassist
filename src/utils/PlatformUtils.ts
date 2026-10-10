@@ -50,6 +50,11 @@ export const isDetachedAvatarWindow =
   typeof window !== "undefined" &&
   new URLSearchParams(window.location.search).get("desktop-role") === "avatar";
 
+// App mode and attached live-wallpaper mode both use the full-window desktop
+// layout. Detached desktop windows keep their own floating layout.
+export const isDesktopAttachedModeWindow =
+  isAppModeWindow || (isLiveWallpaperWindow && !isDetachedDesktopWindow);
+
 export const isDesktopWallpaperRendererWindow =
   isLiveWallpaperWindow && !isDetachedChatWindow;
 

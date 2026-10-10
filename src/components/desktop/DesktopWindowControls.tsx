@@ -12,6 +12,7 @@ import {
 import { useState } from "react";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
 import { isAppModeWindow } from "../../utils/PlatformUtils";
+import Button from "../ui/Button";
 
 /**
  * Window controls for Electron desktop app
@@ -66,30 +67,36 @@ export default function DesktopWindowControls() {
             Electron API not loaded
           </span>
         )}
-        <button
+        <Button
+          variant="unstyled"
+          tooltipVariant="default"
           onClick={handleMinimize}
           data-testid="desktop-window-minimize-button"
           className="p-1 rounded-full hover:bg-white/10 transition-colors"
           title="Minimize"
         >
           <MinusIcon className="w-3 h-3 text-white/70" />
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="unstyled"
+          tooltipVariant="default"
           onClick={handleMaximize}
           data-testid="desktop-window-maximize-button"
           className="p-1 rounded-full hover:bg-white/10 transition-colors"
           title="Maximize/Restore"
         >
           <Square2StackIcon className="w-3 h-3 text-white/70" />
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="unstyled"
+          tooltipVariant="default"
           onClick={handleClose}
           data-testid="desktop-window-close-button"
           className="p-1 rounded-full hover:bg-red-500/30 transition-colors"
           title="Close"
         >
           <XMarkIcon className="w-3 h-3 text-white/70" />
-        </button>
+        </Button>
       </div>
     </>
   );

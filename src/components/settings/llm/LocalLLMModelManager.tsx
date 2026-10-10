@@ -185,7 +185,8 @@ const CatalogList = ({
           const isSelected =
             selectedValue === item.value || selectedValue === item.id;
           return (
-            <button
+            <Button
+              variant="unstyled"
               key={item.id}
               type="button"
               onClick={() => onSelect(item)}
@@ -218,7 +219,7 @@ const CatalogList = ({
                   {item.description}
                 </div>
               )}
-            </button>
+            </Button>
           );
         })}
       </div>
@@ -1036,13 +1037,15 @@ const LocalLLMModelManager = ({
                 <span>Choose</span>
               </Button>
               {customModelsPath && (
-                <button
+                <Button
+                  variant="unstyled"
+                  tooltipVariant={isLightBackground ? "dark" : "default"}
                   onClick={handleClearCustomFolder}
                   className="w-10 h-10 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 transition-colors flex items-center justify-center"
                   title="Reset to default"
                 >
                   <Icon name="x" size={16} />
-                </button>
+                </Button>
               )}
             </div>
             <p className="text-[10px] text-white/50">
@@ -1062,7 +1065,7 @@ const LocalLLMModelManager = ({
         <button
           onClick={handleImportClick}
           disabled={loading}
-          className="w-full p-2 md:p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex w-full flex-col p-2 md:p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Icon
             name="upload"
@@ -1308,13 +1311,14 @@ const LocalLLMModelManager = ({
                       <Icon name="image" size={16} />
                     </div>
                   )}
-                  <button
+                  <Button
+                    variant="unstyled"
                     onClick={() => handleDelete(model.name)}
                     className="p-2 rounded hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-colors"
                     title="Delete model"
                   >
                     <Icon name="trash" size={16} />
-                  </button>
+                  </Button>
                   <Toggle
                     checked={selectedModel === model.name}
                     onChange={(checked) => {

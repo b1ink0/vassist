@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   Engine,
@@ -25,7 +31,11 @@ import {
   useUIConfig,
 } from "../../hooks/config/useConfigUI";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
-import { FPSLimitOptions } from "../../config/uiConfig";
+import {
+  DefaultStickerBorderSettings,
+  FPSLimitOptions,
+  type StickerBorderSettings,
+} from "../../config/uiConfig";
 import Logger from "../../services/common/LoggerService";
 import {
   isAndroid,
@@ -38,6 +48,7 @@ import type {
   PositionManagerLike,
   PositionPixels,
   SceneBuildConfig,
+  SceneWithMetadata,
 } from "../../babylon/types";
 import type { ElectronAPI } from "../../types/electron";
 
@@ -167,6 +178,14 @@ const BabylonScene = ({
   const uiConfigForScene: UIConfigForScene | null = uiConfig;
   const modelSizePx = getModelSizePx(uiConfigForScene);
   const fpsLimit = uiConfigForScene?.fpsLimit ?? FPSLimitOptions.FPS_60;
+  const stickerBorderConfig = uiConfig?.stickerBorder;
+  const stickerBorderSettings = useMemo<StickerBorderSettings>(
+    () => ({
+      ...DefaultStickerBorderSettings,
+      ...(stickerBorderConfig ?? {}),
+    }),
+    [stickerBorderConfig],
+  );
 
   const [isDragOver, setIsDragOver] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -802,6 +821,13 @@ const BabylonScene = ({
       window.removeEventListener("resize", updatePosition);
     };
   }, [activePositionManagerRef, isReady, setModelOverlayPos]);
+
+  useEffect(() => {
+    if (!isReady || isPreview) return;
+
+    const scene = sceneRef.current as SceneWithMetadata | null;
+    scene?.metadata?.setStickerBorderSettings?.(stickerBorderSettings);
+  }, [isPreview, isReady, stickerBorderSettings]);
 
   useEffect(() => {
     if (isPreview) return;

@@ -7,12 +7,23 @@ export const ASSISTANT_CONTROL_PANEL_GAP = 8;
 export const ASSISTANT_CONTROL_TOTAL_OFFSET = 224;
 export const ASSISTANT_CONTROL_PANEL_WIDTH = 125;
 export const ASSISTANT_CONTROL_PANEL_MAX_HEIGHT = 300;
+export const ASSISTANT_CONTROL_CAMERA_PANEL_HEIGHT = 86;
 export const ASSISTANT_CONTROL_ROW_HEIGHT = 43;
 export const ASSISTANT_CONTROL_CHAT_GUTTER =
   ASSISTANT_CONTROL_SIZE + ASSISTANT_CONTROL_PANEL_GAP * 2;
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.max(min, Math.min(value, max));
+
+const clampPanelCoordinate = (
+  coordinate: number,
+  panelSize: number,
+  viewportSize: number,
+): number => {
+  const min = ASSISTANT_CONTROL_EDGE_PADDING;
+  const max = Math.max(min, viewportSize - panelSize - min);
+  return clamp(coordinate, min, max);
+};
 
 export const getButtonPositionFromPreset = (
   preset: string,
@@ -70,6 +81,8 @@ export interface PanelLayoutInput {
   isDesktop: boolean;
   isNormalDesktop?: boolean;
   showUtilityButtons: boolean;
+  /** Keep desktop panels on the outside/left of the control dock when chat is open. */
+  forcePanelToLeft?: boolean;
 }
 
 export const getAssistantControlLayout = ({
@@ -80,6 +93,7 @@ export const getAssistantControlLayout = ({
   isAndroid,
   isNormalDesktop = false,
   showUtilityButtons,
+  forcePanelToLeft = false,
 }: PanelLayoutInput): AssistantControlLayout => {
   const normalControlPosition = {
     x: 16,
@@ -88,7 +102,21 @@ export const getAssistantControlLayout = ({
   const effectiveButtonPosition = isNormalDesktop
     ? normalControlPosition
     : buttonPosition;
-  const isLeftSide = effectiveButtonPosition.x < viewport.width / 2;
+  const availableLeft =
+    effectiveButtonPosition.x - ASSISTANT_CONTROL_EDGE_PADDING;
+  const availableRight =
+    viewport.width -
+    (effectiveButtonPosition.x + ASSISTANT_CONTROL_SIZE) -
+    ASSISTANT_CONTROL_EDGE_PADDING;
+  const panelWidthWithGap =
+    ASSISTANT_CONTROL_PANEL_WIDTH + ASSISTANT_CONTROL_PANEL_GAP;
+  const calculatedIsLeftSide =
+    availableRight >= panelWidthWithGap
+      ? true
+      : availableLeft >= panelWidthWithGap
+        ? false
+        : availableRight >= availableLeft;
+  const isLeftSide = forcePanelToLeft ? false : calculatedIsLeftSide;
 
   if (isAndroid) {
     const buttonX = 20;
@@ -101,21 +129,36 @@ export const getAssistantControlLayout = ({
           (ASSISTANT_CONTROL_SIZE + ASSISTANT_CONTROL_PANEL_GAP)
         : 0);
     const panelLeft = (width: number) =>
-      clamp(
+      clampPanelCoordinate(
         buttonX + ASSISTANT_CONTROL_SIZE + ASSISTANT_CONTROL_PANEL_GAP,
-        ASSISTANT_CONTROL_EDGE_PADDING,
-        viewport.width - width - ASSISTANT_CONTROL_EDGE_PADDING,
+        width,
+        viewport.width,
       );
     const panelTop = (anchorTop: number, height: number) =>
-      clamp(
+      clampPanelCoordinate(
         anchorTop + ASSISTANT_CONTROL_SIZE / 2 - height / 2,
-        ASSISTANT_CONTROL_EDGE_PADDING,
-        viewport.height - height - ASSISTANT_CONTROL_EDGE_PADDING,
+        height,
+        viewport.height,
       );
     const emoteAnchorTop =
       stackTop + ASSISTANT_CONTROL_SIZE + ASSISTANT_CONTROL_PANEL_GAP;
     const avatarAnchorTop =
       emoteAnchorTop + ASSISTANT_CONTROL_SIZE + ASSISTANT_CONTROL_PANEL_GAP;
+    const avatarTop = panelTop(avatarAnchorTop, avatarHeight);
+    const cameraTopBelow =
+      avatarTop + avatarHeight + ASSISTANT_CONTROL_PANEL_GAP;
+    const cameraTop =
+      cameraTopBelow <=
+      viewport.height -
+        ASSISTANT_CONTROL_CAMERA_PANEL_HEIGHT -
+        ASSISTANT_CONTROL_EDGE_PADDING
+        ? cameraTopBelow
+        : Math.max(
+            ASSISTANT_CONTROL_EDGE_PADDING,
+            avatarTop -
+              ASSISTANT_CONTROL_CAMERA_PANEL_HEIGHT -
+              ASSISTANT_CONTROL_PANEL_GAP,
+          );
 
     return {
       emote: {
@@ -124,14 +167,11 @@ export const getAssistantControlLayout = ({
       },
       avatar: {
         left: panelLeft(ASSISTANT_CONTROL_PANEL_WIDTH),
-        top: panelTop(avatarAnchorTop, avatarHeight),
+        top: avatarTop,
       },
       camera: {
         left: panelLeft(ASSISTANT_CONTROL_PANEL_WIDTH),
-        top:
-          panelTop(avatarAnchorTop, avatarHeight) +
-          avatarHeight +
-          ASSISTANT_CONTROL_PANEL_GAP,
+        top: cameraTop,
       },
       button: { left: "20px", bottom: "20px" },
       isLeftSide: true,
@@ -148,25 +188,38 @@ export const getAssistantControlLayout = ({
     emoteAnchorTop + ASSISTANT_CONTROL_SIZE + ASSISTANT_CONTROL_PANEL_GAP;
 
   const panelLeft = (width: number) =>
-    clamp(
+    clampPanelCoordinate(
       isLeftSide
         ? effectiveButtonPosition.x +
             ASSISTANT_CONTROL_SIZE +
             ASSISTANT_CONTROL_PANEL_GAP
         : effectiveButtonPosition.x - width - ASSISTANT_CONTROL_PANEL_GAP,
-      ASSISTANT_CONTROL_EDGE_PADDING,
-      viewport.width - width - ASSISTANT_CONTROL_EDGE_PADDING,
+      width,
+      viewport.width,
     );
 
   const panelTop = (anchorTop: number, height: number) =>
-    clamp(
+    clampPanelCoordinate(
       anchorTop + ASSISTANT_CONTROL_SIZE / 2 - height / 2,
-      ASSISTANT_CONTROL_EDGE_PADDING,
-      viewport.height - height - ASSISTANT_CONTROL_EDGE_PADDING,
+      height,
+      viewport.height,
     );
 
   const emoteTop = panelTop(emoteAnchorTop, emoteHeight);
   const avatarTop = panelTop(avatarAnchorTop, avatarHeight);
+  const cameraTopBelow = avatarTop + avatarHeight + ASSISTANT_CONTROL_PANEL_GAP;
+  const cameraTop =
+    cameraTopBelow <=
+    viewport.height -
+      ASSISTANT_CONTROL_CAMERA_PANEL_HEIGHT -
+      ASSISTANT_CONTROL_EDGE_PADDING
+      ? cameraTopBelow
+      : Math.max(
+          ASSISTANT_CONTROL_EDGE_PADDING,
+          avatarTop -
+            ASSISTANT_CONTROL_CAMERA_PANEL_HEIGHT -
+            ASSISTANT_CONTROL_PANEL_GAP,
+        );
 
   return {
     emote: {
@@ -179,7 +232,7 @@ export const getAssistantControlLayout = ({
     },
     camera: {
       left: panelLeft(ASSISTANT_CONTROL_PANEL_WIDTH),
-      top: avatarTop + avatarHeight + ASSISTANT_CONTROL_PANEL_GAP,
+      top: cameraTop,
     },
     button: {
       left: isNormalDesktop ? "16px" : `${buttonPosition.x}px`,

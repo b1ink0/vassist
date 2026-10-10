@@ -8,7 +8,7 @@ import { cn } from "../../utils/cn";
 import Icon from "../icons/Icon";
 import Logger from "../../services/common/LoggerService";
 import { backgroundStorageService } from "../../services/storage/BackgroundStorageService";
-import { Button } from "../ui";
+import Button from "../ui/Button";
 
 interface BackgroundItem {
   id: string;
@@ -143,7 +143,7 @@ const BackgroundSettings = ({
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={uploadState.uploading}
-          className="w-full p-3 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex w-full flex-col p-3 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Icon
             name="upload"
@@ -211,7 +211,8 @@ const BackgroundSettings = ({
                 </div>
               )}
 
-              <button
+              <Button
+                variant="unstyled"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleDelete(bg.id);
@@ -220,7 +221,7 @@ const BackgroundSettings = ({
                 title="Delete"
               >
                 <Icon name="trash-2" size={10} className="text-white" />
-              </button>
+              </Button>
             </div>
           ))}
         </div>

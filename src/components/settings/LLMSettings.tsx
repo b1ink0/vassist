@@ -4,7 +4,7 @@
  * Handles provider selection and configuration for OpenAI, Ollama, and Chrome AI
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as React from "react";
 import { Accordion } from "@base-ui/react/accordion";
 import {
@@ -46,6 +46,8 @@ import StatusMessage from "../common/StatusMessage";
 import { Icon } from "../icons";
 import { cn } from "../../utils/cn";
 import { Button, Input, Select, Card, SettingsRow, TabBar } from "../ui";
+
+const SettingsSubTabContent = lazy(() => import("./SettingsSubTabContent"));
 import {
   DEFAULT_SERVICE_PORTS,
   DEFAULT_ENDPOINTS,
@@ -1649,7 +1651,6 @@ const LLMSettings = ({
     return webProviders;
   }, []);
 
-  const llmSubTabOrder: LLMSubTabId[] = ["provider", "routing", "profiles"];
   const [activeSubTab, setActiveSubTab] = useState<LLMSubTabId>("provider");
   const requestedLocalSubTab =
     requestedSubTab === "llm.routing"
@@ -2477,22 +2478,28 @@ const LLMSettings = ({
       </div>
 
       <div className="flex-1 overflow-hidden">
-        <div
-          className="flex flex-nowrap transition-transform duration-300 ease-out"
-          style={{
-            transform: `translateX(-${llmSubTabOrder.indexOf(activeSubTab) * 100}%)`,
-            height: "100%",
-          }}
-        >
-          <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-6 scrollbar-glass">
-            {renderProviderSettings()}
-          </div>
-          <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-6 scrollbar-glass">
-            {renderRoutingSettings()}
-          </div>
-          <div className="flex-shrink-0 w-full min-w-full h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-6 scrollbar-glass">
-            {renderProfileSettings()}
-          </div>
+        <div className="h-full overflow-y-auto scrollbar-glass">
+          <Suspense
+            fallback={
+              <div className="flex h-full min-h-0 items-center justify-center">
+                <Icon
+                  name="loading-2"
+                  size={32}
+                  className="animate-spin text-white/75"
+                />
+              </div>
+            }
+          >
+            <SettingsSubTabContent
+              render={() => (
+                <div className="px-4 md:px-6 py-2 md:py-4 space-y-6">
+                  {activeSubTab === "provider" && renderProviderSettings()}
+                  {activeSubTab === "routing" && renderRoutingSettings()}
+                  {activeSubTab === "profiles" && renderProfileSettings()}
+                </div>
+              )}
+            />
+          </Suspense>
         </div>
       </div>
     </div>

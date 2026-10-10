@@ -4,7 +4,6 @@
 
 import CameraService from "./services/media/CameraService";
 import ScreenShareService from "./services/media/ScreenShareService";
-import DemoSite from "./components/DemoSite";
 import LoadingIndicator from "./components/common/LoadingIndicator";
 import { AppRuntimeProvider } from "./contexts/AppRuntimeContext";
 import type { AppStore } from "./stores/createAppStore";
@@ -132,23 +131,22 @@ function StoreBootstrapInner({
   );
 }
 
-const LazyAppContent = lazy(() => import("./components/AppContent"));
-const LazySetupWizard = lazy(() => import("./components/setup/SetupWizard"));
-const LazyChatInput = lazy(() => import("./components/chat/ChatInput"));
-const LazyVideoPreview = lazy(
-  () => import("./components/desktop/VideoPreview"),
-);
-const LazyDesktopWindowInteractivityBridge = lazy(
+const AppContent = lazy(() => import("./components/AppContent"));
+const DemoSite = lazy(() => import("./components/DemoSite"));
+const SetupWizard = lazy(() => import("./components/setup/SetupWizard"));
+const ChatInput = lazy(() => import("./components/chat/ChatInput"));
+const VideoPreview = lazy(() => import("./components/desktop/VideoPreview"));
+const DesktopWindowInteractivityBridge = lazy(
   () => import("./components/desktop/DesktopWindowInteractivityBridge"),
 );
-const LazyDesktopScreenShareDialog = lazy(
+const DesktopScreenShareDialog = lazy(
   () => import("./components/desktop/DesktopScreenShareDialog"),
 );
-const LazyDesktopModeHost = lazy(
+const DesktopModeHost = lazy(
   () => import("./components/desktop/DesktopModeHost"),
 );
-const LazyAndroidContent = lazy(() => import("../android-src/AndroidContent"));
-const LazyAndroidBackground = lazy(
+const AndroidContent = lazy(() => import("../android-src/AndroidContent"));
+const AndroidBackground = lazy(
   () => import("./components/android/AndroidBackground"),
 );
 
@@ -179,7 +177,7 @@ function AppWithSetup({
     if (showDeferredSetup) {
       return (
         <Suspense fallback={<LoadingIndicator isVisible={true} />}>
-          <LazyAppContent
+          <AppContent
             mode={mode}
             requireSetupOnChatClick={requireSetupOnChatClick}
             {...appContentProps}
@@ -192,14 +190,14 @@ function AppWithSetup({
 
     return (
       <Suspense fallback={<LoadingIndicator isVisible={true} />}>
-        <LazySetupWizard onMinimizeSetup={onMinimizeSetup} />
+        <SetupWizard onMinimizeSetup={onMinimizeSetup} />
       </Suspense>
     );
   }
 
   return (
     <Suspense fallback={<LoadingIndicator isVisible={true} />}>
-      <LazyAppContent
+      <AppContent
         mode={mode}
         requireSetupOnChatClick={requireSetupOnChatClick}
         {...appContentProps}
@@ -217,7 +215,7 @@ function AppWithSetup({
 function AndroidWrapper() {
   return (
     <Suspense fallback={<LoadingIndicator isVisible={true} />}>
-      <LazyAndroidContent />
+      <AndroidContent />
     </Suspense>
   );
 }
@@ -255,7 +253,11 @@ function DevelopmentDemoSite({ onStartSetup }: { onStartSetup: () => void }) {
     ? { onLaunchAssistant: launchHandler }
     : {};
 
-  return <DemoSite {...demoSiteProps} />;
+  return (
+    <Suspense fallback={null}>
+      <DemoSite {...demoSiteProps} />
+    </Suspense>
+  );
 }
 
 /**
@@ -335,7 +337,7 @@ function App({
           <AnimationProvider>
             <div className="relative w-full h-screen overflow-hidden bg-transparent">
               <Suspense fallback={null}>
-                <LazyAndroidBackground />
+                <AndroidBackground />
               </Suspense>
               <AndroidWrapper />
             </div>
@@ -353,7 +355,7 @@ function App({
           <AnimationProvider>
             <div className="relative w-full h-screen overflow-hidden">
               <Suspense fallback={null}>
-                <LazyAndroidBackground />
+                <AndroidBackground />
               </Suspense>
               <AppWithSetup
                 mode="android"
@@ -364,7 +366,7 @@ function App({
               />
               {shouldRenderCameraPreview && (
                 <Suspense fallback={null}>
-                  <LazyVideoPreview service={CameraService} type="camera" />
+                  <VideoPreview service={CameraService} type="camera" />
                 </Suspense>
               )}
             </div>
@@ -382,7 +384,7 @@ function App({
           onStoreReady={onStoreReady}
         >
           <Suspense fallback={<LoadingIndicator isVisible={true} />}>
-            <LazyDesktopScreenShareDialog />
+            <DesktopScreenShareDialog />
           </Suspense>
         </StoreBootstrap>
       );
@@ -395,10 +397,10 @@ function App({
           onStoreReady={onStoreReady}
         >
           <Suspense fallback={null}>
-            <LazyDesktopWindowInteractivityBridge />
+            <DesktopWindowInteractivityBridge />
           </Suspense>
           <Suspense fallback={<LoadingIndicator isVisible={true} />}>
-            <LazyChatInput
+            <ChatInput
               onSend={() => {}}
               onClose={() => {}}
               onVoiceTranscription={() => {}}
@@ -408,9 +410,9 @@ function App({
           </Suspense>
           <Suspense fallback={null}>
             {shouldRenderCameraPreview && (
-              <LazyVideoPreview service={CameraService} type="camera" />
+              <VideoPreview service={CameraService} type="camera" />
             )}
-            <LazyVideoPreview service={ScreenShareService} type="screen" />
+            <VideoPreview service={ScreenShareService} type="screen" />
           </Suspense>
         </StoreBootstrap>
       );
@@ -424,7 +426,7 @@ function App({
         <SetupProvider embedConfig={resolvedEmbedConfig}>
           <AnimationProvider>
             <Suspense fallback={null}>
-              <LazyDesktopModeHost>
+              <DesktopModeHost>
                 <AppWithSetup
                   mode="desktop"
                   showDeferredSetup={showDeferredSetup}
@@ -434,14 +436,11 @@ function App({
                 />
                 <Suspense fallback={null}>
                   {shouldRenderCameraPreview && (
-                    <LazyVideoPreview service={CameraService} type="camera" />
+                    <VideoPreview service={CameraService} type="camera" />
                   )}
-                  <LazyVideoPreview
-                    service={ScreenShareService}
-                    type="screen"
-                  />
+                  <VideoPreview service={ScreenShareService} type="screen" />
                 </Suspense>
-              </LazyDesktopModeHost>
+              </DesktopModeHost>
             </Suspense>
           </AnimationProvider>
         </SetupProvider>
@@ -474,9 +473,9 @@ function App({
               />
               <Suspense fallback={null}>
                 {shouldRenderCameraPreview && (
-                  <LazyVideoPreview service={CameraService} type="camera" />
+                  <VideoPreview service={CameraService} type="camera" />
                 )}
-                <LazyVideoPreview service={ScreenShareService} type="screen" />
+                <VideoPreview service={ScreenShareService} type="screen" />
               </Suspense>
             </div>
           ) : (
@@ -490,9 +489,9 @@ function App({
               />
               <Suspense fallback={<LoadingIndicator isVisible={true} />}>
                 {shouldRenderCameraPreview && (
-                  <LazyVideoPreview service={CameraService} type="camera" />
+                  <VideoPreview service={CameraService} type="camera" />
                 )}
-                <LazyVideoPreview service={ScreenShareService} type="screen" />
+                <VideoPreview service={ScreenShareService} type="screen" />
               </Suspense>
             </>
           )}

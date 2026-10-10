@@ -3,6 +3,8 @@
  */
 
 import {
+  lazy,
+  Suspense,
   useEffect,
   useRef,
   useCallback,
@@ -14,11 +16,14 @@ import {
   type RefAttributes,
   type SetStateAction,
 } from "react";
-import AssistantControlDock from "./AssistantControlDock";
-import ChatInput from "./ChatInput";
-import ChatContainer from "./ChatContainer";
-import AIToolbar from "../toolbar/AIToolbar";
-import { InputWindowManager } from "../desktop/InputWindowManager";
+const AssistantControlDock = lazy(() => import("./AssistantControlDock"));
+const ChatInput = lazy(() => import("./ChatInput"));
+const ChatContainer = lazy(() => import("./ChatContainer"));
+const AIToolbar = lazy(() => import("../toolbar/AIToolbar"));
+const InputWindowManager = lazy(async () => {
+  const module = await import("../desktop/InputWindowManager");
+  return { default: module.InputWindowManager };
+});
 import {
   type ResolvedVAssistEmbedConfig,
   type VAssistMessageEventPayload,
@@ -65,14 +70,16 @@ import {
   isDesktop,
   isInputWindow,
   isLiveWallpaperWindow,
-  isAppModeWindow,
+  isDesktopAttachedModeWindow,
   isDetachedAvatarWindow,
   isDetachedChatWindow,
 } from "../../utils/PlatformUtils";
 import MicrophoneService from "../../services/audio/MicrophoneService";
 import CameraService from "../../services/media/CameraService";
-import DetachedChatResizeHandle from "../desktop/DetachedChatResizeHandle";
 import ScreenShareService from "../../services/media/ScreenShareService";
+const DetachedChatResizeHandle = lazy(
+  () => import("../desktop/DetachedChatResizeHandle"),
+);
 
 type ConversationState =
   (typeof ConversationStates)[keyof typeof ConversationStates];
@@ -408,7 +415,7 @@ const ChatController = ({
   );
   const chatEnabled = embedConfig.features.chat;
   const toolbarEnabled = embedConfig.features.aiToolbar;
-  const isNormalDesktop = isAppModeWindow;
+  const isNormalDesktop = isDesktopAttachedModeWindow;
 
   const assistantRef =
     appAssistantRef as MutableRefObject<AssistantHandle | null>;
@@ -2684,11 +2691,17 @@ const ChatController = ({
     <>
       {/* Desktop input window manager */}
       {!avatarOnly && !isInputWindow && isDesktop && !isNormalDesktop && (
-        <InputWindowManager />
+        <Suspense fallback={null}>
+          <InputWindowManager />
+        </Suspense>
       )}
 
       {/* AI Toolbar - appears on text/image selection */}
-      {toolbarEnabled ? <AIToolbar /> : null}
+      {toolbarEnabled ? (
+        <Suspense fallback={null}>
+          <AIToolbar />
+        </Suspense>
+      ) : null}
 
       {chatEnabled ? (
         <>
@@ -2696,20 +2709,22 @@ const ChatController = ({
               - Model enabled: visible when model ready, HIDE when chat opens (model is anchor)
               - Model disabled: ALWAYS visible (button is anchor, needed for dragging) */}
           {(!avatarOnly || !modelDisabled) && (
-            <AssistantControlDock
-              onClick={handleAssistantControlClick}
-              isVisible={
-                modelDisabled
-                  ? true
-                  : isDesktop || isNormalDesktop
+            <Suspense fallback={null}>
+              <AssistantControlDock
+                onClick={handleAssistantControlClick}
+                isVisible={
+                  modelDisabled
                     ? true
-                    : isAssistantReady &&
-                      !(isChatContainerVisible || isChatInputVisible)
-              }
-              modelDisabled={modelDisabled}
-              isChatOpen={isChatContainerVisible || isChatInputVisible}
-              chatInputRef={chatInputRef}
-            />
+                    : isDesktop || isNormalDesktop
+                      ? true
+                      : isAssistantReady &&
+                        !(isChatContainerVisible || isChatInputVisible)
+                }
+                modelDisabled={modelDisabled}
+                isChatOpen={isChatContainerVisible || isChatInputVisible}
+                chatInputRef={chatInputRef}
+              />
+            </Suspense>
           )}
 
           {/* Chat Input - bottom screen */}
@@ -2717,31 +2732,37 @@ const ChatController = ({
             isNormalDesktop ||
             (isLiveWallpaperWindow && !isDetachedChatWindow)) &&
             !avatarOnly && (
-              <ChatInputTyped
-                ref={chatInputRef}
-                onSend={handleMessageSend}
-                onClose={handleChatInputClose}
-                onVoiceTranscription={handleVoiceTranscription}
-                onVoiceMode={handleVoiceModeChange}
-                embedConfig={embedConfig}
-              />
+              <Suspense fallback={null}>
+                <ChatInputTyped
+                  ref={chatInputRef}
+                  onSend={handleMessageSend}
+                  onClose={handleChatInputClose}
+                  onVoiceTranscription={handleVoiceTranscription}
+                  onVoiceMode={handleVoiceModeChange}
+                  embedConfig={embedConfig}
+                />
+              </Suspense>
             )}
 
           {/* Chat Container - message bubbles */}
           {!avatarOnly && (
-            <ChatContainer
-              modelDisabled={modelDisabled}
-              normalDesktop={isNormalDesktop}
-              chatInputRef={chatInputRef}
-              onDragDrop={handleDragDrop}
-              embedConfig={embedConfig}
-            />
+            <Suspense fallback={null}>
+              <ChatContainer
+                modelDisabled={modelDisabled}
+                normalDesktop={isNormalDesktop}
+                chatInputRef={chatInputRef}
+                onDragDrop={handleDragDrop}
+                embedConfig={embedConfig}
+              />
+            </Suspense>
           )}
 
           {isDetachedChatWindow &&
             !avatarOnly &&
             (isChatContainerVisible || isChatInputVisible) && (
-              <DetachedChatResizeHandle />
+              <Suspense fallback={null}>
+                <DetachedChatResizeHandle />
+              </Suspense>
             )}
         </>
       ) : null}

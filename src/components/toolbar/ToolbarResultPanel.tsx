@@ -14,6 +14,7 @@ import { Icon } from "../icons";
 import { TranslationLanguages } from "../../config/aiConfig";
 import MarkdownText from "../common/StreamdownMarkdown";
 import StreamingContainer from "../common/StreamingContainer";
+import Button from "../ui/Button";
 
 interface ToolbarResultPanelProps {
   result: string;
@@ -190,7 +191,8 @@ const ToolbarResultPanel = forwardRef<HTMLDivElement, ToolbarResultPanelProps>(
 
             {/* Regenerate button */}
             {!isLoading && !error && result && onRegenerateClick && (
-              <button
+              <Button
+                variant="unstyled"
                 data-testid="ai-toolbar-result-regenerate"
                 onClick={onRegenerateClick}
                 disabled={isRegenerating}
@@ -201,19 +203,20 @@ const ToolbarResultPanel = forwardRef<HTMLDivElement, ToolbarResultPanelProps>(
                   name={isRegenerating ? "hourglass" : "refresh"}
                   size={16}
                 />
-              </button>
+              </Button>
             )}
 
             {/* Copy button */}
             {!isLoading && !error && result && onCopyClick && (
-              <button
+              <Button
+                variant="unstyled"
                 data-testid="ai-toolbar-result-copy"
                 onClick={onCopyClick}
                 className="w-5 h-5 flex items-center justify-center text-xs rounded-lg border-none bg-transparent opacity-60 cursor-pointer transition-all duration-200 hover:bg-white/10 hover:opacity-100 text-white"
                 title="Copy to clipboard"
               >
                 <Icon name={copySuccess ? "check" : "clipboard"} size={16} />
-              </button>
+              </Button>
             )}
 
             {/* Speaker button - for summarizer, image analysis, text improvements, dictionary, and dictation */}
@@ -227,7 +230,8 @@ const ToolbarResultPanel = forwardRef<HTMLDivElement, ToolbarResultPanelProps>(
                 action === "dictation") &&
               ttsConfig?.enabled &&
               onSpeakerClick && (
-                <button
+                <Button
+                  variant="unstyled"
                   data-testid="ai-toolbar-result-speaker"
                   onClick={onSpeakerClick}
                   disabled={false}
@@ -250,18 +254,19 @@ const ToolbarResultPanel = forwardRef<HTMLDivElement, ToolbarResultPanelProps>(
                     }
                     size={16}
                   />
-                </button>
+                </Button>
               )}
           </div>
 
           {/* Close button */}
-          <button
+          <Button
+            variant="unstyled"
             data-testid="ai-toolbar-result-close"
             onClick={onClose}
             className="w-5 h-5 flex items-center justify-center text-xs rounded-xl border-none bg-transparent opacity-60 cursor-pointer transition-all duration-200 hover:bg-white/10 hover:opacity-100 text-white"
           >
             <Icon name="close" size={16} />
-          </button>
+          </Button>
         </div>
 
         {/* Error display */}

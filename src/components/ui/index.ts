@@ -5,3 +5,4 @@ export { default as Card } from "./Card";
 export { default as Badge } from "./Badge";
 export { default as SettingsRow } from "./SettingsRow";
 export { default as TabBar } from "./TabBar";
+export { Tooltip } from "./Tooltip";

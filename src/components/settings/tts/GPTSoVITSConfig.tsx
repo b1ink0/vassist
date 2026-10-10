@@ -419,10 +419,11 @@ const GPTSoVITSConfig = ({
             className="hidden"
           />
 
-          <button
+          <Button
+            variant="unstyled"
             onClick={() => voiceFileInputRef.current?.click()}
             disabled={uploadingVoice}
-            className="w-full p-2 md:p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex w-full flex-col p-2 md:p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Icon
               name="upload"
@@ -437,7 +438,7 @@ const GPTSoVITSConfig = ({
             <p className="text-xs text-white/50">
               {newAudioFile ? newAudioFile.name : "Click to browse"}
             </p>
-          </button>
+          </Button>
 
           {newAudioFile && (
             <Button
@@ -540,37 +541,41 @@ const GPTSoVITSConfig = ({
                   <div className="flex items-center gap-1">
                     {isEditing ? (
                       <>
-                        <button
+                        <Button
+                          variant="unstyled"
                           onClick={() => handleSaveVoiceName(voice.id)}
                           className="p-1 rounded hover:bg-green-500/20 text-green-300 transition-colors"
                           title="Save"
                         >
                           <Icon name="check" size={16} />
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="unstyled"
                           onClick={handleCancelEditVoice}
                           className="p-1 rounded hover:bg-red-500/20 text-red-300 transition-colors"
                           title="Cancel"
                         >
                           <Icon name="x" size={16} />
-                        </button>
+                        </Button>
                       </>
                     ) : (
                       <>
-                        <button
+                        <Button
+                          variant="unstyled"
                           onClick={() => handleEditVoice(voice.id)}
                           className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors"
                           title="Edit"
                         >
                           <Icon name="edit-2" size={16} />
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="unstyled"
                           onClick={() => handleDeleteVoice(voice.id)}
                           className="p-1 rounded hover:bg-red-500/20 text-white/50 hover:text-red-300 transition-colors"
                           title="Delete"
                         >
                           <Icon name="trash-2" size={16} />
-                        </button>
+                        </Button>
                         <Toggle
                           checked={isDefault}
                           onChange={(checked) => {

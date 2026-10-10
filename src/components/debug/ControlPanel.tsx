@@ -5,6 +5,7 @@
 import { useState, useRef, useEffect, type MouseEvent } from "react";
 import { cn } from "../../utils/cn";
 import { Icon } from "../icons";
+import Button from "../ui/Button";
 import DebugOverlay from "./DebugOverlay";
 import type { DebugOverlayPositionManagerLike } from "./DebugOverlay";
 import ResourceLoader from "../../utils/ResourceLoader";
@@ -517,7 +518,8 @@ const ControlPanel = ({
 
   return (
     <>
-      <button
+      <Button
+        variant="unstyled"
         onMouseDown={handleButtonMouseDown}
         onClick={handleButtonClick}
         style={{
@@ -533,7 +535,7 @@ const ControlPanel = ({
         title="Drag to reposition | Click to toggle panel"
       >
         <Icon name="tools" size={16} />
-      </button>
+      </Button>
 
       {isVisible && (
         <div
@@ -554,13 +556,14 @@ const ControlPanel = ({
               <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-400 rounded">
                 {currentState}
               </span>
-              <button
+              <Button
+                variant="unstyled"
                 onClick={() => setShowPerf((s) => !s)}
                 className="text-[10px] px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 transition-colors border border-blue-500/30"
                 title="Toggle Performance Stats"
               >
                 📊 Stats
-              </button>
+              </Button>
               {showPerf && (
                 <div
                   className="ml-1 text-[11px] text-gray-200 bg-black/60 px-1.5 py-0.5 rounded whitespace-nowrap flex items-center gap-2"

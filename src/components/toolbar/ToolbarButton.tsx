@@ -12,6 +12,7 @@ import { useRef, type CSSProperties } from "react";
 import type { MouseEventHandler } from "react";
 import { cn } from "../../utils/cn";
 import { Icon } from "../icons";
+import { Tooltip } from "../ui";
 
 export interface ToolbarButtonProps {
   icon: string;
@@ -139,52 +140,56 @@ const ToolbarButton = ({
   };
 
   return (
-    <button
-      ref={buttonRef}
-      data-testid={
-        testId ||
-        (actionType
-          ? `ai-toolbar-button-${actionType.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`
-          : undefined)
-      }
-      onClick={onClick}
-      disabled={disabled}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      className={cn(
-        "flex items-center justify-center gap-1.5",
-        "border-none text-base",
-        "transition-all duration-300 ease-in-out",
-        "min-w-8 px-2",
-        "h-8 rounded-2xl bg-transparent opacity-80 hover:opacity-100",
-        getHoverBgClass(),
-        disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer",
-        "text-white",
-        className,
-      )}
-      title={title}
-      style={style}
+    <Tooltip
+      content={title || label}
+      variant={_isLightBackground ? "dark" : "default"}
     >
-      <span
+      <button
+        ref={buttonRef}
+        data-testid={
+          testId ||
+          (actionType
+            ? `ai-toolbar-button-${actionType.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`
+            : undefined)
+        }
+        onClick={onClick}
+        disabled={disabled}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         className={cn(
-          "inline-block transition-opacity duration-200",
-          isLoading && "animate-spin",
+          "flex items-center justify-center gap-1.5",
+          "border-none text-base",
+          "transition-all duration-300 ease-in-out",
+          "min-w-8 px-2",
+          "h-8 rounded-2xl bg-transparent opacity-80 hover:opacity-100",
+          getHoverBgClass(),
+          disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer",
+          "text-white",
+          className,
         )}
+        style={style}
       >
-        <Icon
-          name={isLoading ? loadingIcon : icon}
-          size={16}
-          context="toolbar"
-        />
-      </span>
-      <span
-        ref={labelRef}
-        className="text-[13px] font-medium whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out"
-        style={{ maxWidth: isLoading ? maxLabelWidth : "0", opacity: 1 }}
-      >
-        {label}
-      </span>
-    </button>
+        <span
+          className={cn(
+            "inline-block transition-opacity duration-200",
+            isLoading && "animate-spin",
+          )}
+        >
+          <Icon
+            name={isLoading ? loadingIcon : icon}
+            size={16}
+            context="toolbar"
+          />
+        </span>
+        <span
+          ref={labelRef}
+          className="text-[13px] font-medium whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out"
+          style={{ maxWidth: isLoading ? maxLabelWidth : "0", opacity: 1 }}
+        >
+          {label}
+        </span>
+      </button>
+    </Tooltip>
   );
 };
 

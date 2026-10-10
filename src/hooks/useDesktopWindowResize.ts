@@ -10,7 +10,7 @@ import {
   isDesktop,
   isDetachedChatWindow,
   isInputWindow,
-  isAppModeWindow,
+  isDesktopAttachedModeWindow,
 } from "../utils/PlatformUtils";
 import { ASSISTANT_CONTROL_CHAT_GUTTER } from "../components/chat/assistant-controls/positioning";
 
@@ -57,7 +57,7 @@ export function useDesktopWindowResize(
     if (
       disabled ||
       !isDesktop ||
-      isAppModeWindow ||
+      isDesktopAttachedModeWindow ||
       isDetachedChatWindow ||
       !api
     )

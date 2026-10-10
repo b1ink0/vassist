@@ -1,7 +1,7 @@
-import { useCallback, useState } from "react";
+import { lazy, Suspense, useCallback, useState } from "react";
 import VirtualAssistant from "./VirtualAssistant";
-import ControlPanel from "../debug/ControlPanel";
-import ModelLoadingOverlay from "../ModelLoadingOverlay";
+const ControlPanel = lazy(() => import("../debug/ControlPanel"));
+const ModelLoadingOverlay = lazy(() => import("../ModelLoadingOverlay"));
 import {
   useAssistantRef,
   useHandleAssistantReady,
@@ -73,16 +73,20 @@ function LiveAssistantShell({
         forcePortraitMode={forcePortraitMode}
       />
 
-      <ControlPanel
-        isAssistantReady={isAssistantReady}
-        currentState={currentState}
-        assistantRef={assistantRef}
-        sceneRef={sceneRef}
-        positionManagerRef={positionManagerRef}
-        onStateChange={setCurrentState}
-      />
+      <Suspense fallback={null}>
+        <ControlPanel
+          isAssistantReady={isAssistantReady}
+          currentState={currentState}
+          assistantRef={assistantRef}
+          sceneRef={sceneRef}
+          positionManagerRef={positionManagerRef}
+          onStateChange={setCurrentState}
+        />
+      </Suspense>
 
-      <ModelLoadingOverlay />
+      <Suspense fallback={null}>
+        <ModelLoadingOverlay />
+      </Suspense>
     </>
   );
 }

@@ -610,6 +610,7 @@ const buildConfigsFromSetupData = (setupData: SetupData) => {
       ...DefaultUIConfig.emotePlayback,
       showDurationBar: true,
       showTime: true,
+      buttonProgress: "none",
       autoPlayCategory: "all",
     },
     shortcuts: {

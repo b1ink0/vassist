@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Icon } from "../icons";
 import { cn } from "../../utils/cn";
+import Button from "../ui/Button";
 
 interface FlagCopyButtonProps {
   flagUrl: string;
@@ -29,7 +30,8 @@ const FlagCopyButton = ({ flagUrl, flagValue }: FlagCopyButtonProps) => {
           Set to: <span className="text-white/80">{flagValue}</span>
         </p>
       </div>
-      <button
+      <Button
+        variant="unstyled"
         onClick={handleCopy}
         className={cn(
           "flex-shrink-0 px-2 py-1 rounded border border-white/20 transition-colors",
@@ -42,7 +44,7 @@ const FlagCopyButton = ({ flagUrl, flagValue }: FlagCopyButtonProps) => {
           size={14}
           className={copied ? "text-white" : "text-white/80"}
         />
-      </button>
+      </Button>
     </div>
   );
 };

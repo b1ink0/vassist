@@ -53,7 +53,7 @@ import {
   isAndroid,
   isDesktop,
   isInputWindow,
-  isAppModeWindow,
+  isDesktopAttachedModeWindow,
 } from "../../utils/PlatformUtils";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
 import MicrophoneService from "../../services/audio/MicrophoneService";
@@ -2010,7 +2010,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       <div
         className={cn(
           "fixed bottom-0 z-[10001] flex pointer-events-none",
-          isAppModeWindow
+          isDesktopAttachedModeWindow
             ? "left-0 right-0 justify-center"
             : "left-0 right-0 justify-center",
         )}
@@ -2021,7 +2021,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                 transition: "transform 0.1s ease-out",
               }
             : {}),
-          ...(isAppModeWindow ? { padding: "0 16px" } : {}),
+          ...(isDesktopAttachedModeWindow ? { padding: "0 16px" } : {}),
         }}
       >
         <div
@@ -2175,7 +2175,9 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
               >
                 {recordingError}
               </span>
-              <button
+              <Button
+                variant="unstyled"
+                tooltipVariant={isLightBackground ? "dark" : "default"}
                 onClick={() => setRecordingError("")}
                 className={cn(
                   isLightBackground ? "glass-text" : "glass-text-black",
@@ -2184,7 +2186,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                 title="Close"
               >
                 <Icon name="close" size={16} />
-              </button>
+              </Button>
             </div>
           )}
 
@@ -2275,6 +2277,8 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                       side="top"
                       align="end"
                       listClassName="min-w-[250px]"
+                      tooltip="Select Microphone"
+                      tooltipVariant={isLightBackground ? "dark" : "default"}
                       trigger={
                         <Button
                           type="button"
@@ -2284,7 +2288,6 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                           className={iconButtonClass({
                             disabled: isRecording || isProcessingRecording,
                           })}
-                          title="Select Microphone"
                         >
                           <Icon
                             name="microphone"
@@ -2356,13 +2359,16 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                           side="top"
                           align="end"
                           listClassName="min-w-[250px]"
+                          tooltip="Select Camera"
+                          tooltipVariant={
+                            isLightBackground ? "dark" : "default"
+                          }
                           trigger={
                             <Button
                               type="button"
                               data-testid="chat-voice-camera-select"
                               variant="unstyled"
                               className={iconButtonClass()}
-                              title="Select Camera"
                             >
                               <Icon
                                 name="chevron-down"
@@ -2450,7 +2456,9 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
 
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1">
-                      <button
+                      <Button
+                        variant="unstyled"
+                        tooltipVariant={isLightBackground ? "dark" : "default"}
                         type="button"
                         onClick={() => toggleThinking(!thinkingEnabled)}
                         data-testid="chat-thinking-toggle"
@@ -2463,8 +2471,10 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                         aria-pressed={thinkingEnabled}
                       >
                         <Icon name="bulb" size={18} />
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="unstyled"
+                        tooltipVariant={isLightBackground ? "dark" : "default"}
                         type="button"
                         onClick={() => imageInputRef.current?.click()}
                         data-testid="chat-attach-image-button"
@@ -2489,9 +2499,11 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                         {attachedImages.length > 0 && (
                           <span>{attachedImages.length}</span>
                         )}
-                      </button>
+                      </Button>
 
-                      <button
+                      <Button
+                        variant="unstyled"
+                        tooltipVariant={isLightBackground ? "dark" : "default"}
                         type="button"
                         onClick={() => audioInputRef.current?.click()}
                         data-testid="chat-attach-audio-button"
@@ -2516,10 +2528,14 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                         {attachedAudios.length > 0 && (
                           <span>{attachedAudios.length}</span>
                         )}
-                      </button>
+                      </Button>
 
                       {voiceInputEnabled ? (
-                        <button
+                        <Button
+                          variant="unstyled"
+                          tooltipVariant={
+                            isLightBackground ? "dark" : "default"
+                          }
                           type="button"
                           onClick={handleMicClick}
                           data-testid="chat-voice-input-button"
@@ -2552,11 +2568,15 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                             }
                             size={18}
                           />
-                        </button>
+                        </Button>
                       ) : null}
 
                       {voiceCallEnabled ? (
-                        <button
+                        <Button
+                          variant="unstyled"
+                          tooltipVariant={
+                            isLightBackground ? "dark" : "default"
+                          }
                           type="button"
                           onClick={handleVoiceModeToggle}
                           data-testid="chat-voice-mode-button"
@@ -2572,11 +2592,15 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                           title="Voice Mode"
                         >
                           <Icon name="phone" size={18} />
-                        </button>
+                        </Button>
                       ) : null}
 
                       {resolvedEmbedConfig.features.settings ? (
-                        <button
+                        <Button
+                          variant="unstyled"
+                          tooltipVariant={
+                            isLightBackground ? "dark" : "default"
+                          }
                           type="button"
                           onClick={handleQuickPanelToggle}
                           data-testid="chat-quick-panel-button"
@@ -2592,10 +2616,12 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                           aria-label="Quick access"
                         >
                           <Icon name="tools" size={18} />
-                        </button>
+                        </Button>
                       ) : null}
 
-                      <button
+                      <Button
+                        variant="unstyled"
+                        tooltipVariant={isLightBackground ? "dark" : "default"}
                         type="button"
                         onClick={wrappedOnClose}
                         data-testid="chat-close-button"
@@ -2606,11 +2632,13 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                         title="Close"
                       >
                         <Icon name="close" size={18} />
-                      </button>
+                      </Button>
                     </div>
 
                     <div className="flex items-center gap-1">
-                      <button
+                      <Button
+                        variant="unstyled"
+                        tooltipVariant={isLightBackground ? "dark" : "default"}
                         ref={submitButtonRef}
                         type="submit"
                         data-testid="chat-send-button"
@@ -2629,7 +2657,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                         title="Send message"
                       >
                         <Icon name="send" size={20} />
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>

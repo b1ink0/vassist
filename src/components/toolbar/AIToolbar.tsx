@@ -40,6 +40,7 @@ import ToolbarButton, { type ToolbarButtonProps } from "./ToolbarButton";
 import ToolbarSection from "./ToolbarSection";
 import ToolbarResultPanel from "./ToolbarResultPanel";
 import { Icon } from "../icons";
+import Button from "../ui/Button";
 import Logger from "../../services/common/LoggerService";
 
 type ToolbarPosition = { x: number; y: number };
@@ -4128,7 +4129,9 @@ const AIToolbar = () => {
                 gap: "6px",
               }}
             >
-              <button
+              <Button
+                variant="unstyled"
+                tooltipVariant={isLightBackgroundPanel ? "dark" : "default"}
                 data-testid="ai-toolbar-writer-submit"
                 onClick={(e) => {
                   e.preventDefault();
@@ -4186,8 +4189,10 @@ const AIToolbar = () => {
                 }}
               >
                 <Icon name="send" size={16} />
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="unstyled"
+                tooltipVariant={isLightBackgroundPanel ? "dark" : "default"}
                 data-testid="ai-toolbar-writer-cancel"
                 onClick={(e) => {
                   e.preventDefault();
@@ -4224,7 +4229,7 @@ const AIToolbar = () => {
                 }}
               >
                 <Icon name="close" size={16} />
-              </button>
+              </Button>
             </div>
           </div>
         ) : (

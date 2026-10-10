@@ -4,6 +4,7 @@ import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
 import type { MmdAnimationSpan } from "babylon-mmd/esm/Runtime/Animation/mmdCompositeAnimation";
 import type { ElectronAPI } from "../types/electron";
+import type { StickerBorderSettings } from "../config/uiConfig";
 import type { ARSessionController } from "./ar/ARSessionController";
 
 export type CameraMode = "2D" | "3D";
@@ -80,6 +81,7 @@ export interface UIPositionConfigLike {
 
 export interface UIConfigLike {
   enablePortraitMode?: boolean;
+  stickerBorder?: Partial<StickerBorderSettings>;
   physicsEngine?: string;
   position?: UIPositionConfigLike;
   modelSizePx?: PixelSize | null;
@@ -329,6 +331,7 @@ export interface SceneMetadataLike {
   mmdModel?: unknown;
   mmdRuntime?: unknown;
   renderPipeline?: unknown;
+  setStickerBorderSettings?: (settings: StickerBorderSettings) => void;
   toggleCameraMode?: () => CameraMode;
   getCameraMode?: () => CameraMode;
   resetCameraPosition?: () => boolean;

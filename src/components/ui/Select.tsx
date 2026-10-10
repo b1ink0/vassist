@@ -7,6 +7,7 @@ import { resolveConfiguredPortalContainer } from "../../embed/portalContainers";
 import { Icon } from "../icons";
 import { cn } from "../../utils/cn";
 import { resolvePortalContainer } from "../../utils/resolvePortalContainer";
+import { Tooltip, type TooltipVariant } from "./Tooltip";
 
 const selectVariants = cva(
   "glass-input w-full min-h-[36px] pr-11 text-left [font-family:inherit]",
@@ -59,6 +60,8 @@ interface SelectProps
   popupClassName?: string;
   listClassName?: string;
   portalContainer?: HTMLElement | ShadowRoot | null;
+  tooltip?: React.ReactNode;
+  tooltipVariant?: TooltipVariant;
 }
 
 const Select = ({
@@ -84,6 +87,8 @@ const Select = ({
   popupClassName,
   listClassName,
   portalContainer,
+  tooltip,
+  tooltipVariant,
   "data-testid": dataTestId,
 }: SelectProps) => {
   const { embedConfig } = useEmbedHost();
@@ -190,29 +195,35 @@ const Select = ({
         name={name}
         required={required}
       >
-        <BaseSelect.Trigger
-          className={triggerClassName}
-          render={trigger}
-          data-testid={dataTestId}
+        <Tooltip
+          content={tooltip}
+          variant={tooltipVariant ?? (variant === "dark" ? "dark" : "default")}
         >
-          {!trigger && (
-            <>
-              <span className={cn("block truncate pr-5", textClass)}>
-                {optionItems.find((opt) => String(opt.value) === selectedValue)
-                  ?.label ??
-                  (placeholder || "Select")}
-              </span>
-              <BaseSelect.Icon
-                className={cn(
-                  "pointer-events-none absolute right-3 top-1/2 -translate-y-1/2",
-                  triggerIconClass,
-                )}
-              >
-                <Icon name="chevron-down" size={16} />
-              </BaseSelect.Icon>
-            </>
-          )}
-        </BaseSelect.Trigger>
+          <BaseSelect.Trigger
+            className={triggerClassName}
+            render={trigger}
+            data-testid={dataTestId}
+          >
+            {!trigger && (
+              <>
+                <span className={cn("block truncate pr-5", textClass)}>
+                  {optionItems.find(
+                    (opt) => String(opt.value) === selectedValue,
+                  )?.label ??
+                    (placeholder || "Select")}
+                </span>
+                <BaseSelect.Icon
+                  className={cn(
+                    "pointer-events-none absolute right-3 top-1/2 -translate-y-1/2",
+                    triggerIconClass,
+                  )}
+                >
+                  <Icon name="chevron-down" size={16} />
+                </BaseSelect.Icon>
+              </>
+            )}
+          </BaseSelect.Trigger>
+        </Tooltip>
 
         <BaseSelect.Portal container={resolvedPortalContainer}>
           <BaseSelect.Positioner

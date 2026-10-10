@@ -11,6 +11,7 @@ export type BackgroundThemeMode = "adaptive" | "light" | "dark";
 export type DesktopMode = "floating-app" | "app" | "live-wallpaper";
 export type LiveWallpaperInteraction = "non-interactive" | "interactive";
 export type DesktopControlPlacement = "attached" | "detached";
+export type EmoteButtonProgressMode = "none" | "ring" | "both";
 
 export interface PixelSize {
   width: number;
@@ -64,6 +65,31 @@ export interface CustomQualitySettings {
   saturation: number;
 }
 
+export interface StickerBorderSettings {
+  enabled: boolean;
+  color: string;
+  thickness: number;
+  samples: number;
+  occlusionStrength: number;
+  occlusionThreshold: number;
+}
+
+export const StickerBorderControlLimits = {
+  thickness: { min: 1, max: 16, step: 1 },
+  samples: { min: 1, max: 8, step: 1 },
+  occlusionStrength: { min: 0, max: 1, step: 0.05 },
+  occlusionThreshold: { min: 0, max: 0.1, step: 0.005 },
+} as const;
+
+export const DefaultStickerBorderSettings: StickerBorderSettings = {
+  enabled: false,
+  color: "#ffffff",
+  thickness: 4,
+  samples: 1,
+  occlusionStrength: 1,
+  occlusionThreshold: 0.01,
+};
+
 export interface UIConfig {
   desktopMode: {
     mode: DesktopMode;
@@ -83,6 +109,7 @@ export interface UIConfig {
   };
   enableModelLoading: boolean;
   enablePortraitMode: boolean;
+  stickerBorder: StickerBorderSettings;
   enablePhysics: boolean;
   physicsEngine: PhysicsEngine;
   renderQuality: RenderQuality;
@@ -101,6 +128,7 @@ export interface UIConfig {
   emotePlayback: {
     showDurationBar: boolean;
     showTime: boolean;
+    buttonProgress: EmoteButtonProgressMode;
     autoPlayCategory: string;
   };
   position: {
@@ -407,6 +435,8 @@ export const DefaultUIConfig: UIConfig = {
 
   enablePortraitMode: false,
 
+  stickerBorder: { ...DefaultStickerBorderSettings },
+
   enablePhysics: true,
 
   physicsEngine: PhysicsEngineOptions.BULLET,
@@ -435,6 +465,7 @@ export const DefaultUIConfig: UIConfig = {
   emotePlayback: {
     showDurationBar: true,
     showTime: true,
+    buttonProgress: "none",
     autoPlayCategory: "all",
   },
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
 import { isDetachedChatWindow } from "../../utils/PlatformUtils";
 import { cn } from "../../utils/cn";
+import { Tooltip } from "../ui/Tooltip";
 
 const MIN_WIDTH = 420;
 const MIN_HEIGHT = 420;
@@ -149,21 +150,22 @@ export default function DetachedChatResizeHandle() {
   };
 
   return (
-    <div
-      data-electron-interactive="true"
-      role="separator"
-      aria-label="Resize detached chat window"
-      title="Resize chat window"
-      onPointerDown={handlePointerDown}
-      className={cn(
-        "fixed right-1 bottom-1 z-[100000] flex h-6 w-6 cursor-nwse-resize items-end justify-end rounded-sm bg-black/20 p-1 transition-opacity",
-        isResizing ? "opacity-100" : "opacity-70",
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className="h-3 w-3 rounded-br border-b-2 border-r-2 border-white/70"
-      />
-    </div>
+    <Tooltip content="Resize chat window" variant="default">
+      <div
+        data-electron-interactive="true"
+        role="separator"
+        aria-label="Resize detached chat window"
+        onPointerDown={handlePointerDown}
+        className={cn(
+          "fixed right-1 bottom-1 z-[100000] flex h-6 w-6 cursor-nwse-resize items-end justify-end rounded-sm bg-black/20 p-1 transition-opacity",
+          isResizing ? "opacity-100" : "opacity-70",
+        )}
+      >
+        <span
+          aria-hidden="true"
+          className="h-3 w-3 rounded-br border-b-2 border-r-2 border-white/70"
+        />
+      </div>
+    </Tooltip>
   );
 }

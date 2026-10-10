@@ -2,7 +2,7 @@
  * @fileoverview Settings panel component with tabbed interface for UI, LLM, TTS, STT, and AI features configuration.
  */
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { lazy, Suspense, useState, useEffect, useMemo, useRef } from "react";
 import type {
   VAssistOpenSettingsOptions,
   ResolvedVAssistEmbedConfig,
@@ -16,12 +16,12 @@ import { Icon } from "./icons";
 import { cn } from "../utils/cn";
 import TabBar from "./ui/TabBar";
 import ChromeAIValidator from "../services/ai/ChromeAIValidator";
-import UISettings from "./settings/UISettings";
-import ThreeDSettings from "./settings/ThreeDSettings";
-import LLMSettings from "./settings/LLMSettings";
-import TTSSettings from "./settings/TTSSettings";
-import STTSettings from "./settings/STTSettings";
-import AIFeaturesSettings from "./settings/AIFeaturesSettings";
+const UISettings = lazy(() => import("./settings/UISettings"));
+const ThreeDSettings = lazy(() => import("./settings/ThreeDSettings"));
+const LLMSettings = lazy(() => import("./settings/LLMSettings"));
+const TTSSettings = lazy(() => import("./settings/TTSSettings"));
+const STTSettings = lazy(() => import("./settings/STTSettings"));
+const AIFeaturesSettings = lazy(() => import("./settings/AIFeaturesSettings"));
 import {
   useAIConfigError,
   useAIConfigSaved,
@@ -198,11 +198,29 @@ const SettingsPanel = ({
   }, []);
 
   useEffect(() => {
-    const activeTabElement = tabsRef.current[activeTab];
-    if (activeTabElement) {
-      const { offsetLeft, offsetWidth } = activeTabElement;
-      setTabIndicatorStyle({ left: offsetLeft, width: offsetWidth });
-    }
+    const updateTabIndicator = () => {
+      const activeTabElement = tabsRef.current[activeTab];
+      if (!activeTabElement) return;
+
+      setTabIndicatorStyle({
+        left: activeTabElement.offsetLeft,
+        width: activeTabElement.offsetWidth,
+      });
+    };
+
+    updateTabIndicator();
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    const handleResize = () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(updateTabIndicator, 150);
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      window.removeEventListener("resize", handleResize);
+    };
   }, [activeTab]);
 
   const visibleTabs = useMemo(
@@ -212,8 +230,8 @@ const SettingsPanel = ({
           id: "ui" as const,
           label: "UI",
           className:
-            "flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4",
-          content: (
+            "flex-shrink-0 w-full h-full overflow-hidden scrollbar-glass",
+          render: () => (
             <UISettings
               isLightBackground={isLightBackground}
               {...(onRequestResetSetupDialog
@@ -230,7 +248,7 @@ const SettingsPanel = ({
           label: "3D",
           className:
             "flex-shrink-0 w-full overflow-y-auto scrollbar-glass relative",
-          content: (
+          render: () => (
             <ThreeDSettings
               isLightBackground={isLightBackground}
               {...(onRequestDeleteModelDialog
@@ -257,7 +275,7 @@ const SettingsPanel = ({
           label: "LLM",
           className:
             "flex-shrink-0 w-full overflow-y-auto scrollbar-glass relative",
-          content: (
+          render: () => (
             <LLMSettings
               isLightBackground={isLightBackground}
               hasChromeAI={hasChromeAI}
@@ -277,7 +295,7 @@ const SettingsPanel = ({
           label: "TTS",
           className:
             "flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4 relative",
-          content: (
+          render: () => (
             <TTSSettings
               isLightBackground={isLightBackground}
               onRequestDeleteVoiceDialog={onRequestDeleteVoiceDialog}
@@ -292,7 +310,7 @@ const SettingsPanel = ({
           label: "STT",
           className:
             "flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4 relative",
-          content: (
+          render: () => (
             <STTSettings
               isLightBackground={isLightBackground}
               hasChromeAI={hasChromeAI}
@@ -306,7 +324,9 @@ const SettingsPanel = ({
           label: "AI+",
           className:
             "flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4 relative",
-          content: <AIFeaturesSettings isLightBackground={isLightBackground} />,
+          render: () => (
+            <AIFeaturesSettings isLightBackground={isLightBackground} />
+          ),
         },
       ].filter((tab) => !embedConfig.settings.hiddenTabs.includes(tab.id)),
     [
@@ -473,10 +493,7 @@ const SettingsPanel = ({
   };
 
   const activeStatus = getActiveStatus();
-  const activeTabIndex = Math.max(
-    visibleTabs.findIndex((tab) => tab.id === activeTab),
-    0,
-  );
+  const activeTabDefinition = visibleTabs.find((tab) => tab.id === activeTab);
 
   /**
    * Handles dismissal of status messages for LLM, TTS, or STT tabs.
@@ -550,7 +567,7 @@ const SettingsPanel = ({
       <div className="relative">
         <div
           data-vassist-tab-indicator
-          className="absolute bottom-0 h-0.5 bg-white transition-all duration-300 ease-out"
+          className="absolute bottom-0 z-10 h-0.5 bg-white transition-all duration-300 ease-out"
           style={{
             left: `${tabIndicatorStyle.left}px`,
             width: `${tabIndicatorStyle.width}px`,
@@ -570,37 +587,41 @@ const SettingsPanel = ({
           <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-white/70">
             {managedByHostLabel}
           </div>
-        ) : (
-          <div
-            className="absolute inset-0 flex transition-transform duration-300 ease-out"
-            style={{
-              transform: `translateX(-${activeTabIndex * 100}%)`,
-            }}
-          >
-            {visibleTabs.map((tab) => {
-              const tabIsReadOnly = embedConfig.settings.readOnlyTabs.includes(
-                tab.id,
-              );
-
-              return (
-                <div
-                  key={tab.id}
-                  data-testid={`settings-tab-${tab.id}`}
-                  className={cn(tab.className, "relative")}
-                >
-                  {tab.content}
-                  {tabIsReadOnly ? (
-                    <div className="absolute inset-0 z-10 flex items-start justify-end bg-slate-950/35 backdrop-blur-[1px] pointer-events-auto">
-                      <div className="m-4 rounded-lg border border-white/15 bg-slate-950/80 px-3 py-2 text-xs text-white/80 shadow-lg">
-                        Managed by host
-                      </div>
-                    </div>
-                  ) : null}
+        ) : activeTabDefinition ? (
+          <div className="absolute inset-0">
+            <Suspense
+              fallback={
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Icon
+                    name="loading-2"
+                    size={32}
+                    className="animate-spin text-white/75"
+                  />
                 </div>
-              );
-            })}
+              }
+            >
+              <div
+                key={activeTabDefinition.id}
+                data-testid={`settings-tab-${activeTabDefinition.id}`}
+                className={cn("relative h-full", activeTabDefinition.className)}
+              >
+                {activeTabDefinition.render()}
+              </div>
+            </Suspense>
+            <div
+              className={cn(
+                "absolute inset-0 z-10 flex items-start justify-end bg-slate-950/35 backdrop-blur-[1px] pointer-events-auto",
+                !embedConfig.settings.readOnlyTabs.includes(
+                  activeTabDefinition.id,
+                ) && "hidden",
+              )}
+            >
+              <div className="m-4 rounded-lg border border-white/15 bg-slate-950/80 px-3 py-2 text-xs text-white/80 shadow-lg">
+                Managed by host
+              </div>
+            </div>
           </div>
-        )}
+        ) : null}
       </div>
 
       {settingsExtension ? (

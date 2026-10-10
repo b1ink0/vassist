@@ -59,6 +59,8 @@ import {
 } from "../../utils/PlatformUtils";
 import { ARSessionController } from "../ar/ARSessionController";
 import { NativeAndroidARProvider } from "../ar/NativeAndroidARProvider";
+import { createStickerBorderController } from "../rendering/StickerBorder";
+import { DefaultStickerBorderSettings } from "../../config/uiConfig";
 import {
   isARModeRequested,
   notifyARError,
@@ -1811,6 +1813,15 @@ export const buildMmdModelScene = async (
     `Post-processing configured: quality=${renderQuality}, samples=${quality.samples}, bloom=${quality.bloomEnabled}, chromatic=${quality.chromaticAberrationEnabled}, isAndroid=${isAndroid}`,
   );
 
+  const stickerBorderController = createStickerBorderController(
+    scene,
+    modelMeshes,
+    {
+      ...DefaultStickerBorderSettings,
+      ...(finalConfig.uiConfig?.stickerBorder ?? {}),
+    },
+  );
+
   // ========================================
   // CANVAS INTERACTION MANAGER
   // ========================================
@@ -1918,6 +1929,7 @@ export const buildMmdModelScene = async (
   scene.metadata.mmdRuntime = mmdRuntime;
   scene.metadata.mmdCamera = mmdCamera;
   scene.metadata.renderPipeline = defaultPipeline;
+  scene.metadata.setStickerBorderSettings = stickerBorderController.setSettings;
 
   // ========================================
   // AR SESSION INITIALIZATION
@@ -1975,6 +1987,7 @@ export const buildMmdModelScene = async (
     animationManager.dispose();
     positionManager.dispose();
     interactionManager.dispose();
+    stickerBorderController.dispose();
     if (arController) {
       void arController.exitAR();
       arController.dispose();
