@@ -1,0 +1,197 @@
+/**
+ * @fileoverview Unified dialog component for confirmations and inputs.
+ * Handles delete confirmations (chat, model, motion) and edit operations.
+ */
+
+import { useState, type KeyboardEvent, type MouseEvent } from "react";
+import { cn } from "../../utils/cn";
+import { Button } from "../ui";
+
+type DialogType = "delete" | "edit" | "confirm" | "input";
+
+interface DialogProps {
+  type?: DialogType;
+  title: string;
+  message?: string;
+  itemId?: string;
+  initialValue?: string;
+  inputPlaceholder?: string;
+  inputMaxLength?: number;
+  isLightBackground?: boolean;
+  animationClass?: string;
+  confirmLabel?: string;
+  confirmStyle?: "primary" | "error";
+  cancelLabel?: string;
+  onConfirm: (itemId?: string, value?: string) => Promise<void> | void;
+  onCancel: () => void;
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return "An error occurred";
+};
+
+/**
+ * Unified dialog component for various modal interactions.
+ *
+ * @component
+ * @param {Object} props - Component props
+ * @param {'delete'|'edit'|'confirm'|'input'} props.type - Type of dialog
+ * @param {string} props.title - Dialog title
+ * @param {string} props.message - Dialog message/description
+ * @param {string} [props.itemId] - ID of item being operated on
+ * @param {string} [props.initialValue] - Initial value for edit/input dialogs
+ * @param {string} [props.inputPlaceholder] - Placeholder for input field
+ * @param {number} [props.inputMaxLength] - Max length for input field
+ * @param {boolean} [props.isLightBackground=false] - Whether background is light
+ * @param {string} [props.animationClass=''] - CSS animation class
+ * @param {string} [props.confirmLabel='Confirm'] - Label for confirm button
+ * @param {string} [props.confirmStyle='primary'] - Style for confirm button ('primary'|'error')
+ * @param {string} [props.cancelLabel='Cancel'] - Label for cancel button
+ * @param {Function} props.onConfirm - Callback when confirmed (receives itemId and value for edit/input)
+ * @param {Function} props.onCancel - Callback when cancelled
+ * @returns {JSX.Element} Dialog component
+ */
+const Dialog = ({
+  type = "confirm",
+  title,
+  message,
+  itemId,
+  initialValue = "",
+  inputPlaceholder = "",
+  inputMaxLength = 100,
+  isLightBackground = false,
+  animationClass = "",
+  confirmLabel = "Confirm",
+  confirmStyle = "primary",
+  cancelLabel = "Cancel",
+  onConfirm,
+  onCancel,
+}: DialogProps) => {
+  const [inputValue, setInputValue] = useState(initialValue);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  /**
+   * Handles confirm button click.
+   */
+  const handleConfirm = async () => {
+    // Validate input for edit/input types
+    if ((type === "edit" || type === "input") && !inputValue.trim()) {
+      return;
+    }
+
+    setIsProcessing(true);
+    setErrorMessage("");
+    try {
+      if (type === "edit" || type === "input") {
+        await onConfirm(itemId, inputValue);
+      } else {
+        await onConfirm(itemId);
+      }
+      setIsProcessing(false);
+    } catch (error: unknown) {
+      setErrorMessage(getErrorMessage(error));
+      setIsProcessing(false);
+    }
+  };
+
+  /**
+   * Handles backdrop click.
+   */
+  const handleBackdropClick = (e: MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    if (!isProcessing) {
+      onCancel();
+    }
+  };
+
+  /**
+   * Handles dialog content click (prevents backdrop close).
+   */
+  const handleDialogClick = (e: MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+  };
+
+  const isErrorConfirm = confirmStyle === "error";
+
+  return (
+    <div
+      className={cn(
+        "vassist-modal-backdrop absolute inset-0 flex items-center justify-center z-50 p-6",
+        animationClass,
+      )}
+      onClick={handleBackdropClick}
+    >
+      <div
+        className={cn(
+          "relative p-6 rounded-2xl w-full max-w-sm glass-container",
+          isLightBackground && "glass-container-dark",
+        )}
+        onClick={handleDialogClick}
+      >
+        <h3 className="vassist-text-primary text-lg font-semibold mb-2">
+          {title}
+        </h3>
+
+        {message && (
+          <p className="vassist-text-secondary text-sm mb-6">{message}</p>
+        )}
+
+        {/* Error message */}
+        {errorMessage && (
+          <div className="vassist-dialog-error mb-4 p-3 rounded-lg">
+            <p className="vassist-text-primary text-sm">{errorMessage}</p>
+          </div>
+        )}
+
+        {/* Input field for edit/input types */}
+        {(type === "edit" || type === "input") && (
+          <input
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            placeholder={inputPlaceholder}
+            className="glass-input w-full mb-4"
+            maxLength={inputMaxLength}
+            autoFocus
+            disabled={isProcessing}
+            onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+              if (e.key === "Enter") handleConfirm();
+              if (e.key === "Escape") onCancel();
+            }}
+          />
+        )}
+
+        {/* Action buttons */}
+        <div className="flex gap-3 justify-end">
+          <Button
+            onClick={onCancel}
+            disabled={isProcessing}
+            variant={isLightBackground ? "dark" : "default"}
+            className="px-2 md:px-4 py-2 rounded-lg text-sm"
+          >
+            {cancelLabel}
+          </Button>
+          <Button
+            onClick={handleConfirm}
+            disabled={
+              isProcessing ||
+              ((type === "edit" || type === "input") && !inputValue.trim())
+            }
+            variant={
+              isErrorConfirm ? "error" : isLightBackground ? "dark" : "default"
+            }
+            className="px-2 md:px-4 py-2 rounded-lg text-sm font-medium"
+          >
+            {isProcessing ? "Processing..." : confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Dialog;

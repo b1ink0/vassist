@@ -25,9 +25,16 @@ release
 *.njsproj
 *.sln
 *.sw?
+*.tsbuildinfo
+
 
 docs
 *.patch
+
+documentation/site/public/embed/
+documentation/site/.vitepress/dist/
+documentation/site/public/res
+dist-embed/
 
 # Desktop TTS
 electron/server/gpt-sovits/python/
@@ -37,7 +44,16 @@ electron/server/gpt-sovits/temp/
 *.diff
 private_test
 *.zip
-electron/server/gpt-sovits/python/
+*.tgz
+*.tar.gz
+*.whl
+*.tmp*
+.vitepress
+!documentation/site/.vitepress/
+!documentation/site/.vitepress/**
+documentation/site/.vitepress/cache/
+documentation/site/.vitepress/dist/
+electron/server/gpt-sovits/python*/
 electron/server/gpt-sovits/temp/
 electron/server/gpt-sovits/__pycache__/
 electron/server/gpt-sovits/*.pyc
@@ -46,3 +62,14 @@ electron/server/gpt-sovits/env/
 electron/server/gpt-sovits/models/
 electron/server/models/
 electron/server/whisper-stt/models/
+models/whisper
+electron/server/whisper-cpp/
+electron/server/supertonic/models/
+playwright-report
+test-results
+.vercel
+.env*
+__pycache__
+
+# LiteRT-LM patcher build output
+app/tools/litert-patcher/*.class
