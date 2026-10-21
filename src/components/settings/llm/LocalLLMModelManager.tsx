@@ -71,6 +71,7 @@ interface LLMStorageServiceLike {
     query: string,
     cursor?: string,
     pageSize?: number,
+    filter?: string,
   ) => Promise<{
     success?: boolean;
     error?: string;
@@ -515,6 +516,7 @@ interface HuggingFaceBrowserProps {
   onSelect: (value: string) => void;
   disabled?: boolean;
   isLightBackground?: boolean;
+  searchFilter?: string;
 }
 
 const HuggingFaceBrowser = ({
@@ -523,6 +525,7 @@ const HuggingFaceBrowser = ({
   onSelect,
   disabled = false,
   isLightBackground = false,
+  searchFilter = "",
 }: HuggingFaceBrowserProps) => {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<DiscoveryItem[]>([]);
@@ -549,6 +552,7 @@ const HuggingFaceBrowser = ({
           query.trim(),
           "",
           12,
+          searchFilter,
         );
         if (cancelled) {
           return;
@@ -581,7 +585,7 @@ const HuggingFaceBrowser = ({
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [disabled, query, storageService]);
+  }, [disabled, query, searchFilter, storageService]);
 
   useEffect(() => {
     if (!storageService || !selectedRepo?.value || disabled) {
@@ -644,6 +648,7 @@ const HuggingFaceBrowser = ({
         query.trim(),
         nextCursor,
         12,
+        searchFilter,
       );
       setItems((prev) => [
         ...prev,
@@ -773,6 +778,7 @@ interface LocalLLMModelManagerProps {
   onRequestDeleteModel?: ((filename: string) => void) | null | undefined;
   refreshTrigger?: unknown;
   supportsCustomFolder?: boolean;
+  huggingFaceFilter?: string;
 }
 
 const getErrorMessage = (err: unknown): string => {
@@ -813,8 +819,10 @@ const LocalLLMModelManager = ({
   onRequestDeleteModel = null,
   refreshTrigger = null,
   supportsCustomFolder = true,
+  huggingFaceFilter = "",
 }: LocalLLMModelManagerProps) => {
   const [models, setModels] = useState<ModelEntry[]>([]);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState("");
   const [ollamaModel, setOllamaModel] = useState("");
@@ -837,6 +845,7 @@ const LocalLLMModelManager = ({
       const result = await storageService.listModels(customModelsPath);
       if (result?.success) {
         setModels(result.models || []);
+        setModelsLoaded(true);
       }
     } catch (err) {
       console.error("Failed to load models:", err);
@@ -1163,6 +1172,7 @@ const LocalLLMModelManager = ({
                 onSelect={setDownloadUrl}
                 disabled={loading}
                 isLightBackground={isLightBackground}
+                searchFilter={huggingFaceFilter}
               />
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-white/80">
@@ -1254,6 +1264,14 @@ const LocalLLMModelManager = ({
       )}
 
       {/* Model List */}
+      {modelsLoaded &&
+        selectedModel &&
+        !models.some((model) => model.name === selectedModel) && (
+          <p className="text-xs text-amber-300">
+            Selected model {selectedModel} is not installed. Download it or
+            select another model.
+          </p>
+        )}
       <div className="p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-white/90 flex items-center gap-2">

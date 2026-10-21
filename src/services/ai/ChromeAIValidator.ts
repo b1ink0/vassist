@@ -357,6 +357,7 @@ class ChromeAIValidator {
       if (!languageModelApi) {
         throw new Error("LanguageModel API unavailable");
       }
+      if (typeof languageModelApi.params !== "function") return null;
       const params = await languageModelApi.params();
 
       Logger.log("ChromeAIValidator", "Model params:", params);
@@ -397,10 +398,15 @@ class ChromeAIValidator {
       if (!languageModelApi) {
         throw new Error("LanguageModel API unavailable");
       }
-      const session = await languageModelApi.create({
-        temperature: 1.0,
-        topK: 3,
-      });
+      const params = await this.getModelParams();
+      const session = await languageModelApi.create(
+        params
+          ? {
+              temperature: params.defaultTemperature,
+              topK: params.defaultTopK,
+            }
+          : {},
+      );
 
       const response = await session.prompt('Say "OK" if you can hear me.');
 

@@ -15,6 +15,7 @@ export const EXTERNAL_SERVICE_ENDPOINTS = {
   ollamaRegistry: "https://registry.ollama.ai",
   npmRegistry: "https://registry.npmjs.org",
   github: "https://github.com",
+  githubApi: "https://api.github.com",
 } as const;
 
 export const SERVICE_ROUTES = {
@@ -27,6 +28,7 @@ export const SERVICE_ROUTES = {
     chatCompletions: "/v1/chat/completions",
     audioTranscriptions: "/v1/audio/transcriptions",
     audioSpeech: "/v1/audio/speech",
+    systemOne: "/v1/systemone",
   },
   llamaServer: {
     models: "/models",
@@ -41,6 +43,7 @@ export const SERVICE_ROUTES = {
 export const DEFAULT_SERVICE_PORTS: {
   server: number;
   llamaServer: number;
+  decisionLlamaServer: number;
   gptSovits: number;
   fasterWhisper: number;
   supertonic: number;
@@ -48,6 +51,7 @@ export const DEFAULT_SERVICE_PORTS: {
 } = {
   server: 11438,
   llamaServer: 11439,
+  decisionLlamaServer: 11440,
   gptSovits: 9880,
   fasterWhisper: 9881,
   supertonic: 9882,
@@ -56,6 +60,7 @@ export const DEFAULT_SERVICE_PORTS: {
 
 export type DesktopInternalPorts = {
   llamaServer: number;
+  decisionLlamaServer: number;
   gptSovits: number;
   fasterWhisper: number;
   supertonic: number;
@@ -136,6 +141,9 @@ export function resolveDesktopInternalPorts(
     llamaServer: isValidPort(ports?.llamaServer)
       ? ports.llamaServer
       : DEFAULT_SERVICE_PORTS.llamaServer,
+    decisionLlamaServer: isValidPort(ports?.decisionLlamaServer)
+      ? ports.decisionLlamaServer
+      : DEFAULT_SERVICE_PORTS.decisionLlamaServer,
     gptSovits: isValidPort(ports?.gptSovits)
       ? ports.gptSovits
       : DEFAULT_SERVICE_PORTS.gptSovits,
@@ -166,6 +174,11 @@ export function validateDesktopServicePorts(
     [
       "llama-server",
       internalPorts?.llamaServer ?? DEFAULT_SERVICE_PORTS.llamaServer,
+    ],
+    [
+      "llama decision-server",
+      internalPorts?.decisionLlamaServer ??
+        DEFAULT_SERVICE_PORTS.decisionLlamaServer,
     ],
     ["GPT-SoVITS", internalPorts?.gptSovits ?? DEFAULT_SERVICE_PORTS.gptSovits],
     [

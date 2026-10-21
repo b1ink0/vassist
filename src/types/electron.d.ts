@@ -87,6 +87,19 @@ export interface ElectronSetupAPI {
   [method: string]: ((...args: unknown[]) => unknown) | undefined;
 }
 
+export interface ElectronLlamaServerAPI {
+  getStatus?: () => Promise<unknown>;
+  getLatestBuild?: () => Promise<string>;
+  install?: (
+    backend: string,
+    channel?: "pinned" | "latest",
+  ) => Promise<unknown>;
+  deleteBackend?: (backend: string) => Promise<unknown>;
+  onInstallLog?: (callback: (log: unknown) => void) => () => void;
+  onInstallProgress?: (callback: (progress: unknown) => void) => () => void;
+  onInstallComplete?: (callback: (result: unknown) => void) => () => void;
+}
+
 export interface ElectronInputWindow {
   open: () => Promise<void>;
   close: () => Promise<void>;
@@ -131,7 +144,8 @@ export interface ElectronAPI {
   server?: ElectronServerAPI;
   llm?: ElectronLLMAPI;
   whisperSetup?: ElectronSetupAPI;
-  llamaServer?: Record<string, ((...args: unknown[]) => unknown) | undefined>;
+  llamaServer?: ElectronLlamaServerAPI;
+  decisionLlamaServer?: ElectronLlamaServerAPI;
   whisperCpp?: Record<string, ((...args: unknown[]) => unknown) | undefined>;
   supertonicSetup?: ElectronSetupAPI;
   gptSovitsSetup?: ElectronSetupAPI;

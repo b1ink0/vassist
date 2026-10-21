@@ -5,8 +5,9 @@
  * - The gateway (:11438) carries model/backend/context per request.
  * - Runtime packs download on demand from a PINNED qualified build
  *   (never "latest"), SHA-256 verified when the manifest provides digests.
- * - One llama-server process serves the currently requested model on a
- *   private port (11439); switching models recycles the process.
+ * - The chat instance uses one active model on a private port (11439).
+ * - The decision instance uses llama-server router mode on a separate port,
+ *   keeping multiple decision models available from its models directory.
  * - llama-server's native idle sleep unloads the model and KV cache after
  *   five minutes without requests while keeping the lightweight server alive.
  *
@@ -21,6 +22,7 @@ import type * as fs from "fs";
 import type * as path from "path";
 import * as tar from "tar";
 import unzipper from "unzipper";
+import type { LLMRuntimeParameters } from "../../../src/config/llmParameters";
 import {
   DEFAULT_SERVICE_PORTS,
   EXTERNAL_SERVICE_ENDPOINTS,
@@ -36,7 +38,52 @@ import {
  * refresh filenames/digests from the GitHub release API, re-qualify
  * text+SSE+images per backend. {b} expands to the build id.
  */
-const RUNTIME_MANIFEST = {
+const DECISION_RUNTIME_MANIFEST = {
+  version: 1,
+  build: "b11570",
+  targets: {
+    "win-x64": {
+      cpu: ["llama-{b}-bin-win-cpu-x64.zip"],
+      vulkan: ["llama-{b}-bin-win-vulkan-x64.zip"],
+      cuda: [
+        "llama-{b}-bin-win-cuda-12.4-x64.zip",
+        "cudart-llama-bin-win-cuda-12.4-x64.zip",
+      ],
+      rocm: ["llama-{b}-bin-win-rocm-10.0-x64.zip"],
+    },
+    "linux-x64": {
+      cpu: ["llama-{b}-bin-ubuntu-x64.tar.gz"],
+      vulkan: ["llama-{b}-bin-ubuntu-vulkan-x64.tar.gz"],
+      rocm: ["llama-{b}-bin-ubuntu-rocm-10.0-x64.tar.gz"],
+    },
+    "mac-arm64": { metal: ["llama-{b}-bin-macos-arm64.tar.gz"] },
+  },
+  sha256: {
+    "llama-b11570-bin-win-cpu-x64.zip":
+      "2ac50506661724876ec12b50fa2f4e2d3ddac4830da8cb799d3703bba4c72da4",
+    "llama-b11570-bin-win-vulkan-x64.zip":
+      "21b7c457e87873e9fc29434957db83afe8cf06f5bd74fba89b9d64307e6fdabf",
+    "llama-b11570-bin-win-cuda-12.4-x64.zip":
+      "7e8cfe94fd6570ae3fa038f7dd070319becaf478f0c08016ab42c86874d20a2e",
+    "cudart-llama-bin-win-cuda-12.4-x64.zip":
+      "8c79a9b226de4b3cacfd1f83d24f962d0773be79f1e7b75c6af4ded7e32ae1d6",
+    "llama-b11570-bin-win-rocm-10.0-x64.zip":
+      "3a4103f7db488816e4f4c05c31efbb8e5b6dfe324df1f931d30b59517b619533",
+    "llama-b11570-bin-ubuntu-x64.tar.gz":
+      "6fa129f3e6f5a9dab675d0d41436bc797c826a62438ac295d129bbba7b3c637b",
+    "llama-b11570-bin-ubuntu-vulkan-x64.tar.gz":
+      "2c4587bb3617c03fc5dd5ca263ea3b4a3abcbe548c12b827d824d295508989ae",
+    "llama-b11570-bin-ubuntu-rocm-10.0-x64.tar.gz":
+      "cc15ceb89d044ec7d0bbf5a7e7e41eb0c57dfa67df31340d25bca17c14dfc504",
+    "llama-b11570-bin-macos-arm64.tar.gz":
+      "34d1021219e7e33bb44cd052f83242e4dccb714b9ecdda1428396a36f9cbc846",
+  } as Record<string, string>,
+};
+
+// Keep the existing chat runtime pin intact. The native decision router uses
+// the newer manifest above, so enabling System One does not force a chat
+// runtime migration or interrupt an already-qualified chat installation.
+const CHAT_RUNTIME_MANIFEST = {
   version: 1,
   build: "b10622",
   targets: {
@@ -78,8 +125,8 @@ const RUNTIME_MANIFEST = {
   } as Record<string, string>,
 };
 
-const ACTIVE_MODEL_ID = "vassist-active";
 const IDLE_SLEEP_SECONDS = 5 * 60;
+const DEFAULT_ROUTER_MODELS_MAX = 4;
 const PROCESS_EXIT_TIMEOUT_MS = 10_000;
 const REQUEST_DRAIN_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -103,31 +150,77 @@ interface LlamaRuntimeManifest {
   sha256?: Record<string, string>;
 }
 
-interface LaunchRequest {
+interface LaunchRequest extends Omit<
+  LLMRuntimeParameters,
+  "contextSize" | "gpuLayers"
+> {
   modelPath: string;
+  modelsDir?: string;
   mmprojPath?: string;
   ctxSize?: number;
   backend?: LlamaBackend | "auto";
+  gpuLayers?: number | "auto";
 }
 
 export function createLlamaServerManager({
   fs: fsMod,
   path: pathMod,
   app,
+  instanceName = "chat",
+  defaultPort = DEFAULT_SERVICE_PORTS.llamaServer,
+  routerModelsDir,
+  routerModelsMax = DEFAULT_ROUTER_MODELS_MAX,
+  ipcChannelPrefix = instanceName === "decision"
+    ? "decisionLlamaServer"
+    : "llamaServer",
 }: {
   fs: typeof fs;
   path: typeof path;
   app: { getPath: (name: string) => string };
+  instanceName?: string;
+  defaultPort?: number;
+  routerModelsDir?: string;
+  routerModelsMax?: number;
+  ipcChannelPrefix?: string;
 }) {
   const fs = fsMod;
   const path = pathMod;
+  const RUNTIME_MANIFEST =
+    instanceName === "decision"
+      ? DECISION_RUNTIME_MANIFEST
+      : CHAT_RUNTIME_MANIFEST;
+  let runtimeBuild = RUNTIME_MANIFEST.build;
+  const decisionRuntimeStatePath = pathMod.join(
+    app.getPath("userData"),
+    "llama-runtimes",
+    "decision-runtime.json",
+  );
+  if (instanceName === "decision") {
+    try {
+      const saved = JSON.parse(
+        fsMod.readFileSync(decisionRuntimeStatePath, "utf8"),
+      ) as { build?: unknown };
+      if (typeof saved.build === "string" && /^b\d+$/.test(saved.build)) {
+        runtimeBuild = saved.build;
+      }
+    } catch {
+      // First run or an older installation: use the validated pinned build.
+    }
+  }
+  const installChannel = (event: string) => `${ipcChannelPrefix}:${event}`;
 
   let currentProcess: ChildLike | null = null;
   let runningSignature: string | null = null;
   let currentModelId: string | null = null;
   let activeRequests = 0;
-  let llamaPort = DEFAULT_SERVICE_PORTS.llamaServer;
+  const activeModelId =
+    instanceName === "chat"
+      ? "vassist-active"
+      : `vassist-${instanceName}-active`;
+  let llamaPort = defaultPort;
   let installing = false;
+  let latestDecisionBuildCache: { build: string; expiresAt: number } | null =
+    null;
   let lifecycleQueue: Promise<void> = Promise.resolve();
   const requestDrainWaiters = new Set<() => void>();
 
@@ -165,17 +258,123 @@ export function createLlamaServerManager({
     return path.join(app.getPath("userData"), "llama-runtimes");
   }
 
-  function getBuildDir() {
-    return path.join(getRuntimesRoot(), RUNTIME_MANIFEST.build);
+  function getBuildDir(build = runtimeBuild) {
+    return path.join(getRuntimesRoot(), build);
   }
 
   function getActivePresetPath() {
-    return path.join(getBuildDir(), "active-model.ini");
+    return path.join(getBuildDir(), `${instanceName}-active-model.ini`);
   }
 
-  function getBackendDir(backend: LlamaBackend) {
+  function getBackendDir(backend: LlamaBackend, build = runtimeBuild) {
     const platformKey = getPlatformKey();
-    return path.join(getBuildDir(), `${platformKey}-${backend}`);
+    return path.join(getBuildDir(build), `${platformKey}-${backend}`);
+  }
+
+  async function getLatestDecisionBuild(): Promise<string> {
+    if (instanceName !== "decision") return RUNTIME_MANIFEST.build;
+    if (
+      latestDecisionBuildCache &&
+      latestDecisionBuildCache.expiresAt > Date.now()
+    ) {
+      return latestDecisionBuildCache.build;
+    }
+    const response = await fetch(
+      `${EXTERNAL_SERVICE_ENDPOINTS.githubApi}/repos/ggml-org/llama.cpp/releases/latest`,
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "User-Agent": "VAssist",
+        },
+      },
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Could not check the latest llama.cpp release (HTTP ${response.status})`,
+      );
+    }
+    const release = (await response.json()) as { tag_name?: unknown };
+    if (
+      typeof release.tag_name !== "string" ||
+      !/^b\d+$/.test(release.tag_name)
+    ) {
+      throw new Error("GitHub returned an unsupported llama.cpp release tag");
+    }
+    latestDecisionBuildCache = {
+      build: release.tag_name,
+      expiresAt: Date.now() + 5 * 60 * 1000,
+    };
+    return release.tag_name;
+  }
+
+  async function getInstallManifest(
+    backend: string,
+    channel: "pinned" | "latest",
+  ): Promise<LlamaRuntimeManifest> {
+    if (instanceName !== "decision" || channel === "pinned") {
+      return RUNTIME_MANIFEST;
+    }
+
+    const platformKey = getPlatformKey();
+    const templates = (
+      RUNTIME_MANIFEST.targets as Record<string, Record<string, string[]>>
+    )[platformKey]?.[backend];
+    if (!templates) {
+      throw new Error(`No ${backend} runtime pack for ${platformKey}`);
+    }
+    const response = await fetch(
+      `${EXTERNAL_SERVICE_ENDPOINTS.githubApi}/repos/ggml-org/llama.cpp/releases/latest`,
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "User-Agent": "VAssist",
+        },
+      },
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Could not check the latest llama.cpp release (HTTP ${response.status})`,
+      );
+    }
+    const release = (await response.json()) as {
+      tag_name?: unknown;
+      assets?: Array<{ name?: unknown; digest?: unknown }>;
+    };
+    const build = release.tag_name;
+    if (typeof build !== "string" || !/^b\d+$/.test(build)) {
+      throw new Error("GitHub returned an unsupported llama.cpp release tag");
+    }
+    const assets = new Map(
+      (release.assets ?? [])
+        .filter(
+          (asset): asset is { name: string; digest?: string } =>
+            typeof asset.name === "string",
+        )
+        .map((asset) => [asset.name, asset]),
+    );
+    const sha256: Record<string, string> = {};
+    const files = templates.map((template) => {
+      const filename = template.replace(/\{b\}/g, build);
+      const asset = assets.get(filename);
+      const digest = asset?.digest;
+      if (
+        !asset ||
+        typeof digest !== "string" ||
+        !/^sha256:[a-f\d]{64}$/i.test(digest)
+      ) {
+        throw new Error(
+          `Latest llama.cpp release ${build} does not provide a verifiable ${backend} asset (${filename})`,
+        );
+      }
+      sha256[filename] = digest.slice("sha256:".length).toLowerCase();
+      return filename;
+    });
+    return {
+      version: 1,
+      build,
+      targets: { [platformKey]: { [backend]: files } },
+      sha256,
+    };
   }
 
   function assertBackend(value: string): asserts value is LlamaBackend {
@@ -271,7 +470,7 @@ export function createLlamaServerManager({
     const exe = findServerExe(getBackendDir(backend));
     if (!exe) {
       throw new Error(
-        `llama.cpp ${RUNTIME_MANIFEST.build}/${backend} runtime not installed`,
+        `llama.cpp ${runtimeBuild}/${backend} runtime not installed`,
       );
     }
     return exe;
@@ -286,6 +485,7 @@ export function createLlamaServerManager({
     sender?: {
       send: (channel: string, payload: unknown) => void;
     } | null,
+    channel: "pinned" | "latest" = "pinned",
   ): Promise<void> {
     assertBackend(backend);
     if (installing) {
@@ -294,27 +494,36 @@ export function createLlamaServerManager({
       );
     }
     const platformKey = getPlatformKey();
+    installing = true;
+    let installManifest: LlamaRuntimeManifest;
+    try {
+      installManifest = await getInstallManifest(backend, channel);
+    } catch (error) {
+      installing = false;
+      throw error;
+    }
     const target = (
-      RUNTIME_MANIFEST.targets as Record<string, Record<string, string[]>>
+      installManifest.targets as Record<string, Record<string, string[]>>
     )[platformKey]?.[backend];
     if (!target) {
+      installing = false;
       throw new Error(
-        `No ${backend} runtime pack for ${platformKey} in manifest build ${RUNTIME_MANIFEST.build}`,
+        `No ${backend} runtime pack for ${platformKey} in manifest build ${installManifest.build}`,
       );
     }
 
-    installing = true;
     const sendLog = (message: unknown, type = "stdout") =>
-      sender?.send("llamaServer:installLog", { type, message });
-    const destDir = getBackendDir(backend);
+      sender?.send(installChannel("installLog"), { type, message });
+    const previousBuild = runtimeBuild;
+    const buildDir = getBuildDir(installManifest.build);
+    const destDir = getBackendDir(backend, installManifest.build);
     const installDir = `${destDir}.installing-${process.pid}-${Date.now()}`;
     const backupDir = `${destDir}.previous`;
 
     try {
-      const buildDir = getBuildDir();
       fs.mkdirSync(buildDir, { recursive: true });
       fs.rmSync(installDir, { recursive: true, force: true });
-      const b = RUNTIME_MANIFEST.build;
+      const b = installManifest.build;
 
       // Weight each archive equally so percent spans the whole install
       const perArchive = 100 / target.length;
@@ -333,11 +542,11 @@ export function createLlamaServerManager({
           buildDir,
           `.download-${process.pid}-${filename}`,
         );
-        const expected = RUNTIME_MANIFEST.sha256[filename];
+        const expected = installManifest.sha256?.[filename];
         const basePercent = i * perArchive;
         await downloadFile(url, archivePath, expected, (received, total) => {
           const frac = total ? received / total : 0;
-          sender?.send("llamaServer:installProgress", {
+          sender?.send(installChannel("installProgress"), {
             percent: Math.round(basePercent + frac * perArchive),
             status: `Downloading ${filename} (${(received / 1024 / 1024).toFixed(1)}${
               total ? ` / ${(total / 1024 / 1024).toFixed(1)} MB` : " MB"
@@ -395,8 +604,38 @@ export function createLlamaServerManager({
           // best effort
         }
       }
+      if (instanceName === "decision") {
+        await stopLocked("decision runtime updated");
+        fs.mkdirSync(path.dirname(decisionRuntimeStatePath), {
+          recursive: true,
+        });
+        const stateTemp = `${decisionRuntimeStatePath}.tmp-${process.pid}`;
+        fs.writeFileSync(
+          stateTemp,
+          JSON.stringify({ build: installManifest.build }),
+        );
+        fs.renameSync(stateTemp, decisionRuntimeStatePath);
+        runtimeBuild = installManifest.build;
+
+        const obsoleteBuilds = new Set([previousBuild, "b11429", "b11570"]);
+        obsoleteBuilds.delete(runtimeBuild);
+        obsoleteBuilds.delete(CHAT_RUNTIME_MANIFEST.build);
+        for (const obsoleteBuild of obsoleteBuilds) {
+          if (!/^b\d+$/.test(obsoleteBuild)) continue;
+          const obsoleteDir = getBuildDir(obsoleteBuild);
+          if (fs.existsSync(obsoleteDir)) {
+            fs.rmSync(obsoleteDir, { recursive: true, force: true });
+            sendLog(
+              `[LlamaServer:decision] Removed previous decision runtime ${obsoleteBuild}.`,
+            );
+          }
+        }
+      }
       sendLog("[LlamaServer] Install complete.");
-      sender?.send("llamaServer:installComplete", { success: true, backend });
+      sender?.send(installChannel("installComplete"), {
+        success: true,
+        backend,
+      });
     } catch (error) {
       fs.rmSync(installDir, { recursive: true, force: true });
       if (fs.existsSync(backupDir) && !fs.existsSync(destDir)) {
@@ -404,7 +643,7 @@ export function createLlamaServerManager({
       }
       const message = error instanceof Error ? error.message : String(error);
       sendLog(`[LlamaServer] Install failed: ${message}`, "stderr");
-      sender?.send("llamaServer:installComplete", {
+      sender?.send(installChannel("installComplete"), {
         success: false,
         error: message,
       });
@@ -418,7 +657,7 @@ export function createLlamaServerManager({
     sender: { send: (c: string, p: unknown) => void } | null | undefined,
     info: { percent: number; status: string },
   ) {
-    sender?.send("llamaServer:installProgress", info);
+    sender?.send(installChannel("installProgress"), info);
   }
 
   // ── Process lifecycle ────────────────────────────────────────────────
@@ -469,26 +708,51 @@ export function createLlamaServerManager({
   }
 
   async function loadModel(modelId: string): Promise<void> {
-    await serverJson(SERVICE_ROUTES.llamaServer.loadModel, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: modelId }),
-    });
-
     const startedAt = Date.now();
-    while (Date.now() - startedAt < 300_000) {
+    const getModelStatus = async () => {
       const payload = (await serverJson(SERVICE_ROUTES.llamaServer.models)) as {
         data?: Array<{
           id?: string;
           status?: { value?: string; failed?: boolean; exit_code?: number };
         }>;
       };
-      const model = payload.data?.find((entry) => entry.id === modelId);
-      const state = model?.status?.value;
+      return payload.data?.find((entry) => entry.id === modelId)?.status;
+    };
+
+    let status = await getModelStatus();
+    if (status?.failed) {
+      throw new Error(
+        `llama-server failed to load ${modelId} (exit code ${status.exit_code ?? "unknown"})`,
+      );
+    }
+    if (status?.value === "loaded" || status?.value === "sleeping") return;
+
+    if (status?.value !== "loading") {
+      try {
+        await serverJson(SERVICE_ROUTES.llamaServer.loadModel, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: modelId }),
+        });
+      } catch (error) {
+        // Router autoload can win the race after the status check. In that
+        // case, wait for its load instead of failing the inference request.
+        if (
+          !(error instanceof Error) ||
+          !/model is already running/i.test(error.message)
+        ) {
+          throw error;
+        }
+      }
+    }
+
+    while (Date.now() - startedAt < 300_000) {
+      status = await getModelStatus();
+      const state = status?.value;
       if (state === "loaded" || state === "sleeping") return;
-      if (model?.status?.failed) {
+      if (status?.failed) {
         throw new Error(
-          `llama-server failed to load ${modelId} (exit code ${model.status.exit_code ?? "unknown"})`,
+          `llama-server failed to load ${modelId} (exit code ${status.exit_code ?? "unknown"})`,
         );
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -641,6 +905,13 @@ export function createLlamaServerManager({
     }
   }
 
+  function getRouterModelId(modelPath: string): string {
+    const filename = path.basename(modelPath);
+    return filename.toLowerCase().endsWith(".gguf")
+      ? filename.slice(0, -".gguf".length)
+      : filename;
+  }
+
   function writeActiveModelPreset(req: LaunchRequest): string {
     const presetPath = getActivePresetPath();
     const mmproj = req.mmprojPath ?? findMmproj(req.modelPath);
@@ -648,7 +919,7 @@ export function createLlamaServerManager({
     const lines = [
       "version = 1",
       "",
-      `[${ACTIVE_MODEL_ID}]`,
+      `[${activeModelId}]`,
       `model = ${iniPath(req.modelPath)}`,
       "load-on-startup = false",
       "stop-timeout = 30",
@@ -657,6 +928,45 @@ export function createLlamaServerManager({
       lines.push(`mmproj = ${iniPath(mmproj)}`);
       console.log("[LlamaServer] Vision projector:", mmproj);
     }
+    fs.mkdirSync(path.dirname(presetPath), { recursive: true });
+    fs.writeFileSync(presetPath, `${lines.join("\n")}\n`, "utf8");
+    return presetPath;
+  }
+
+  function writeRouterMmprojPreset(modelsDir: string): string | null {
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(modelsDir);
+    } catch {
+      return null;
+    }
+
+    const lines = ["version = 1", ""];
+    for (const filename of entries) {
+      if (
+        !filename.toLowerCase().endsWith(".gguf") ||
+        /^mmproj/i.test(filename)
+      ) {
+        continue;
+      }
+      const modelId = filename.slice(0, -".gguf".length);
+      if (/[\[\]\r\n]/.test(modelId)) continue;
+
+      const mmprojPath = path.join(modelsDir, `mmproj-${filename}`);
+      if (!fs.existsSync(mmprojPath)) continue;
+
+      lines.push(
+        `[${modelId}]`,
+        `mmproj = ${mmprojPath.replace(/\\/g, "/")}`,
+        "",
+      );
+    }
+
+    if (lines.length === 2) return null;
+    const presetPath = path.join(
+      getBuildDir(),
+      `${instanceName}-router-mmproj.ini`,
+    );
     fs.mkdirSync(path.dirname(presetPath), { recursive: true });
     fs.writeFileSync(presetPath, `${lines.join("\n")}\n`, "utf8");
     return presetPath;
@@ -751,7 +1061,7 @@ export function createLlamaServerManager({
     const rocmRoot = findWindowsRocmRoot(runtimeDir);
     if (!rocmRoot) {
       throw new Error(
-        "ROCm dependency hipblas.dll was not found. Install AMD ROCm 7.14, set HIP_PATH to its extracted root, and restart VAssist.",
+        `ROCm dependency hipblas.dll was not found. Install AMD ROCm ${instanceName === "decision" ? "10.0" : "7.14"}, set HIP_PATH to its extracted root, and restart VAssist.`,
       );
     }
 
@@ -790,6 +1100,8 @@ export function createLlamaServerManager({
    * the signature (model+mmproj+ctx+runtime) differs from what's running.
    */
   async function ensureForRequestLocked(req: LaunchRequest): Promise<string> {
+    const effectiveRouterModelsDir = req.modelsDir ?? routerModelsDir;
+    const routerMode = Boolean(effectiveRouterModelsDir);
     const wanted = req.backend ?? "auto";
     if (wanted !== "auto") assertBackend(wanted);
     const candidates: LlamaBackend[] =
@@ -834,24 +1146,48 @@ export function createLlamaServerManager({
     const { exe, backend, env: childEnv } = resolved;
 
     const signature = JSON.stringify([
-      req.modelPath,
+      effectiveRouterModelsDir ?? req.modelPath,
       req.mmprojPath ?? null,
       req.ctxSize ?? null,
-      RUNTIME_MANIFEST.build,
+      runtimeBuild,
       backend,
+      req.gpuLayers ?? null,
+      req.threads ?? null,
+      req.batchSize ?? null,
+      req.ubatchSize ?? null,
+      req.flashAttention ?? "auto",
+      req.cacheTypeK ?? "f16",
+      req.cacheTypeV ?? "f16",
+      req.ropeScaling ?? "model",
+      req.ropeScale ?? null,
     ]);
     if (
       currentProcess &&
       runningSignature === signature &&
       (await isHealthy())
     ) {
+      if (routerMode) {
+        writeRouterMmprojPreset(effectiveRouterModelsDir as string);
+        await serverJson(
+          `${SERVICE_ROUTES.llamaServer.models}?reload=1`,
+          undefined,
+          30_000,
+        ).catch((error) =>
+          console.warn(
+            "[LlamaServer:decision] Model directory refresh failed:",
+            error,
+          ),
+        );
+        await loadModel(getRouterModelId(req.modelPath));
+      }
       activeRequests += 1;
-      return ACTIVE_MODEL_ID;
+      return routerMode ? getRouterModelId(req.modelPath) : activeModelId;
     }
 
-    await stopLocked("model or runtime changed");
+    await stopLocked(
+      routerMode ? "router runtime changed" : "model or runtime changed",
+    );
 
-    const presetPath = writeActiveModelPreset(req);
     const args = [
       "--host",
       LOOPBACK_HOST,
@@ -861,10 +1197,48 @@ export function createLlamaServerManager({
       String(req.ctxSize ?? 4096),
       "--sleep-idle-seconds",
       String(IDLE_SLEEP_SECONDS),
-      "--models-preset",
-      presetPath,
       "--no-webui",
     ];
+    if (typeof req.gpuLayers === "number" && req.gpuLayers >= 0) {
+      args.push("--gpu-layers", String(req.gpuLayers));
+    }
+    if (req.threads !== undefined)
+      args.push("--threads", String(req.threads === 0 ? -1 : req.threads));
+    if (req.batchSize !== undefined && req.batchSize > 0)
+      args.push("--batch-size", String(req.batchSize));
+    if (req.ubatchSize !== undefined && req.ubatchSize > 0)
+      args.push("--ubatch-size", String(req.ubatchSize));
+    args.push("--flash-attn", req.flashAttention ?? "auto");
+    if (req.cacheTypeK) args.push("--cache-type-k", req.cacheTypeK);
+    if (req.cacheTypeV) args.push("--cache-type-v", req.cacheTypeV);
+    if (req.ropeScaling && req.ropeScaling !== "model") {
+      args.push("--rope-scaling", req.ropeScaling);
+      if (req.ropeScale !== undefined && req.ropeScaling !== "none")
+        args.push("--rope-scale", String(req.ropeScale));
+    }
+    if (routerMode) {
+      const decisionBatchSize = req.ctxSize ?? 4096;
+      args.push(
+        "--batch-size",
+        String(decisionBatchSize),
+        "--ubatch-size",
+        String(decisionBatchSize),
+      );
+      args.push(
+        "--models-dir",
+        effectiveRouterModelsDir as string,
+        "--models-max",
+        String(routerModelsMax),
+        "--models-autoload",
+      );
+      const mmprojPreset = writeRouterMmprojPreset(
+        effectiveRouterModelsDir as string,
+      );
+      if (mmprojPreset) args.push("--models-preset", mmprojPreset);
+    } else {
+      const presetPath = writeActiveModelPreset(req);
+      args.push("--models-preset", presetPath);
+    }
 
     console.log("[LlamaServer] Spawning:", exe, args.join(" "));
     const child = spawn(exe, args, {
@@ -906,18 +1280,29 @@ export function createLlamaServerManager({
         throw new Error("llama-server exited during model load");
       }
       if (await isHealthy()) {
-        currentModelId = ACTIVE_MODEL_ID;
-        try {
-          await loadModel(ACTIVE_MODEL_ID);
-        } catch (error) {
-          await stopLocked("model load failed", false);
-          throw error;
+        if (routerMode) {
+          writeRouterMmprojPreset(effectiveRouterModelsDir as string);
+          await serverJson(
+            `${SERVICE_ROUTES.llamaServer.models}?reload=1`,
+            undefined,
+            30_000,
+          );
+          await loadModel(getRouterModelId(req.modelPath));
+        }
+        if (!routerMode) {
+          currentModelId = activeModelId;
+          try {
+            await loadModel(activeModelId);
+          } catch (error) {
+            await stopLocked("model load failed", false);
+            throw error;
+          }
         }
         console.log(
-          `[LlamaServer] Ready on :${llamaPort} backend=${backend} model=${req.modelPath}`,
+          `[LlamaServer:${instanceName}] Ready on :${llamaPort} backend=${backend} model=${req.modelPath}`,
         );
         activeRequests += 1;
-        return ACTIVE_MODEL_ID;
+        return routerMode ? getRouterModelId(req.modelPath) : activeModelId;
       }
       await new Promise((r) => setTimeout(r, 500));
     }
@@ -943,7 +1328,7 @@ export function createLlamaServerManager({
 
   function getStatus() {
     return {
-      build: RUNTIME_MANIFEST.build,
+      build: runtimeBuild,
       platformKey: getPlatformKey(),
       installedBackends: Object.entries(RUNTIME_MANIFEST.targets)
         .flatMap(([platformKey, targetEntry]) =>
@@ -979,6 +1364,7 @@ export function createLlamaServerManager({
     getEndpoint: () => endpointForPort(llamaPort),
     ensureForRequest,
     installBackend,
+    getLatestDecisionBuild,
     deleteBackend,
     stop,
     restart: async () => {

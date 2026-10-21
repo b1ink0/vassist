@@ -5,11 +5,11 @@ VAssist repository tree and file metrics.
 ## Totals
 
 - Directories: 183
-- Files: 615
-- Text files counted for metrics: 528
-- Total text lines: 163880
-- Code files counted for metrics: 424
-- Total code lines: 148146
+- Files: 621
+- Text files counted for metrics: 534
+- Total text lines: 167125
+- Code files counted for metrics: 431
+- Total code lines: 151435
 
 ## Line Counts by File Type
 
@@ -21,15 +21,15 @@ VAssist repository tree and file metrics.
 | HTML         | .html                   |     5 |   191 |
 | Java         | .java                   |     4 |   215 |
 | JavaScript   | .js, .mjs, .cjs         |     1 |    32 |
-| Kotlin       | .kt                     |    20 | 10988 |
+| Kotlin       | .kt                     |    20 | 11030 |
 | Shell Script | (no extension)          |     5 |   654 |
-| TSX          | .tsx                    |   115 | 53267 |
-| TypeScript   | .ts, .mts, .cts         |   259 | 77951 |
+| TSX          | .tsx                    |   118 | 54303 |
+| TypeScript   | .ts, .mts, .cts         |   263 | 80162 |
 | Gradle       | .gradle                 |     7 |   579 |
-| JSON         | .json                   |    17 |   580 |
-| Markdown     | .md                     |    36 |  6166 |
+| JSON         | .json                   |    17 |   581 |
+| Markdown     | .md                     |    35 |  6087 |
 | Other Text   | mixed                   |    15 |  3593 |
-| Plain Text   | (no extension)          |    11 |  4015 |
+| Plain Text   | (no extension)          |    11 |  4049 |
 | Properties   | .properties             |     2 |    29 |
 | SVG          | .svg                    |     4 |   342 |
 | XML          | .xml                    |    12 |   430 |
@@ -39,14 +39,14 @@ VAssist repository tree and file metrics.
 - .husky/: 1 directories, 1 files
 - android/: 64 directories, 92 files
 - android-src/: 1 directories, 3 files
-- documentation/: 13 directories, 50 files
+- documentation/: 13 directories, 49 files
 - electron/: 17 directories, 60 files
 - embed/: 1 directories, 1 files
 - extension/: 6 directories, 19 files
 - packages/: 5 directories, 12 files
 - public/: 5 directories, 20 files
-- src/: 59 directories, 265 files
-- tests/: 9 directories, 56 files
+- src/: 59 directories, 271 files
+- tests/: 9 directories, 57 files
 - tools/: 2 directories, 7 files
 - .gitignore: file
 - .prettierignore: file
@@ -305,7 +305,6 @@ vassist/
 │   │   │   └── ui.md
 │   │   ├── index.md
 │   │   └── intro.md
-│   ├── android-qnn.md
 │   └── README.md
 ├── electron/
 │   ├── assets/
@@ -553,7 +552,10 @@ vassist/
 │   │   ├── settings/
 │   │   │   ├── llm/
 │   │   │   │   ├── ComputeUnitCard.tsx
+│   │   │   │   ├── DecisionSettings.tsx
 │   │   │   │   ├── DesktopLLMConfig.tsx
+│   │   │   │   ├── LlamaServerRuntimeManager.tsx
+│   │   │   │   ├── LLMParameterSettings.tsx
 │   │   │   │   ├── LocalLLMModelManager.tsx
 │   │   │   │   └── STTTTSModelManager.tsx
 │   │   │   ├── shared/
@@ -619,6 +621,7 @@ vassist/
 │   │   ├── androidTtsModels.ts
 │   │   ├── androidWhisperModels.ts
 │   │   ├── animationConfig.ts
+│   │   ├── llmParameters.ts
 │   │   ├── promptConfig.ts
 │   │   ├── sceneConfig.ts
 │   │   ├── serviceEndpoints.ts
@@ -662,8 +665,10 @@ vassist/
 │   │   ├── ai/
 │   │   │   ├── AIService.ts
 │   │   │   ├── ChromeAIValidator.ts
+│   │   │   ├── DecisionClient.ts
 │   │   │   ├── LanguageDetectorService.ts
 │   │   │   ├── LocalLlmClientFactory.ts
+│   │   │   ├── OllamaClient.ts
 │   │   │   ├── RewriterService.ts
 │   │   │   ├── SummarizerService.ts
 │   │   │   ├── TranslatorService.ts
@@ -841,7 +846,8 @@ vassist/
 │   │   └── testApi.ts
 │   ├── hosts/
 │   │   └── extension-host.html
-│   └── extensionTestHost.ts
+│   ├── extensionTestHost.ts
+│   └── llm-parameters-check.ts
 ├── tools/
 │   ├── vite-plugins/
 │   │   ├── android-models-plugin.ts

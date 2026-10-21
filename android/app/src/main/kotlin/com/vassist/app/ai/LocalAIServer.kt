@@ -107,6 +107,10 @@ class LocalAIServer(
     
     // Track currently loaded LLM model path
     private var currentModelPath: String? = null
+    private var llmContextSize = 4096
+    private var llmTemperature = 0.7f
+    private var llmTopK = 40
+    private var llmTopP = 0.9f
     
     /**
      * Custom Response that properly flushes chunked data for SSE streaming.
@@ -658,7 +662,14 @@ class LocalAIServer(
             return errorResponse(Response.Status.BAD_REQUEST, "Missing 'messages' in request")
         }
         
-        val maxTokens = request.max_tokens ?: 2048
+        val maxTokens = request.max_tokens ?: request.max_completion_tokens ?: 2048
+        val contextSize = request.llmContextSize ?: 4096
+        val temperature = request.temperature ?: 0.7f
+        val topK = request.top_k ?: 40
+        val topP = request.top_p ?: 0.9f
+        if (maxTokens < 1 || contextSize < 0 || temperature < 0 || topK < 0 || topP < 0 || topP > 1) {
+            return errorResponse(Response.Status.BAD_REQUEST, "Invalid LLM generation parameters")
+        }
         val stream = request.stream ?: false
         // Accept all industry conventions for toggling thinking:
         //   enable_thinking (ours/llama.cpp), chat_template_kwargs.enable_thinking
@@ -673,12 +684,17 @@ class LocalAIServer(
         val requestedModel = request.model
         
         // Load/swap model if needed (on-demand like Desktop)
-        if (requestedModel != null && requestedModel != "local") {
-            val modelPath = resolveModelPath(requestedModel)
+        if (requestedModel == null || requestedModel == "local") {
+            if (currentModelPath == null) runBlocking(aiDispatcher) { getLlamaService() }
+        }
+        if (requestedModel != null || currentModelPath != null) {
+            val modelPath = if (requestedModel != null && requestedModel != "local") resolveModelPath(requestedModel) else currentModelPath!!
             Log.d(TAG, "Request model: $requestedModel, resolved: $modelPath")
             Log.d(TAG, "Current model: $currentModelPath")
             
-            if (modelPath != currentModelPath) {
+            val contextChanged = contextSize != llmContextSize
+            val samplingChanged = temperature != llmTemperature || topK != llmTopK || topP != llmTopP
+            if (modelPath != currentModelPath || contextChanged || (activeRuntime == "llama" && samplingChanged)) {
                 Log.i(TAG, "Model switch requested: $currentModelPath -> $modelPath")
                 val runtime = if (modelPath.endsWith(".litertlm", ignoreCase = true)) "litert" else "llama"
                 try {
@@ -693,7 +709,7 @@ class LocalAIServer(
                                     liteRtService = null
 
                                     val service = LiteRtLmService(context)
-                                    service.initialize(modelPath, device = getLLMComputeUnit())
+                                    service.initialize(modelPath, device = getLLMComputeUnit(), contextSize = contextSize)
                                     liteRtService = service
                                     Log.i(TAG, "[LLM-backend] LiteRT-LM model switched: $modelPath (backend=${service.activeBackend})")
                                 } else {
@@ -703,11 +719,15 @@ class LocalAIServer(
                                     llamaService = null
 
                                     val service = LlamaService(context)
-                                    service.initialize(modelPath, device = getLLMComputeUnit())
+                                    service.initialize(modelPath, contextSize = contextSize, temperature = temperature, device = getLLMComputeUnit(), topK = topK, topP = topP)
                                     llamaService = service
                                 }
                                 activeRuntime = runtime
                                 currentModelPath = modelPath
+                                llmContextSize = contextSize
+                                llmTemperature = temperature
+                                llmTopK = topK
+                                llmTopP = topP
                                 Log.i(TAG, "Model switched successfully (runtime=$runtime)")
                             }
                         }
@@ -718,6 +738,8 @@ class LocalAIServer(
                 }
             }
         }
+
+        liteRtService?.configureSampling(request.temperature, request.top_k, request.top_p, request.seed)
         
         // Convert to LlamaService format
         val llamaMessages = mutableListOf<LlamaService.ChatMessage>()
@@ -1288,6 +1310,11 @@ class LocalAIServer(
         val messages: List<ChatMessage>?,
         val model: String? = null,
         val max_tokens: Int? = null,
+        val max_completion_tokens: Int? = null,
+        val llmContextSize: Int? = null,
+        val top_k: Int? = null,
+        val top_p: Float? = null,
+        val seed: Int? = null,
         val enable_thinking: Boolean? = null,
         // llama.cpp / vLLM convention: chat_template_kwargs { enable_thinking }
         val chat_template_kwargs: ChatTemplateKwargs? = null,

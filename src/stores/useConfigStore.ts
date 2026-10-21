@@ -162,6 +162,7 @@ export interface ConfigStoreState {
   ) => void;
   saveAIConfig: () => Promise<void>;
   testAIConnection: () => Promise<void>;
+  setAIConfigError: (message: string) => void;
   clearAIConfigError: () => void;
   testTranslator: (
     text: string,
@@ -226,108 +227,133 @@ const pathDebouncers: Record<
 
 const normalizeAIConfig = (
   savedConfig: Partial<AIConfig> | null | undefined,
-): AIConfig => ({
-  ...DefaultAIConfig,
-  ...(savedConfig ?? {}),
-  remoteProfiles: Array.isArray(savedConfig?.remoteProfiles)
-    ? savedConfig.remoteProfiles
-    : DefaultAIConfig.remoteProfiles,
-  chromeAi: {
-    ...DefaultAIConfig.chromeAi,
-    ...(savedConfig?.chromeAi ?? {}),
-  },
-  openai: {
-    ...DefaultAIConfig.openai,
-    ...(savedConfig?.openai ?? {}),
-    routing: {
-      ...DefaultAIConfig.openai.routing,
-      ...(savedConfig?.openai?.routing ?? {}),
-      visionModel: {
-        ...DefaultAIConfig.openai.routing.visionModel,
-        ...(savedConfig?.openai?.routing?.visionModel ?? {}),
-      },
-      routerModel: {
-        ...DefaultAIConfig.openai.routing.routerModel,
-        ...(savedConfig?.openai?.routing?.routerModel ?? {}),
-      },
+): AIConfig => {
+  const savedDecision = savedConfig?.decision as
+    | (Partial<AIConfig["decision"]> & { backend?: string })
+    | undefined;
+  const legacyBackend = savedDecision?.backend;
+  const legacyProvider =
+    legacyBackend === "remote" ||
+    legacyBackend === "desktop-local" ||
+    legacyBackend === "host"
+      ? legacyBackend
+      : legacyBackend === "android-local"
+        ? "remote"
+        : undefined;
+
+  return {
+    ...DefaultAIConfig,
+    ...(savedConfig ?? {}),
+    remoteProfiles: Array.isArray(savedConfig?.remoteProfiles)
+      ? savedConfig.remoteProfiles
+      : DefaultAIConfig.remoteProfiles,
+    decision: {
+      ...DefaultAIConfig.decision,
+      ...(savedDecision ?? {}),
+      runtimeChannel:
+        savedDecision?.runtimeChannel === "latest" ? "latest" : "pinned",
+      ...(legacyProvider ? { provider: legacyProvider, backend: "auto" } : {}),
+      remoteProfiles: Array.isArray(savedDecision?.remoteProfiles)
+        ? savedDecision.remoteProfiles
+        : DefaultAIConfig.decision.remoteProfiles,
     },
-  },
-  ollama: {
-    ...DefaultAIConfig.ollama,
-    ...(savedConfig?.ollama ?? {}),
-    routing: {
-      ...DefaultAIConfig.ollama.routing,
-      ...(savedConfig?.ollama?.routing ?? {}),
-      visionModel: {
-        ...DefaultAIConfig.ollama.routing.visionModel,
-        ...(savedConfig?.ollama?.routing?.visionModel ?? {}),
-      },
-      routerModel: {
-        ...DefaultAIConfig.ollama.routing.routerModel,
-        ...(savedConfig?.ollama?.routing?.routerModel ?? {}),
-      },
+    chromeAi: {
+      ...DefaultAIConfig.chromeAi,
+      ...(savedConfig?.chromeAi ?? {}),
     },
-  },
-  "android-local": {
-    ...DefaultAIConfig["android-local"],
-    ...(savedConfig?.["android-local"] ?? {}),
-    routing: {
-      ...DefaultAIConfig["android-local"].routing,
-      ...(savedConfig?.["android-local"]?.routing ?? {}),
-      visionModel: {
-        ...DefaultAIConfig["android-local"].routing.visionModel,
-        ...(savedConfig?.["android-local"]?.routing?.visionModel ?? {}),
-      },
-      routerModel: {
-        ...DefaultAIConfig["android-local"].routing.routerModel,
-        ...(savedConfig?.["android-local"]?.routing?.routerModel ?? {}),
+    openai: {
+      ...DefaultAIConfig.openai,
+      ...(savedConfig?.openai ?? {}),
+      routing: {
+        ...DefaultAIConfig.openai.routing,
+        ...(savedConfig?.openai?.routing ?? {}),
+        visionModel: {
+          ...DefaultAIConfig.openai.routing.visionModel,
+          ...(savedConfig?.openai?.routing?.visionModel ?? {}),
+        },
+        routerModel: {
+          ...DefaultAIConfig.openai.routing.routerModel,
+          ...(savedConfig?.openai?.routing?.routerModel ?? {}),
+        },
       },
     },
-  },
-  "desktop-local": {
-    ...DefaultAIConfig["desktop-local"],
-    ...(savedConfig?.["desktop-local"] ?? {}),
-    internalPorts: resolveDesktopInternalPorts(
-      savedConfig?.["desktop-local"]?.internalPorts,
-    ),
-    routing: {
-      ...DefaultAIConfig["desktop-local"].routing,
-      ...(savedConfig?.["desktop-local"]?.routing ?? {}),
-      visionModel: {
-        ...DefaultAIConfig["desktop-local"].routing.visionModel,
-        ...(savedConfig?.["desktop-local"]?.routing?.visionModel ?? {}),
-      },
-      routerModel: {
-        ...DefaultAIConfig["desktop-local"].routing.routerModel,
-        ...(savedConfig?.["desktop-local"]?.routing?.routerModel ?? {}),
+    ollama: {
+      ...DefaultAIConfig.ollama,
+      ...(savedConfig?.ollama ?? {}),
+      routing: {
+        ...DefaultAIConfig.ollama.routing,
+        ...(savedConfig?.ollama?.routing ?? {}),
+        visionModel: {
+          ...DefaultAIConfig.ollama.routing.visionModel,
+          ...(savedConfig?.ollama?.routing?.visionModel ?? {}),
+        },
+        routerModel: {
+          ...DefaultAIConfig.ollama.routing.routerModel,
+          ...(savedConfig?.ollama?.routing?.routerModel ?? {}),
+        },
       },
     },
-  },
-  aiFeatures: {
-    ...DefaultAIConfig.aiFeatures,
-    ...(savedConfig?.aiFeatures ?? {}),
-    translator: {
-      ...DefaultAIConfig.aiFeatures.translator,
-      ...(savedConfig?.aiFeatures?.translator ?? {}),
+    "android-local": {
+      ...DefaultAIConfig["android-local"],
+      ...(savedConfig?.["android-local"] ?? {}),
+      routing: {
+        ...DefaultAIConfig["android-local"].routing,
+        ...(savedConfig?.["android-local"]?.routing ?? {}),
+        visionModel: {
+          ...DefaultAIConfig["android-local"].routing.visionModel,
+          ...(savedConfig?.["android-local"]?.routing?.visionModel ?? {}),
+        },
+        routerModel: {
+          ...DefaultAIConfig["android-local"].routing.routerModel,
+          ...(savedConfig?.["android-local"]?.routing?.routerModel ?? {}),
+        },
+      },
     },
-    languageDetector: {
-      ...DefaultAIConfig.aiFeatures.languageDetector,
-      ...(savedConfig?.aiFeatures?.languageDetector ?? {}),
+    "desktop-local": {
+      ...DefaultAIConfig["desktop-local"],
+      ...(savedConfig?.["desktop-local"] ?? {}),
+      internalPorts: resolveDesktopInternalPorts(
+        savedConfig?.["desktop-local"]?.internalPorts,
+      ),
+      routing: {
+        ...DefaultAIConfig["desktop-local"].routing,
+        ...(savedConfig?.["desktop-local"]?.routing ?? {}),
+        visionModel: {
+          ...DefaultAIConfig["desktop-local"].routing.visionModel,
+          ...(savedConfig?.["desktop-local"]?.routing?.visionModel ?? {}),
+        },
+        routerModel: {
+          ...DefaultAIConfig["desktop-local"].routing.routerModel,
+          ...(savedConfig?.["desktop-local"]?.routing?.routerModel ?? {}),
+        },
+      },
     },
-    summarizer: {
-      ...DefaultAIConfig.aiFeatures.summarizer,
-      ...(savedConfig?.aiFeatures?.summarizer ?? {}),
+    aiFeatures: {
+      ...DefaultAIConfig.aiFeatures,
+      ...(savedConfig?.aiFeatures ?? {}),
+      translator: {
+        ...DefaultAIConfig.aiFeatures.translator,
+        ...(savedConfig?.aiFeatures?.translator ?? {}),
+      },
+      languageDetector: {
+        ...DefaultAIConfig.aiFeatures.languageDetector,
+        ...(savedConfig?.aiFeatures?.languageDetector ?? {}),
+      },
+      summarizer: {
+        ...DefaultAIConfig.aiFeatures.summarizer,
+        ...(savedConfig?.aiFeatures?.summarizer ?? {}),
+      },
+      rewriter: {
+        ...DefaultAIConfig.aiFeatures.rewriter,
+        ...(savedConfig?.aiFeatures?.rewriter ?? {}),
+      },
+      writer: {
+        ...DefaultAIConfig.aiFeatures.writer,
+        ...(savedConfig?.aiFeatures?.writer ?? {}),
+      },
     },
-    rewriter: {
-      ...DefaultAIConfig.aiFeatures.rewriter,
-      ...(savedConfig?.aiFeatures?.rewriter ?? {}),
-    },
-    writer: {
-      ...DefaultAIConfig.aiFeatures.writer,
-      ...(savedConfig?.aiFeatures?.writer ?? {}),
-    },
-  },
-});
+  };
+};
 
 const normalizeUIConfig = (
   savedConfig: Partial<UIConfig> | null | undefined,
@@ -843,7 +869,11 @@ const syncDesktopServerForProviders = async (
   const sttUsesDesktopLocal =
     sttConfig?.provider === STTProviders.DESKTOP_LOCAL;
   const needsDesktopProxy =
-    llmUsesDesktopLocal || ttsUsesDesktopLocal || sttUsesDesktopLocal;
+    llmUsesDesktopLocal ||
+    ttsUsesDesktopLocal ||
+    sttUsesDesktopLocal ||
+    (aiConfig.decision.enabled &&
+      aiConfig.decision.provider === "desktop-local");
 
   if (!needsDesktopProxy) {
     try {
@@ -901,6 +931,8 @@ const syncDesktopServerForProviders = async (
       ),
       llmEngine: (desktopLlmConfig as any).llmEngine,
       llmBackend: (desktopLlmConfig as any).llmBackend,
+      decisionBackend: aiConfig.decision.backend,
+      decisionContextSize: aiConfig.decision.contextSize,
       stt: {
         model: desktopSttConfig.model,
         language: desktopSttConfig.language,
@@ -1203,7 +1235,7 @@ export const useConfigStore = create<ConfigStoreState>()(
           state.isConfigLoading = true;
         });
 
-        let savedAiConfig = DefaultAIConfig;
+        let savedAiConfig: AIConfig = DefaultAIConfig;
         let savedTtsConfig = DefaultTTSConfig;
         let savedSttConfig = DefaultSTTConfig;
 
@@ -1343,6 +1375,12 @@ export const useConfigStore = create<ConfigStoreState>()(
             state.aiTesting = false;
           });
         }
+      },
+      setAIConfigError: (message) => {
+        set((state) => {
+          state.aiConfigSaved = false;
+          state.aiConfigError = message;
+        });
       },
       clearAIConfigError: () => {
         set((state) => {

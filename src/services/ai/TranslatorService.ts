@@ -6,6 +6,10 @@
  */
 
 import OpenAI from "openai";
+import {
+  DEFAULT_ENDPOINTS,
+  normalizeOpenAIBaseUrl,
+} from "../../config/serviceEndpoints";
 import Logger from "../common/LoggerService";
 import { createLocalOpenAiClient } from "./LocalLlmClientFactory";
 import { isExtension } from "../../utils/PlatformUtils";
@@ -26,6 +30,7 @@ type TranslatorConfig = {
 type ConfigureInput = {
   provider: TranslatorProvider;
   openai?: {
+    endpoint?: string;
     apiKey: string;
     model?: string;
     temperature?: number;
@@ -223,7 +228,11 @@ class TranslatorService {
           throw new Error("Missing OpenAI configuration");
         }
         state.llmClient = new OpenAI({
-          apiKey: openaiConfig.apiKey,
+          apiKey: openaiConfig.apiKey || "local",
+          baseURL: normalizeOpenAIBaseUrl(
+            openaiConfig.endpoint,
+            DEFAULT_ENDPOINTS.openaiApi,
+          ),
           dangerouslyAllowBrowser: !this.isExtensionMode,
         });
 

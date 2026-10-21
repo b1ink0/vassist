@@ -62,7 +62,9 @@ class LlamaService(private val context: Context) {
         modelPath: String? = null,
         contextSize: Int = DEFAULT_CONTEXT_SIZE,
         temperature: Float = DEFAULT_TEMPERATURE,
-        device: String = "cpu"
+        device: String = "cpu",
+        topK: Int = DEFAULT_TOP_K,
+        topP: Float = DEFAULT_TOP_P
     ): String {
         try {
             val modelFile = resolveModelPath(modelPath)
@@ -75,10 +77,10 @@ class LlamaService(private val context: Context) {
 
             llama.load(
                 pathToModel = modelFile.absolutePath,
-                contextSize = contextSize,
+                contextSize = if (contextSize > 0) contextSize else DEFAULT_CONTEXT_SIZE,
                 temperature = temperature,
-                topK = DEFAULT_TOP_K,
-                topP = DEFAULT_TOP_P,
+                topK = topK,
+                topP = topP,
                 device = device,
                 nativeLibDir = context.applicationInfo.nativeLibraryDir,
                 adsplibDir = stageLlamaAdspLibs().absolutePath

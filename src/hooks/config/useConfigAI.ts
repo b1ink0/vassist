@@ -17,6 +17,7 @@ export const useConfigAIActions = () =>
       updateAIConfig: state.updateAIConfig,
       saveAIConfig: state.saveAIConfig,
       testAIConnection: state.testAIConnection,
+      setAIConfigError: state.setAIConfigError,
       clearAIConfigError: state.clearAIConfigError,
       testTranslator: state.testTranslator,
       testLanguageDetector: state.testLanguageDetector,

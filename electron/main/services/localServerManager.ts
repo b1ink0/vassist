@@ -1,6 +1,7 @@
 import type { IpcMain, IpcMainInvokeEvent } from "electron";
 import type * as fsType from "fs";
 import type * as pathType from "path";
+import type { LLMRuntimeParameters } from "../../../src/config/llmParameters";
 import {
   DEFAULT_SERVICE_PORTS,
   DESKTOP_BIND_HOST,
@@ -10,9 +11,11 @@ import {
   validateDesktopServicePorts,
 } from "../../../src/config/serviceEndpoints";
 
-type ServerRuntimeConfig = {
+type ServerRuntimeConfig = LLMRuntimeParameters & {
   llmEngine?: string;
   llmBackend?: string;
+  decisionBackend?: string;
+  decisionContextSize?: number;
   backend?: string;
   model?: string;
   customModelsPath?: string;
@@ -24,6 +27,7 @@ type ServerRuntimeConfig = {
   serverPort?: number;
   internalPorts?: Partial<{
     llamaServer: number;
+    decisionLlamaServer: number;
     gptSovits: number;
     fasterWhisper: number;
     supertonic: number;
@@ -53,6 +57,14 @@ type LocalAIServerLike = {
       temperature?: number;
       maxTokens?: number;
       contextSize?: number;
+      threads?: number | undefined;
+      batchSize?: number | undefined;
+      ubatchSize?: number | undefined;
+      flashAttention?: LLMRuntimeParameters["flashAttention"];
+      cacheTypeK?: LLMRuntimeParameters["cacheTypeK"];
+      cacheTypeV?: LLMRuntimeParameters["cacheTypeV"];
+      ropeScaling?: LLMRuntimeParameters["ropeScaling"];
+      ropeScale?: number | undefined;
       gpuLayers?: number | "auto";
       llamaServerUrl?: string;
     };
@@ -77,6 +89,11 @@ type LocalAIServerLike = {
       port?: number;
       llamaServerUrl?: string;
       supertonicUrl?: string;
+    };
+    decision: {
+      modelsDir: string | null;
+      backend?: string;
+      contextSize?: number;
     };
   };
   host: string;
@@ -107,6 +124,7 @@ type LocalServerManagerDeps = {
   fs: typeof fsType;
   baseDir: string;
   getModelsDir: (customPath?: string | null) => string;
+  getDecisionModelsDir?: (customPath?: string | null) => string;
   loadLlamaApi?: () => Promise<unknown>;
   ensureTTSBackendRunning?: (() => void | Promise<void>) | null;
   restartTTSBackend?: ((reason: string) => void | Promise<void>) | null;
@@ -115,6 +133,7 @@ type LocalServerManagerDeps = {
   stopTTSBackend?: (() => void) | null;
   setTTSBackend?: ((backend: string | undefined | null) => void) | null;
   setLlamaServerPort?: ((port: number) => Promise<void>) | null;
+  setDecisionLlamaServerPort?: ((port: number) => Promise<void>) | null;
   setPythonServicePorts?:
     | ((ports: {
         gptSovits: number;
@@ -126,6 +145,7 @@ type LocalServerManagerDeps = {
   llamaProxy?: {
     ensureForRequest: (req: {
       modelPath: string;
+      modelsDir?: string;
       mmprojPath?: string;
       ctxSize?: number;
       backend?: string;
@@ -133,6 +153,18 @@ type LocalServerManagerDeps = {
     markRequestComplete: () => void;
     getEndpoint?: () => string;
   } | null;
+  decisionProxy?: {
+    ensureForRequest: (req: {
+      modelPath: string;
+      modelsDir?: string;
+      mmprojPath?: string;
+      ctxSize?: number;
+      backend?: string;
+    }) => Promise<string>;
+    markRequestComplete: () => void;
+    getEndpoint?: () => string;
+  } | null;
+  decisionModelsDir?: string;
   ensureSupertonicRunning?: (() => void | Promise<void>) | null;
   restartSupertonicBackend?: ((reason: string) => void | Promise<void>) | null;
   ensureWhisperCppRunning?: (() => void | Promise<void>) | null;
@@ -163,9 +195,13 @@ export function createLocalServerManager({
   stopTTSBackend,
   setTTSBackend,
   setLlamaServerPort,
+  setDecisionLlamaServerPort,
   setPythonServicePorts,
   setWhisperCppPort,
   llamaProxy,
+  decisionProxy,
+  decisionModelsDir,
+  getDecisionModelsDir,
   ensureSupertonicRunning,
   restartSupertonicBackend,
   ensureWhisperCppRunning,
@@ -217,9 +253,26 @@ export function createLocalServerManager({
                 markRequestComplete: () => void;
                 getEndpoint?: () => string;
               } | null;
+              decisionProxy?: {
+                ensureForRequest: (req: {
+                  modelPath: string;
+                  mmprojPath?: string;
+                  ctxSize?: number;
+                  backend?: string;
+                }) => Promise<string>;
+                markRequestComplete: () => void;
+                getEndpoint?: () => string;
+              } | null;
+              decisionModelsDir?: string;
             } = {};
             if (llamaProxy !== undefined) {
               serverDeps.llamaProxy = llamaProxy;
+            }
+            if (decisionProxy !== undefined) {
+              serverDeps.decisionProxy = decisionProxy;
+            }
+            if (decisionModelsDir !== undefined) {
+              serverDeps.decisionModelsDir = decisionModelsDir;
             }
             if (ensureSttBackendRunning !== undefined) {
               serverDeps.ensureSttBackendRunning = ensureSttBackendRunning;
@@ -298,6 +351,7 @@ export function createLocalServerManager({
         }
         try {
           await setLlamaServerPort?.(internalPorts.llamaServer);
+          await setDecisionLlamaServerPort?.(internalPorts.decisionLlamaServer);
           await setPythonServicePorts?.({
             gptSovits: internalPorts.gptSovits,
             fasterWhisper: internalPorts.fasterWhisper,
@@ -314,6 +368,7 @@ export function createLocalServerManager({
           stt: LocalAIServerLike["config"]["stt"];
           tts: LocalAIServerLike["config"]["tts"];
           server: LocalAIServerLike["config"]["server"];
+          decision: LocalAIServerLike["config"]["decision"];
         } = {
           llm: {
             modelPath: null,
@@ -324,11 +379,21 @@ export function createLocalServerManager({
                 ? "llama-server"
                 : "node-llama",
             llmServerBackend: config.llmBackend || "auto",
-            temperature: config.temperature || 0.7,
-            maxTokens: config.maxTokens || 2048,
-            contextSize: config.contextSize || 4096,
+            temperature: config.temperature ?? 0.7,
+            maxTokens: config.maxTokens ?? 2048,
+            contextSize: config.contextSize ?? 4096,
+            threads: config.threads,
+            batchSize: config.batchSize,
+            ubatchSize: config.ubatchSize,
+            flashAttention: config.flashAttention,
+            cacheTypeK: config.cacheTypeK,
+            cacheTypeV: config.cacheTypeV,
+            ropeScaling: config.ropeScaling,
+            ropeScale: config.ropeScale,
             gpuLayers:
-              config.gpuLayers === 99 ? "auto" : config.gpuLayers || "auto",
+              config.gpuLayers === 99 || config.gpuLayers === -1
+                ? "auto"
+                : (config.gpuLayers ?? "auto"),
             llamaServerUrl: buildHttpEndpoint(
               LOOPBACK_HOST,
               internalPorts.llamaServer,
@@ -365,6 +430,14 @@ export function createLocalServerManager({
             host: desiredHost,
             port: desiredPort,
           },
+          decision: {
+            modelsDir:
+              getDecisionModelsDir?.(config.customModelsPath) ??
+              decisionModelsDir ??
+              null,
+            backend: config.decisionBackend || "auto",
+            contextSize: config.decisionContextSize ?? 4096,
+          },
         };
 
         if (config.model) {
@@ -375,27 +448,6 @@ export function createLocalServerManager({
             console.log("[Server] LLM model:", config.model);
           } else {
             console.warn("[Server] Model not found:", config.model);
-            const requestedBaseName =
-              String(config.model).toLowerCase().split(":")[0] || "";
-            const availableModels = fs
-              .readdirSync(modelsDir)
-              .filter(
-                (entry) =>
-                  entry.toLowerCase().endsWith(".gguf") &&
-                  !entry.toLowerCase().startsWith("mmproj-"),
-              )
-              .sort((left, right) => left.localeCompare(right));
-            const fallbackModel =
-              availableModels.find((entry) =>
-                entry.toLowerCase().includes(requestedBaseName),
-              ) || availableModels[0];
-            if (fallbackModel) {
-              serverConfig.llm.modelPath = path.join(modelsDir, fallbackModel);
-              console.log(
-                "[Server] Falling back to available model:",
-                fallbackModel,
-              );
-            }
           }
         }
 
@@ -414,6 +466,7 @@ export function createLocalServerManager({
           Object.assign(server.config.stt, serverConfig.stt);
           Object.assign(server.config.tts, serverConfig.tts);
           Object.assign(server.config.server, serverConfig.server);
+          Object.assign(server.config.decision, serverConfig.decision);
           const previousHost = server.host;
           const previousPort = server.port;
           const hostChanged = previousHost !== desiredHost;
@@ -528,6 +581,9 @@ export function createLocalServerManager({
         if (!server) {
           const serverDeps: {
             loadLlamaApi?: () => Promise<unknown>;
+            llamaProxy?: LocalServerManagerDeps["llamaProxy"];
+            decisionProxy?: LocalServerManagerDeps["decisionProxy"];
+            decisionModelsDir?: string;
             ensureTTSBackendRunning?: (() => void | Promise<void>) | null;
             restartTTSBackend?:
               | ((reason: string) => void | Promise<void>)
@@ -538,6 +594,11 @@ export function createLocalServerManager({
           if (loadLlamaApi) {
             serverDeps.loadLlamaApi = loadLlamaApi;
           }
+          if (llamaProxy !== undefined) serverDeps.llamaProxy = llamaProxy;
+          if (decisionProxy !== undefined)
+            serverDeps.decisionProxy = decisionProxy;
+          if (decisionModelsDir !== undefined)
+            serverDeps.decisionModelsDir = decisionModelsDir;
           if (ensureTTSBackendRunning !== undefined) {
             serverDeps.ensureTTSBackendRunning = ensureTTSBackendRunning;
           }
@@ -577,6 +638,9 @@ export function createLocalServerManager({
               LOOPBACK_HOST,
               DEFAULT_SERVICE_PORTS.gptSovits,
             ),
+          },
+          decision: {
+            modelsDir: decisionModelsDir ?? null,
           },
         };
 

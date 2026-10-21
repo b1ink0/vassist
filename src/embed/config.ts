@@ -1,4 +1,6 @@
 import type { AIConfig, STTConfig, TTSConfig } from "../config/aiConfig";
+import { LLM_PARAMETER_KEYS } from "../config/llmParameters";
+import type { LLMParameters } from "../config/llmParameters";
 import type { UIConfig } from "../config/uiConfig";
 import type { StorageAdapterSelection } from "../storage/StorageAdapterRegistry";
 import type { ResourceLoaderSelection } from "../utils/resource-loader/types";
@@ -62,6 +64,7 @@ export type VAssistFeatureName =
 export type VAssistSettingsSubTabId =
   | "llm.provider"
   | "llm.routing"
+  | "llm.decision"
   | "llm.profiles";
 
 export type VAssistSettingsSectionId =
@@ -71,6 +74,7 @@ export type VAssistSettingsSectionId =
   | "ui.developer"
   | "llm.provider"
   | "llm.routing"
+  | "llm.decision"
   | "llm.profiles"
   | "tts.provider"
   | "tts.remoteProfiles"
@@ -83,6 +87,9 @@ export type VAssistSettingsSectionId =
   | "ai-plus.writer";
 
 export type VAssistSettingsFieldId =
+  | `llm.${"openai" | "ollama" | "desktop-local" | "android-local" | "chromeAi"}.${keyof LLMParameters}`
+  | "llm.openai.endpoint"
+  | "llm.ollama.apiFormat"
   | "ui.aiToolbar.enabled"
   | "ui.aiToolbar.showOnInputFocus"
   | "ui.aiToolbar.showOnImageHover"
@@ -620,6 +627,7 @@ export const VASSIST_SETTINGS_TABS: readonly VAssistSettingsTabId[] = [
 export const VASSIST_SETTINGS_SUB_TABS: readonly VAssistSettingsSubTabId[] = [
   "llm.provider",
   "llm.routing",
+  "llm.decision",
   "llm.profiles",
 ];
 
@@ -630,6 +638,7 @@ export const VASSIST_SETTINGS_SECTIONS: readonly VAssistSettingsSectionId[] = [
   "ui.developer",
   "llm.provider",
   "llm.routing",
+  "llm.decision",
   "llm.profiles",
   "tts.provider",
   "tts.remoteProfiles",
@@ -643,6 +652,15 @@ export const VASSIST_SETTINGS_SECTIONS: readonly VAssistSettingsSectionId[] = [
 ];
 
 export const VASSIST_SETTINGS_FIELDS: readonly VAssistSettingsFieldId[] = [
+  ...(
+    ["openai", "ollama", "desktop-local", "android-local", "chromeAi"] as const
+  ).flatMap((provider) =>
+    LLM_PARAMETER_KEYS.map(
+      (field) => `llm.${provider}.${field}` as VAssistSettingsFieldId,
+    ),
+  ),
+  "llm.openai.endpoint",
+  "llm.ollama.apiFormat",
   "ui.aiToolbar.enabled",
   "ui.aiToolbar.showOnInputFocus",
   "ui.aiToolbar.showOnImageHover",

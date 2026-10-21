@@ -5,9 +5,15 @@
  */
 
 import OpenAI from "openai";
-import { AIProviders } from "../../config/aiConfig";
+import { AIProviders, DefaultAIConfig } from "../../config/aiConfig";
+import {
+  buildLLMRequestParameters,
+  getLLMProfileParameters,
+  restoreLLMProfileParameters,
+} from "../../config/llmParameters";
 import { PromptConfig } from "../../config/promptConfig";
 import ChromeAIValidator from "./ChromeAIValidator";
+import OllamaClient from "./OllamaClient";
 import Logger from "../common/LoggerService";
 import FrameCaptureService from "../media/FrameCaptureService";
 import { isExtension } from "../../utils/PlatformUtils";
@@ -99,8 +105,8 @@ class AIService {
   _resolveRemoteModelListUrl(config: RemoteModelListConfig): string {
     if (config.provider === "openai") {
       return joinEndpointPath(
-        DEFAULT_ENDPOINTS.openaiApi,
-        SERVICE_ROUTES.openai.models,
+        this._normalizeEndpoint(config.endpoint, DEFAULT_ENDPOINTS.openaiApi),
+        "models",
       );
     }
 
@@ -134,10 +140,15 @@ class AIService {
     if (provider === AIProviders.OPENAI || provider === "openai") {
       return {
         client: new OpenAI({
-          apiKey: providerConfig.apiKey,
+          apiKey: providerConfig.apiKey || "local",
+          baseURL: this._normalizeEndpoint(
+            providerConfig.endpoint,
+            DEFAULT_ENDPOINTS.openaiApi,
+          ),
           dangerouslyAllowBrowser: !this.isExtensionMode,
         }),
         config: {
+          ...getLLMProfileParameters(providerConfig),
           model: providerConfig.model,
           temperature: providerConfig.temperature,
           maxTokens: providerConfig.maxTokens,
@@ -156,17 +167,23 @@ class AIService {
         DEFAULT_ENDPOINTS.ollama,
       );
       return {
-        client: new OpenAI({
-          apiKey: providerConfig.apiKey || "ollama",
-          baseURL: endpoint,
-          dangerouslyAllowBrowser: !this.isExtensionMode,
-        }),
+        client:
+          providerConfig.apiFormat === "ollama"
+            ? new OllamaClient(endpoint, providerConfig, providerConfig.apiKey)
+            : new OpenAI({
+                apiKey: providerConfig.apiKey || "ollama",
+                baseURL: endpoint,
+                dangerouslyAllowBrowser: !this.isExtensionMode,
+              }),
         config: {
+          ...getLLMProfileParameters(providerConfig),
           model: providerConfig.model,
           temperature: providerConfig.temperature,
           maxTokens: providerConfig.maxTokens,
           enableImageSupport: providerConfig.enableImageSupport !== false,
-          enableAudioSupport: providerConfig.enableAudioSupport !== false,
+          enableAudioSupport:
+            providerConfig.apiFormat !== "ollama" &&
+            providerConfig.enableAudioSupport !== false,
           thinkingEnabled: providerConfig.thinkingEnabled === true,
           thinkingEffort: providerConfig.thinkingEffort,
           routing: providerConfig.routing || { enabled: false },
@@ -189,9 +206,10 @@ class AIService {
           dangerouslyAllowBrowser: true,
         }),
         config: {
+          ...getLLMProfileParameters(providerConfig),
           model: providerConfig.model || "qwen3-local",
-          temperature: providerConfig.temperature || 0.7,
-          maxTokens: providerConfig.maxTokens || 2048,
+          temperature: providerConfig.temperature ?? 0.7,
+          maxTokens: providerConfig.maxTokens ?? 2048,
           thinkingEnabled: providerConfig.thinkingEnabled === true,
           thinkingEffort: providerConfig.thinkingEffort,
           enableImageSupport: false,
@@ -216,9 +234,11 @@ class AIService {
           dangerouslyAllowBrowser: true,
         }),
         config: {
+          ...getLLMProfileParameters(providerConfig),
           model: providerConfig.model || "qwen3:0.6b",
-          temperature: providerConfig.temperature || 0.7,
-          maxTokens: providerConfig.maxTokens || 2048,
+          backend: providerConfig.backend ?? "auto",
+          temperature: providerConfig.temperature ?? 0.7,
+          maxTokens: providerConfig.maxTokens ?? 2048,
           customModelsPath: providerConfig.customModelsPath || null,
           thinkingEnabled: providerConfig.thinkingEnabled === true,
           thinkingEffort: providerConfig.thinkingEffort,
@@ -283,9 +303,20 @@ class AIService {
       };
     }
 
-    const runtime = this._buildProviderRuntime(profile.provider, profile);
+    const defaults =
+      (DefaultAIConfig as unknown as Record<string, object>)[
+        profile.provider
+      ] ?? {};
+    const runtime = this._buildProviderRuntime(profile.provider, {
+      ...profile,
+      ...restoreLLMProfileParameters(profile, defaults),
+    });
     return {
-      modelOverride: modelConfig.modelName || runtime.config.model || null,
+      modelOverride:
+        modelConfig.selectedModel ||
+        modelConfig.modelName ||
+        runtime.config.model ||
+        null,
       providerOverride: profile.provider,
       configOverride: { ...runtime.config, routing: { enabled: false } },
       clientOverride: runtime.client,
@@ -734,12 +765,16 @@ class AIService {
     const body: any = {
       model: state.config.model,
       messages: formattedMessages,
-      temperature: state.config.temperature,
-      max_tokens: state.config.maxTokens,
+      ...buildLLMRequestParameters(state.provider, state.config),
       stream: true,
     };
 
     const cfg = state.config as any;
+    if (state.provider === "desktop-local") {
+      body.llmEngine = cfg.llmEngine;
+      body.llmBackend =
+        cfg.llmEngine === "llama-server" ? cfg.llmBackend : cfg.backend;
+    }
     const thinkingOn = cfg.thinkingEnabled === true;
     if (state.provider !== AIProviders.OPENAI && state.provider !== "openai") {
       body.enable_thinking = thinkingOn;
@@ -749,8 +784,8 @@ class AIService {
       if (thinkingOn && cfg.thinkingEffort) {
         body.reasoning_effort = cfg.thinkingEffort;
       }
-    } else {
-      // Official OpenAI: reasoning_effort is the native knob
+    } else if (thinkingOn || cfg.thinkingEffort) {
+      // Reasoning parameters are opt-in because support is model-dependent.
       body.reasoning_effort = thinkingOn
         ? cfg.thinkingEffort || "medium"
         : "none";
@@ -1526,11 +1561,20 @@ class AIService {
 
         // Session config
         const sessionConfig: any = {
-          temperature: state.config.temperature,
-          topK: state.config.topK,
           language: state.config.outputLanguage || "en",
           initialPrompts: systemPrompts.length > 0 ? systemPrompts : undefined,
         };
+        const chromeParams = await ChromeAIValidator.getModelParams();
+        if (chromeParams) {
+          sessionConfig.temperature = Math.min(
+            state.config.temperature ?? chromeParams.defaultTemperature ?? 1,
+            chromeParams.maxTemperature ?? Infinity,
+          );
+          sessionConfig.topK = Math.min(
+            state.config.topK ?? chromeParams.defaultTopK ?? 3,
+            chromeParams.maxTopK ?? Infinity,
+          );
+        }
 
         // Add multi-modal support if enabled in config (default: true)
         const imageSupport = state.config.enableImageSupport !== false;

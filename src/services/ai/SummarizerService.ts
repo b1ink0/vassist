@@ -7,6 +7,10 @@
 
 import { createLocalOpenAiClient } from "./LocalLlmClientFactory";
 import OpenAI from "openai";
+import {
+  DEFAULT_ENDPOINTS,
+  normalizeOpenAIBaseUrl,
+} from "../../config/serviceEndpoints";
 import Logger from "../common/LoggerService";
 import { isExtension } from "../../utils/PlatformUtils";
 
@@ -161,7 +165,11 @@ class SummarizerService {
       } else if (provider === "openai") {
         const openaiConfig = config.openai;
         state.llmClient = new OpenAI({
-          apiKey: openaiConfig.apiKey,
+          apiKey: openaiConfig.apiKey || "local",
+          baseURL: normalizeOpenAIBaseUrl(
+            openaiConfig.endpoint,
+            DEFAULT_ENDPOINTS.openaiApi,
+          ),
           dangerouslyAllowBrowser: !this.isExtensionMode,
         });
 

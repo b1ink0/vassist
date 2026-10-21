@@ -74,6 +74,7 @@ type LLMHandlersDeps = {
   path: typeof pathType;
   require: NodeRequire;
   getModelsDir: (customPath?: string | null) => string;
+  getDecisionModelsDir: (customPath?: string | null) => string;
   llmBackendManager: {
     getStatus: (arg: { backend?: string }) => unknown;
     installBackend: (arg: {
@@ -244,8 +245,14 @@ export function registerLLMHandlers({
   path,
   require,
   getModelsDir,
+  getDecisionModelsDir,
   llmBackendManager,
 }: LLMHandlersDeps) {
+  ipcMain.handle(
+    "llm:get-decision-models-dir",
+    (_event: IpcMainInvokeEvent, customPath?: string | null) =>
+      getDecisionModelsDir(customPath),
+  );
   ipcMain.handle(
     "llm:search-ollama-models",
     async (_event: IpcMainInvokeEvent, query = "", page = 1, pageSize = 20) => {
@@ -371,13 +378,14 @@ export function registerLLMHandlers({
       query = "",
       cursor = "",
       pageSize = 20,
+      filter = "",
     ) => {
       try {
         const params = new URLSearchParams();
         if (String(query || "").trim()) {
           params.set("search", String(query).trim());
         }
-        params.set("filter", "gguf");
+        params.set("filter", String(filter || "gguf").trim() || "gguf");
         params.set(
           "limit",
           String(Math.max(1, Math.min(50, Number(pageSize) || 20))),
@@ -402,9 +410,24 @@ export function registerLLMHandlers({
         }
 
         const payload = (await response.json()) as HuggingFaceSearchEntry[];
+        const requiredTags = String(filter || "")
+          .split(",")
+          .map((tag) => tag.trim().toLowerCase())
+          .filter(Boolean);
         const items = payload
           .filter(
             (entry) => typeof entry.id === "string" && entry.id.length > 0,
+          )
+          .filter((entry) =>
+            requiredTags.length === 0
+              ? true
+              : requiredTags.every(
+                  (tag) =>
+                    Array.isArray(entry.tags) &&
+                    entry.tags.some(
+                      (entryTag) => entryTag.toLowerCase() === tag,
+                    ),
+                ),
           )
           .map((entry) => {
             const description = [

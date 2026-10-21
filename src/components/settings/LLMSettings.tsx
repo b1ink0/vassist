@@ -18,6 +18,7 @@ import {
 } from "../../hooks/config/useConfigStatus";
 import {
   AIProviders,
+  DefaultAIConfig,
   type AIConfig,
   type AIRemoteProviderProfile,
 } from "../../config/aiConfig";
@@ -31,6 +32,14 @@ import { useAndroidApi } from "../../hooks/useAndroidStore";
 import ComputeUnitCard from "./llm/ComputeUnitCard";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
 import DesktopLLMConfig from "./llm/DesktopLLMConfig";
+import LLMParameterSettings, {
+  NumberParameter,
+} from "./llm/LLMParameterSettings";
+import {
+  getLLMProfileParameters,
+  restoreLLMProfileParameters,
+} from "../../config/llmParameters";
+import ChromeAIValidator from "../../services/ai/ChromeAIValidator";
 import LocalLLMModelManager from "./llm/LocalLLMModelManager";
 import {
   getLLMModelStorage,
@@ -48,6 +57,7 @@ import { cn } from "../../utils/cn";
 import { Button, Input, Select, Card, SettingsRow, TabBar } from "../ui";
 
 const SettingsSubTabContent = lazy(() => import("./SettingsSubTabContent"));
+const DecisionSettings = lazy(() => import("./llm/DecisionSettings"));
 import {
   DEFAULT_SERVICE_PORTS,
   DEFAULT_ENDPOINTS,
@@ -152,7 +162,7 @@ interface LLMSettingsProps {
     | undefined;
 }
 
-type LLMSubTabId = "provider" | "routing" | "profiles";
+type LLMSubTabId = "provider" | "routing" | "decision" | "profiles";
 
 const PROVIDER_LABELS: Record<string, string> = {
   [AIProviders.OPENAI]: "OpenAI",
@@ -166,6 +176,7 @@ const getRemoteProfileOptionLabel = (profile: AIRemoteProviderProfile) =>
   profile.name;
 
 interface DesktopLlmBridge {
+  getDecisionModelsDir: (customPath?: string | null) => Promise<unknown>;
   listModels: (customPath?: string | null) => Promise<unknown>;
   pullModel: (
     modelName: string,
@@ -182,6 +193,18 @@ interface DesktopLlmBridge {
     customPath?: string | null,
   ) => Promise<unknown>;
   chooseModelsFolder: () => Promise<unknown>;
+  searchHuggingFaceModels?: (
+    query: string,
+    cursor?: string,
+    pageSize?: number,
+    filter?: string,
+  ) => Promise<unknown>;
+  listHuggingFaceFiles?: (
+    repoId: string,
+    query?: string,
+    page?: number,
+    pageSize?: number,
+  ) => Promise<unknown>;
   onDownloadProgress: (
     callback: (progress: { percent: number; status: string }) => void,
   ) => (() => void) | undefined;
@@ -200,6 +223,7 @@ const isDesktopLlmBridge = (value: unknown): value is DesktopLlmBridge => {
   const record = value as Record<string, unknown>;
   return (
     typeof record.listModels === "function" &&
+    typeof record.getDecisionModelsDir === "function" &&
     typeof record.pullModel === "function" &&
     typeof record.downloadModel === "function" &&
     typeof record.deleteModel === "function" &&
@@ -232,10 +256,17 @@ const RemoteProfileManager = ({
     (profile) => profile.provider === provider,
   );
   const [profileName, setProfileName] = React.useState("");
-  const [selectedProfileId, setSelectedProfileId] = React.useState("");
+  const selectedProfileId = aiConfig[provider].selectedBackendProfileId || "";
+  const setSelectedProfileId = React.useCallback(
+    (id: string) => {
+      updateAIConfig(`${provider}.selectedBackendProfileId`, id);
+    },
+    [provider, updateAIConfig],
+  );
   const selectedProfile =
     profiles.find((profile) => profile.id === selectedProfileId) || null;
   const actionVariant = isLightBackground ? "dark" : "ghost";
+  const androidApi = useAndroidApi();
 
   React.useEffect(() => {
     if (
@@ -244,7 +275,7 @@ const RemoteProfileManager = ({
     ) {
       setSelectedProfileId("");
     }
-  }, [profiles, selectedProfileId]);
+  }, [profiles, selectedProfileId, setSelectedProfileId]);
 
   React.useEffect(() => {
     if (!selectedProfile) {
@@ -261,10 +292,13 @@ const RemoteProfileManager = ({
     if (profile.provider === AIProviders.OPENAI) {
       updateAIConfig("openai", {
         ...aiConfig.openai,
+        selectedBackendProfileId: profile.id,
+        ...restoreLLMProfileParameters(profile, DefaultAIConfig.openai),
+        endpoint: profile.endpoint || DefaultAIConfig.openai.endpoint,
         apiKey: profile.apiKey || "",
         model: profile.model,
-        temperature: profile.temperature ?? aiConfig.openai.temperature,
-        maxTokens: profile.maxTokens ?? aiConfig.openai.maxTokens,
+        temperature: profile.temperature ?? DefaultAIConfig.openai.temperature,
+        maxTokens: profile.maxTokens ?? DefaultAIConfig.openai.maxTokens,
         enableImageSupport: profile.enableImageSupport !== false,
         enableAudioSupport: profile.enableAudioSupport !== false,
       });
@@ -274,44 +308,63 @@ const RemoteProfileManager = ({
     if (profile.provider === AIProviders.ANDROID_LOCAL) {
       updateAIConfig("android-local", {
         ...aiConfig["android-local"],
-        endpoint: profile.endpoint || aiConfig["android-local"].endpoint,
+        selectedBackendProfileId: profile.id,
+        ...restoreLLMProfileParameters(
+          profile,
+          DefaultAIConfig["android-local"],
+        ),
+        endpoint: profile.endpoint || DefaultAIConfig["android-local"].endpoint,
         model: profile.model,
         temperature:
-          profile.temperature ?? aiConfig["android-local"].temperature,
-        maxTokens: profile.maxTokens ?? aiConfig["android-local"].maxTokens,
+          profile.temperature ?? DefaultAIConfig["android-local"].temperature,
+        maxTokens:
+          profile.maxTokens ?? DefaultAIConfig["android-local"].maxTokens,
       });
+      void androidApi?.setLLMComputeUnit?.(profile.computeUnit || "auto");
       return;
     }
 
     if (profile.provider === AIProviders.DESKTOP_LOCAL) {
       updateAIConfig("desktop-local", {
         ...aiConfig["desktop-local"],
-        endpoint: profile.endpoint || aiConfig["desktop-local"].endpoint,
+        selectedBackendProfileId: profile.id,
+        ...restoreLLMProfileParameters(
+          profile,
+          DefaultAIConfig["desktop-local"],
+        ),
+        endpoint: profile.endpoint || DefaultAIConfig["desktop-local"].endpoint,
         model: profile.model,
         customModelsPath:
           profile.customModelsPath ??
-          aiConfig["desktop-local"].customModelsPath,
+          DefaultAIConfig["desktop-local"].customModelsPath,
         shareOnNetwork:
-          profile.shareOnNetwork ?? aiConfig["desktop-local"].shareOnNetwork,
-        serverPort: profile.serverPort ?? aiConfig["desktop-local"].serverPort,
-        backend: profile.backend ?? aiConfig["desktop-local"].backend,
+          profile.shareOnNetwork ??
+          DefaultAIConfig["desktop-local"].shareOnNetwork,
+        serverPort:
+          profile.serverPort ?? DefaultAIConfig["desktop-local"].serverPort,
+        backend: profile.backend ?? DefaultAIConfig["desktop-local"].backend,
         temperature:
-          profile.temperature ?? aiConfig["desktop-local"].temperature,
-        maxTokens: profile.maxTokens ?? aiConfig["desktop-local"].maxTokens,
+          profile.temperature ?? DefaultAIConfig["desktop-local"].temperature,
+        maxTokens:
+          profile.maxTokens ?? DefaultAIConfig["desktop-local"].maxTokens,
         contextSize:
-          profile.contextSize ?? aiConfig["desktop-local"].contextSize,
-        gpuLayers: profile.gpuLayers ?? aiConfig["desktop-local"].gpuLayers,
-        threads: profile.threads ?? aiConfig["desktop-local"].threads,
+          profile.contextSize ?? DefaultAIConfig["desktop-local"].contextSize,
+        gpuLayers:
+          profile.gpuLayers ?? DefaultAIConfig["desktop-local"].gpuLayers,
+        threads: profile.threads ?? DefaultAIConfig["desktop-local"].threads,
       });
       return;
     }
 
     updateAIConfig("ollama", {
       ...aiConfig.ollama,
-      endpoint: profile.endpoint || aiConfig.ollama.endpoint,
+      selectedBackendProfileId: profile.id,
+      apiKey: profile.apiKey || "",
+      ...restoreLLMProfileParameters(profile, DefaultAIConfig.ollama),
+      endpoint: profile.endpoint || DefaultAIConfig.ollama.endpoint,
       model: profile.model,
-      temperature: profile.temperature ?? aiConfig.ollama.temperature,
-      maxTokens: profile.maxTokens ?? aiConfig.ollama.maxTokens,
+      temperature: profile.temperature ?? DefaultAIConfig.ollama.temperature,
+      maxTokens: profile.maxTokens ?? DefaultAIConfig.ollama.maxTokens,
       enableImageSupport: profile.enableImageSupport !== false,
       enableAudioSupport: profile.enableAudioSupport !== false,
     });
@@ -344,6 +397,8 @@ const RemoteProfileManager = ({
         id: nextProfileId,
         name: profileName.trim() || selectedProfile?.name || defaultName,
         provider: "openai",
+        ...getLLMProfileParameters(aiConfig.openai),
+        endpoint: aiConfig.openai.endpoint,
         apiKey: aiConfig.openai.apiKey,
         model: aiConfig.openai.model || "",
         temperature: aiConfig.openai.temperature,
@@ -356,6 +411,7 @@ const RemoteProfileManager = ({
         id: nextProfileId,
         name: profileName.trim() || selectedProfile?.name || defaultName,
         provider: "android-local",
+        ...getLLMProfileParameters(aiConfig["android-local"]),
         endpoint: aiConfig["android-local"].endpoint,
         model: aiConfig["android-local"].model || "",
         temperature: aiConfig["android-local"].temperature,
@@ -368,6 +424,7 @@ const RemoteProfileManager = ({
         id: nextProfileId,
         name: profileName.trim() || selectedProfile?.name || defaultName,
         provider: "desktop-local",
+        ...getLLMProfileParameters(aiConfig["desktop-local"]),
         endpoint: aiConfig["desktop-local"].endpoint,
         model: aiConfig["desktop-local"].model || "",
         customModelsPath: aiConfig["desktop-local"].customModelsPath ?? null,
@@ -387,8 +444,9 @@ const RemoteProfileManager = ({
         id: nextProfileId,
         name: profileName.trim() || selectedProfile?.name || defaultName,
         provider: "ollama",
+        ...getLLMProfileParameters(aiConfig.ollama),
         endpoint: aiConfig.ollama.endpoint,
-        apiKey: "",
+        apiKey: aiConfig.ollama.apiKey,
         model: aiConfig.ollama.model || "",
         temperature: aiConfig.ollama.temperature,
         maxTokens: aiConfig.ollama.maxTokens,
@@ -1438,6 +1496,21 @@ const LLMSettings = ({
     useConfigStatusActions();
   const aiConfig = useAIConfig();
   const aiTesting = useAITesting();
+  const [chromeParams, setChromeParams] = useState<Record<
+    string,
+    number
+  > | null>(null);
+  useEffect(() => {
+    let active = true;
+    if (aiConfig.provider === AIProviders.CHROME_AI) {
+      void ChromeAIValidator.getModelParams().then((params) => {
+        if (active) setChromeParams(params);
+      });
+    }
+    return () => {
+      active = false;
+    };
+  }, [aiConfig.provider, hasChromeAI]);
   const { updateAIConfig, testAIConnection } = useConfigAIActions();
   const uiConfig = useUIConfig();
   const { updateUIConfig } = useConfigUIActions();
@@ -1453,6 +1526,34 @@ const LLMSettings = ({
   const desktopLlmBridge = isDesktopLlmBridge(desktopAPI?.llm)
     ? desktopAPI.llm
     : null;
+  const [desktopDecisionModelsPath, setDesktopDecisionModelsPath] = useState<
+    string | null
+  >(null);
+  const desktopCustomModelsPath =
+    aiConfig["desktop-local"]?.customModelsPath ?? null;
+
+  useEffect(() => {
+    let active = true;
+    if (!desktopLlmBridge) {
+      setDesktopDecisionModelsPath(null);
+      return () => {
+        active = false;
+      };
+    }
+    void desktopLlmBridge
+      .getDecisionModelsDir(desktopCustomModelsPath)
+      .then((value) => {
+        if (active && typeof value === "string") {
+          setDesktopDecisionModelsPath(value);
+        }
+      })
+      .catch(() => {
+        if (active) setDesktopDecisionModelsPath(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [desktopCustomModelsPath, desktopLlmBridge]);
   const desktopLlmApi = useMemo(() => {
     if (!desktopLlmBridge) {
       return null;
@@ -1503,12 +1604,18 @@ const LLMSettings = ({
               pageSize,
             ) as Promise<DiscoveryResult>)
           : unsupportedDiscovery(),
-      searchHuggingFaceModels: (query: string, cursor = "", pageSize = 20) =>
+      searchHuggingFaceModels: (
+        query: string,
+        cursor = "",
+        pageSize = 20,
+        filter = "",
+      ) =>
         desktopLlmBridge.searchHuggingFaceModels
           ? (desktopLlmBridge.searchHuggingFaceModels(
               query,
               cursor,
               pageSize,
+              filter,
             ) as Promise<DiscoveryResult>)
           : unsupportedDiscovery(),
       listHuggingFaceFiles: (
@@ -1655,11 +1762,13 @@ const LLMSettings = ({
   const requestedLocalSubTab =
     requestedSubTab === "llm.routing"
       ? "routing"
-      : requestedSubTab === "llm.profiles"
-        ? "profiles"
-        : requestedSubTab === "llm.provider"
-          ? "provider"
-          : null;
+      : requestedSubTab === "llm.decision"
+        ? "decision"
+        : requestedSubTab === "llm.profiles"
+          ? "profiles"
+          : requestedSubTab === "llm.provider"
+            ? "provider"
+            : null;
   const [subTabIndicatorStyle, setSubTabIndicatorStyle] = useState({
     left: 0,
     width: 0,
@@ -1667,6 +1776,7 @@ const LLMSettings = ({
   const subTabsRef = useRef<Record<LLMSubTabId, HTMLButtonElement | null>>({
     provider: null,
     routing: null,
+    decision: null,
     profiles: null,
   });
 
@@ -1763,6 +1873,11 @@ const LLMSettings = ({
                     {(
                       [
                         ["llamaServer", "llama-server", "Local LLM worker"],
+                        [
+                          "decisionLlamaServer",
+                          "decision-server",
+                          "System One decision worker",
+                        ],
                         ["gptSovits", "GPT-SoVITS", "Local voice synthesis"],
                         [
                           "fasterWhisper",
@@ -1893,6 +2008,20 @@ const LLMSettings = ({
             provider="openai"
           />
           <SettingsRow
+            label="Endpoint URL"
+            targetId="llm.openai.endpoint"
+            layout="stacked"
+          >
+            <Input
+              value={aiConfig.openai.endpoint}
+              onChange={(event) =>
+                updateAIConfig("openai.endpoint", event.target.value)
+              }
+              placeholder={DEFAULT_ENDPOINTS.openaiApi}
+              variant={isLightBackground ? "dark" : "default"}
+            />
+          </SettingsRow>
+          <SettingsRow
             label="API Key"
             targetId="llm.openai.apiKey"
             layout="stacked"
@@ -1915,6 +2044,7 @@ const LLMSettings = ({
               value={aiConfig.openai.model}
               onChange={(value) => updateAIConfig("openai.model", value)}
               provider="openai"
+              endpoint={aiConfig.openai.endpoint}
               placeholder="gpt-4o"
               apiKey={aiConfig.openai.apiKey}
               isLightBackground={isLightBackground}
@@ -1930,6 +2060,14 @@ const LLMSettings = ({
             aiConfig={aiConfig}
             updateAIConfig={updateAIConfig}
           />
+          <LLMParameterSettings
+            provider="openai"
+            config={aiConfig.openai}
+            onChange={(field, value) =>
+              updateAIConfig(`openai.${field}`, value)
+            }
+            isLightBackground={isLightBackground}
+          />
         </>
       )}
 
@@ -1941,6 +2079,23 @@ const LLMSettings = ({
             isLightBackground={isLightBackground}
             provider="ollama"
           />
+          <SettingsRow
+            label="API format"
+            targetId="llm.ollama.apiFormat"
+            layout="stacked"
+          >
+            <Select
+              value={aiConfig.ollama.apiFormat}
+              onChange={(event) =>
+                updateAIConfig("ollama.apiFormat", event.target.value)
+              }
+              variant={isLightBackground ? "dark" : "default"}
+              options={[
+                { value: "openai", label: "OpenAI-compatible" },
+                { value: "ollama", label: "Ollama native (runtime options)" },
+              ]}
+            />
+          </SettingsRow>
           <SettingsRow
             label="Endpoint URL"
             targetId="llm.ollama.endpoint"
@@ -1955,6 +2110,21 @@ const LLMSettings = ({
               placeholder={DEFAULT_ENDPOINTS.ollama}
               variant={isLightBackground ? "dark" : "default"}
               className="w-full"
+            />
+          </SettingsRow>
+          <SettingsRow
+            label="API Key"
+            targetId="llm.ollama.apiKey"
+            layout="stacked"
+          >
+            <Input
+              type="password"
+              value={aiConfig.ollama.apiKey}
+              onChange={(event) =>
+                updateAIConfig("ollama.apiKey", event.target.value)
+              }
+              placeholder="Optional"
+              variant={isLightBackground ? "dark" : "default"}
             />
           </SettingsRow>
           <SettingsRow
@@ -1977,11 +2147,21 @@ const LLMSettings = ({
             updateAIConfig={updateAIConfig}
             additionalNote="Requires multi-modal capable model."
           />
-          <AudioSupportToggle
-            providerKey="ollama"
-            aiConfig={aiConfig}
-            updateAIConfig={updateAIConfig}
-            additionalNote="Requires multi-modal capable model."
+          {aiConfig.ollama.apiFormat !== "ollama" && (
+            <AudioSupportToggle
+              providerKey="ollama"
+              aiConfig={aiConfig}
+              updateAIConfig={updateAIConfig}
+              additionalNote="Requires multi-modal capable model."
+            />
+          )}
+          <LLMParameterSettings
+            provider="ollama"
+            config={aiConfig.ollama}
+            onChange={(field, value) =>
+              updateAIConfig(`ollama.${field}`, value)
+            }
+            isLightBackground={isLightBackground}
           />
         </>
       )}
@@ -2044,45 +2224,14 @@ const LLMSettings = ({
             supportsCustomFolder={false}
           />
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">
-              Temperature: {aiConfig["android-local"]?.temperature || 0.7}
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="2"
-              step="0.1"
-              value={aiConfig["android-local"]?.temperature || 0.7}
-              onChange={(e) =>
-                updateAIConfig(
-                  "android-local.temperature",
-                  parseFloat(e.target.value),
-                )
-              }
-              className="w-full"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">
-              Max Tokens: {aiConfig["android-local"]?.maxTokens || 2048}
-            </label>
-            <input
-              type="range"
-              min="64"
-              max="2048"
-              step="64"
-              value={aiConfig["android-local"]?.maxTokens || 2048}
-              onChange={(e) =>
-                updateAIConfig(
-                  "android-local.maxTokens",
-                  parseInt(e.target.value),
-                )
-              }
-              className="w-full"
-            />
-          </div>
+          <LLMParameterSettings
+            provider="android-local"
+            config={aiConfig["android-local"]}
+            onChange={(field, value) =>
+              updateAIConfig(`android-local.${field}`, value)
+            }
+            isLightBackground={isLightBackground}
+          />
         </>
       )}
 
@@ -2198,42 +2347,45 @@ const LLMSettings = ({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">
-              Temperature: {aiConfig.chromeAi?.temperature || 1.0}
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="2"
-              step="0.1"
-              value={aiConfig.chromeAi?.temperature || 1.0}
-              onChange={(e) =>
-                updateAIConfig(
-                  "chromeAi.temperature",
-                  parseFloat(e.target.value),
-                )
-              }
-              className="w-full"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">
-              Top-K: {aiConfig.chromeAi?.topK || 3}
-            </label>
-            <input
-              type="range"
-              min="1"
-              max="10"
-              step="1"
-              value={aiConfig.chromeAi?.topK || 3}
-              onChange={(e) =>
-                updateAIConfig("chromeAi.topK", parseInt(e.target.value))
-              }
-              className="w-full"
-            />
-          </div>
+          {chromeParams ? (
+            <div className="space-y-4">
+              <NumberParameter
+                label="Temperature"
+                value={aiConfig.chromeAi.temperature}
+                min={0}
+                max={chromeParams.maxTemperature}
+                step={0.01}
+                onChange={(value) =>
+                  updateAIConfig(
+                    "chromeAi.temperature",
+                    value ?? chromeParams.defaultTemperature,
+                  )
+                }
+                isLightBackground={isLightBackground}
+              />
+              <NumberParameter
+                label="Top K"
+                value={aiConfig.chromeAi.topK}
+                min={1}
+                max={chromeParams.maxTopK}
+                onChange={(value) =>
+                  updateAIConfig(
+                    "chromeAi.topK",
+                    value ?? chromeParams.defaultTopK,
+                  )
+                }
+                isLightBackground={isLightBackground}
+              />
+              <p className="text-xs text-white/55">
+                Context capacity is managed by the browser.
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-white/55">
+              Sampling and context capacity are managed by the browser. Numeric
+              sampling controls are available when the browser exposes them.
+            </p>
+          )}
 
           <div className="space-y-2">
             <label className="block text-sm font-medium text-white/90">
@@ -2468,6 +2620,7 @@ const LLMSettings = ({
           tabs={[
             { id: "provider", label: "Provider" },
             { id: "routing", label: "Routing" },
+            { id: "decision", label: "Decision" },
             { id: "profiles", label: "Profiles" },
           ]}
           size="compact"
@@ -2495,6 +2648,16 @@ const LLMSettings = ({
                 <div className="px-4 md:px-6 py-2 md:py-4 space-y-6">
                   {activeSubTab === "provider" && renderProviderSettings()}
                   {activeSubTab === "routing" && renderRoutingSettings()}
+                  {activeSubTab === "decision" && (
+                    <DecisionSettings
+                      aiConfig={aiConfig}
+                      provider={aiConfig.provider}
+                      isLightBackground={isLightBackground}
+                      updateAIConfig={updateAIConfig}
+                      storageService={desktopStorageService}
+                      decisionModelsPath={desktopDecisionModelsPath}
+                    />
+                  )}
                   {activeSubTab === "profiles" && renderProfileSettings()}
                 </div>
               )}

@@ -9,6 +9,7 @@ import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
+import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
@@ -69,8 +70,17 @@ class LiteRtLmService(private val context: Context) {
     var activeBackend: String = "cpu"
         private set
 
-    suspend fun initialize(modelPath: String, device: String = "auto") {
+    private var maxContextTokens: Int? = null
+    private var samplerConfig: SamplerConfig? = null
+
+    fun configureSampling(temperature: Float?, topK: Int?, topP: Float?, seed: Int?) {
+        samplerConfig = if (temperature == null && topK == null && topP == null && seed == null) null
+        else SamplerConfig(topK = topK ?: 40, topP = (topP ?: 0.9f).toDouble(), temperature = (temperature ?: 0.7f).toDouble(), seed = seed ?: 0)
+    }
+
+    suspend fun initialize(modelPath: String, device: String = "auto", contextSize: Int = 0) {
         withContext(engineDispatcher) {
+            maxContextTokens = contextSize.takeIf { it > 0 }
             // Clear cached caps from previous models — each model probes
             // independently so one model's failure doesn't poison another
             if (currentModelPath != modelPath) {
@@ -124,6 +134,7 @@ class LiteRtLmService(private val context: Context) {
             visionBackend = visionBackend,
             audioBackend = audioBackend,
             maxNumImages = 4,
+            maxNumTokens = maxContextTokens,
             cacheDir = context.cacheDir.absolutePath
         )
         releaseInternal()
@@ -146,6 +157,8 @@ class LiteRtLmService(private val context: Context) {
         val history = turns.dropLast(1)
 
         val config = ConversationConfig(
+            samplerConfig = samplerConfig,
+            maxOutputToken = maxTokens,
             systemInstruction = Contents.of(systemText),
             initialMessages = history.mapNotNull { msg ->
                 when {

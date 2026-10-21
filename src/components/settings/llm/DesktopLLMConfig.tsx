@@ -3,15 +3,20 @@ import { Icon } from "../../icons";
 import { useDesktopApi } from "../../../hooks/useDesktopStore";
 import { isDesktop } from "../../../utils/PlatformUtils";
 import { Button, Select, Input } from "../../ui";
-import { cn } from "../../../utils/cn";
 import { DEFAULT_ENDPOINTS } from "../../../config/serviceEndpoints";
 import LocalLLMModelManager from "./LocalLLMModelManager";
+import LLMParameterSettings from "./LLMParameterSettings";
+import type { LLMParameters } from "../../../config/llmParameters";
+import {
+  CHAT_LLAMA_RUNTIME_PACKS,
+  default as LlamaServerRuntimeManager,
+} from "./LlamaServerRuntimeManager";
 import {
   getLLMModelStorage,
   type DiscoveryResult,
 } from "../../../services/storage/LLMModelStorageService";
 
-interface DesktopLLMConfigShape {
+interface DesktopLLMConfigShape extends LLMParameters {
   endpoint?: string;
   model?: string;
   customModelsPath?: string | null;
@@ -116,39 +121,6 @@ const getErrorMessage = (error: unknown): string => {
   return String(error);
 };
 
-const LLAMA_RUNTIME_PACKS: Record<
-  string,
-  Array<{
-    id: string;
-    title: string;
-    size: string;
-    requiresLink?: { label: string; url: string };
-  }>
-> = {
-  "win-x64": [
-    { id: "cpu", title: "CPU", size: "~18 MB" },
-    { id: "vulkan", title: "Vulkan (any GPU)", size: "~34 MB" },
-    { id: "cuda", title: "NVIDIA CUDA 12.4", size: "~640 MB incl. runtime" },
-    {
-      id: "rocm",
-      title: "AMD ROCm 7.14",
-      size: "~196 MB",
-      requiresLink: {
-        label: "ROCm 7.14 setup guide",
-        url: "https://github.com/ggml-org/llama.cpp/discussions/27047",
-      },
-    },
-  ],
-  "linux-x64": [
-    { id: "cpu", title: "CPU", size: "~16 MB" },
-    { id: "vulkan", title: "Vulkan (any GPU)", size: "~33 MB" },
-    { id: "rocm", title: "AMD ROCm 7.14", size: "~213 MB" },
-  ],
-  "mac-arm64": [
-    { id: "metal", title: "Metal (Apple Silicon)", size: "~11 MB" },
-  ],
-};
-
 /**
  * Reusable Desktop LLM Configuration Component
  * Used in both setup wizard and settings panel for desktop-local LLM provider
@@ -176,94 +148,9 @@ const DesktopLLMConfig = ({
   const [backendProgress, setBackendProgress] =
     useState<BackendProgress | null>(null);
 
-  const handleChange = (key: string, value: string | number | null) => {
+  const handleChange = (key: string, value: unknown) => {
     onChange({ [key]: value });
   };
-
-  const llamaServerApi = (
-    api as unknown as {
-      llamaServer?: {
-        getStatus?: () => Promise<{
-          installedBackends?: string[];
-          build?: string;
-          running?: boolean;
-          platformKey?: string;
-        }>;
-        install?: (backend: string) => Promise<unknown>;
-        onInstallLog?: (
-          cb: (log: { message?: string; type?: string }) => void,
-        ) => (() => void) | undefined;
-        onInstallProgress?: (
-          cb: (progress: { percent: number; status: string }) => void,
-        ) => (() => void) | undefined;
-        onInstallComplete?: (
-          cb: (result: { success?: boolean; error?: string }) => void,
-        ) => (() => void) | undefined;
-      };
-    }
-  ).llamaServer;
-  const [llamaStatus, setLlamaStatus] = useState<{
-    installedBackends?: string[];
-    build?: string;
-    running?: boolean;
-    platformKey?: string;
-  } | null>(null);
-  const [llamaInstalling, setLlamaInstalling] = useState<string | null>(null);
-  const [cppLlamaLogs, setCppLlamaLogs] = useState<string[]>([]);
-  const [llamaProgress, setLlamaProgress] = useState<{
-    percent: number;
-    status: string;
-  } | null>(null);
-  const fallbackPlatformKey = navigator.userAgent.includes("Mac")
-    ? "mac-arm64"
-    : navigator.userAgent.includes("Linux")
-      ? "linux-x64"
-      : "win-x64";
-  const platformKey = llamaStatus?.platformKey ?? fallbackPlatformKey;
-
-  useEffect(() => {
-    if (!llamaServerApi?.getStatus) return;
-    let cancelled = false;
-    const refresh = () =>
-      llamaServerApi
-        .getStatus?.()
-        .then((s) => {
-          if (!cancelled) setLlamaStatus(s);
-        })
-        .catch(() => {});
-    refresh();
-    const offLog = llamaServerApi.onInstallLog?.((log) => {
-      if (log?.message) {
-        setCppLlamaLogs((prev) => [...prev.slice(-30), String(log.message)]);
-      }
-    });
-    const offProg = llamaServerApi.onInstallProgress?.((progress) => {
-      if (progress && typeof progress === "object" && "percent" in progress) {
-        setLlamaProgress(progress as { percent: number; status: string });
-      }
-    });
-    const offDone = llamaServerApi.onInstallComplete?.((result) => {
-      setLlamaInstalling(null);
-      setLlamaProgress(null);
-      if (result?.success) refresh();
-    });
-    return () => {
-      cancelled = true;
-      offLog?.();
-      offProg?.();
-      offDone?.();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (refreshTrigger === undefined || !llamaServerApi?.getStatus) return;
-    llamaServerApi
-      .getStatus()
-      .then((s) => setLlamaStatus(s))
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshTrigger]);
 
   const handleModelSelect = (modelName: string) => {
     handleChange("model", modelName);
@@ -504,14 +391,16 @@ const DesktopLLMConfig = ({
       {/* Status */}
       <div className="p-3 rounded-lg bg-white/5 border border-white/10">
         <div className="flex items-center gap-2 mb-2">
-          <div className="w-2 h-2 rounded-full bg-green-400"></div>
+          <div className="w-2 h-2 rounded-full bg-white/40"></div>
           <span className="text-sm font-semibold text-white/90">
-            Ready to use!
+            {config.model ? "Model selected" : "No model selected"}
           </span>
         </div>
         <p className="text-xs text-white/60">
-          Model: {config.model || "No model selected"} • llama.cpp via Electron
-          • GPU accelerated
+          Model: {config.model || "No model selected"} •{" "}
+          {config.llmEngine === "llama-server"
+            ? "llama-server"
+            : "node-llama-cpp"}
         </p>
         {!config.model && (
           <p className="text-[10px] text-yellow-400 mt-1">
@@ -540,166 +429,18 @@ const DesktopLLMConfig = ({
         />
 
         {config.llmEngine === "llama-server" && (
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-white/90 mb-1">
-              llama.cpp Runtime Backend ({llamaStatus?.build ?? "pin pending"})
-            </label>
-            <Select
-              data-testid="desktop-llama-backend-select"
-              value={config.llmBackend || "auto"}
-              onChange={(e) => handleChange("llmBackend", e.target.value)}
-              variant={isLightBackground ? "dark" : "default"}
-              options={[
-                { value: "auto", label: "Auto" },
-                ...(["cpu", "vulkan", "cuda", "rocm"] as const)
-                  .filter(
-                    (b) =>
-                      !(
-                        (b === "cuda" && platformKey !== "win-x64") ||
-                        platformKey === "mac-arm64"
-                      ),
-                  )
-                  .map((b) => ({
-                    value: b,
-                    label:
-                      b === "cpu"
-                        ? "CPU (~18 MB)"
-                        : b === "vulkan"
-                          ? platformKey === "win-x64"
-                            ? "Vulkan, any GPU (~34 MB)"
-                            : "Vulkan (~33 MB)"
-                          : b === "cuda"
-                            ? "NVIDIA CUDA 12.4 (~640 MB incl. runtime)"
-                            : "AMD ROCm (~196 MB, requires HIP SDK)",
-                  })),
-                ...(platformKey === "mac-arm64"
-                  ? [{ value: "metal", label: "Metal, Apple Silicon" }]
-                  : []),
-              ]}
-            />
-
-            {/* Runtime pack cards — downloader style, one per backend */}
-            <div className="space-y-2">
-              {(LLAMA_RUNTIME_PACKS[platformKey] ?? []).map((pack) => {
-                const installed = (
-                  llamaStatus?.installedBackends ?? []
-                ).includes(pack.id);
-                const isActive =
-                  installed && (config.llmBackend || "cpu") === pack.id;
-                const installingThis = llamaInstalling === pack.id;
-                return (
-                  <div
-                    key={pack.id}
-                    className={cn(
-                      "p-2 md:p-3 rounded-lg bg-white/5 border transition-colors",
-                      installingThis ? "border-white/30" : "border-white/10",
-                    )}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-sm font-medium text-white/90 truncate">
-                          {pack.title}
-                        </span>
-                        {isActive && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-white/10 text-white/70 flex-shrink-0">
-                            Active
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {installingThis ? (
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-white/70">
-                            {llamaProgress?.status || "Downloading..."}
-                          </span>
-                          <span className="text-white/70">
-                            {llamaProgress?.percent != null
-                              ? `${Math.round(llamaProgress.percent)}%`
-                              : ""}
-                          </span>
-                        </div>
-                        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-white/40 transition-all duration-300"
-                            style={{
-                              width: `${llamaProgress?.percent ?? 0}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-white/50 truncate">
-                          {installed ? "Installed" : `Download ${pack.size}`}
-                        </span>
-                        <div className="flex gap-1 flex-shrink-0">
-                          {installed ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onRequestDeleteModel?.(
-                                  `llama-backend:${pack.id}`,
-                                )
-                              }
-                              disabled={!onRequestDeleteModel}
-                              data-testid={`llama-backend-delete-${pack.id}`}
-                              className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white/80 text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0 disabled:opacity-40"
-                            >
-                              <Icon name="trash" size={11} />
-                              <span>Delete</span>
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setLlamaInstalling(pack.id);
-                                setCppLlamaLogs([]);
-                                void llamaServerApi?.install?.(pack.id);
-                              }}
-                              data-testid={`llama-backend-download-${pack.id}`}
-                              className="px-2 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0 bg-white/10 hover:bg-white/20 text-white/90"
-                            >
-                              <Icon name="download" size={11} />
-                              <span>Download</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    {pack.requiresLink && (
-                      <a
-                        href={pack.requiresLink.url}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className={cn(
-                          "inline-block mt-1.5 text-[11px] underline opacity-75 hover:opacity-100",
-                          isLightBackground ? "text-black/70" : "glass-text",
-                        )}
-                      >
-                        {pack.requiresLink.label}
-                      </a>
-                    )}
-                  </div>
-                );
-              })}
-              {(cppLlamaLogs.length > 0 || llamaProgress) && (
-                <div className="max-h-24 overflow-y-auto p-2 rounded bg-black/30 font-mono text-[10px] text-white/60 whitespace-pre-wrap">
-                  {(llamaProgress
-                    ? [
-                        `[progress] ${llamaProgress.status} ${Math.round(llamaProgress.percent ?? 0)}%`,
-                      ]
-                    : []
-                  )
-                    .concat(cppLlamaLogs.slice(-8))
-                    .map((line, index) => (
-                      <div key={`${index}-${line.slice(0, 10)}`}>{line}</div>
-                    ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <LlamaServerRuntimeManager
+            api={api?.llamaServer}
+            packs={CHAT_LLAMA_RUNTIME_PACKS}
+            selectedBackend={config.llmBackend || "auto"}
+            onBackendChange={(backend) => handleChange("llmBackend", backend)}
+            onRequestDeleteBackend={(backend) =>
+              onRequestDeleteModel?.(`llama-backend:${backend}`)
+            }
+            refreshTrigger={refreshTrigger}
+            isLightBackground={isLightBackground}
+            testIdPrefix="desktop-llama-backend"
+          />
         )}
       </div>
 
@@ -798,127 +539,25 @@ const DesktopLLMConfig = ({
         </div>
       )}
 
-      {/* Advanced Config */}
-      <details className="group" open={isSetupMode}>
-        <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
-          <span>Advanced Settings</span>
-          <Icon
-            name="arrow-down"
-            size={14}
-            className="group-open:rotate-180 transition-transform"
-          />
-        </summary>
-        <div className="mt-2 space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-white/90 mb-1">
-              Endpoint URL
-            </label>
-            <Input
-              type="text"
-              value={config.endpoint || DEFAULT_ENDPOINTS.desktopLocal}
-              onChange={(e) => handleChange("endpoint", e.target.value)}
-              placeholder={DEFAULT_ENDPOINTS.desktopLocal}
-              variant={isLightBackground ? "dark" : "default"}
-            />
-            <p className="text-[10px] text-white/50 mt-1">
-              Local AI server endpoint
-            </p>
-          </div>
-
-          {/* Additional Advanced Parameters */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-white/90 mb-1">
-                Temperature (
-                {config.temperature !== undefined ? config.temperature : 0.7})
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="2"
-                step="0.1"
-                value={
-                  config.temperature !== undefined ? config.temperature : 0.7
-                }
-                onChange={(e) =>
-                  handleChange("temperature", parseFloat(e.target.value))
-                }
-                className="w-full"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-white/90 mb-1">
-                Max Tokens ({config.maxTokens || 2048})
-              </label>
-              <Input
-                type="number"
-                min="256"
-                max="8192"
-                step="256"
-                value={config.maxTokens || 2048}
-                onChange={(e) =>
-                  handleChange("maxTokens", parseInt(e.target.value))
-                }
-                variant={isLightBackground ? "dark" : "default"}
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-white/90 mb-1">
-                Context Size ({config.contextSize || 4096})
-              </label>
-              <Input
-                type="number"
-                min="512"
-                max="32768"
-                step="512"
-                value={config.contextSize || 4096}
-                onChange={(e) =>
-                  handleChange("contextSize", parseInt(e.target.value))
-                }
-                variant={isLightBackground ? "dark" : "default"}
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-white/90 mb-1">
-                GPU Layers (
-                {config.gpuLayers !== undefined ? config.gpuLayers : 33})
-              </label>
-              <Input
-                type="number"
-                min="0"
-                max="100"
-                value={config.gpuLayers !== undefined ? config.gpuLayers : 33}
-                onChange={(e) =>
-                  handleChange("gpuLayers", parseInt(e.target.value))
-                }
-                variant={isLightBackground ? "dark" : "default"}
-              />
-              <p className="text-[10px] text-white/50 mt-1">
-                Offload layers to GPU (0 = CPU only)
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-white/90 mb-1">
-                Threads ({config.threads || 4})
-              </label>
-              <Input
-                type="number"
-                min="1"
-                max="32"
-                value={config.threads || 4}
-                onChange={(e) =>
-                  handleChange("threads", parseInt(e.target.value))
-                }
-                variant={isLightBackground ? "dark" : "default"}
-              />
-            </div>
-          </div>
-        </div>
-      </details>
+      <div className="space-y-4">
+        <label className="block text-xs font-medium text-white/90">
+          Endpoint URL
+        </label>
+        <Input
+          type="text"
+          value={config.endpoint || DEFAULT_ENDPOINTS.desktopLocal}
+          onChange={(event) => handleChange("endpoint", event.target.value)}
+          placeholder={DEFAULT_ENDPOINTS.desktopLocal}
+          variant={isLightBackground ? "dark" : "default"}
+        />
+        <LLMParameterSettings
+          provider="desktop-local"
+          config={config}
+          onChange={handleChange}
+          isLightBackground={isLightBackground}
+          openAdvanced={isSetupMode}
+        />
+      </div>
 
       {/* Model Management Section */}
       {!isSetupMode && isDesktop && storageService && (

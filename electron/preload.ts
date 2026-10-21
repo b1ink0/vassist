@@ -120,6 +120,8 @@ contextBridge.exposeInMainWorld("electron", {
 
   // LLM Model Management
   llm: {
+    getDecisionModelsDir: (customPath?: string | null) =>
+      ipcRenderer.invoke("llm:get-decision-models-dir", customPath),
     listModels: (customPath?: string | null) =>
       ipcRenderer.invoke("llm:list-models", customPath),
     downloadModel: (url: string, customPath?: string | null) =>
@@ -141,12 +143,18 @@ contextBridge.exposeInMainWorld("electron", {
         page,
         pageSize,
       ),
-    searchHuggingFaceModels: (query: string, cursor = "", pageSize = 20) =>
+    searchHuggingFaceModels: (
+      query: string,
+      cursor = "",
+      pageSize = 20,
+      filter = "",
+    ) =>
       ipcRenderer.invoke(
         "llm:search-huggingface-models",
         query,
         cursor,
         pageSize,
+        filter,
       ),
     listHuggingFaceFiles: (
       repoId: string,
@@ -261,6 +269,45 @@ contextBridge.exposeInMainWorld("electron", {
       ipcRenderer.on("llamaServer:installComplete", subscription);
       return () =>
         ipcRenderer.removeListener("llamaServer:installComplete", subscription);
+    },
+  },
+  decisionLlamaServer: {
+    getStatus: () => ipcRenderer.invoke("decisionLlamaServer:getStatus"),
+    getLatestBuild: () =>
+      ipcRenderer.invoke("decisionLlamaServer:getLatestBuild"),
+    install: (backend: string, channel: "pinned" | "latest" = "pinned") =>
+      ipcRenderer.invoke("decisionLlamaServer:install", backend, channel),
+    deleteBackend: (backend: string) =>
+      ipcRenderer.invoke("decisionLlamaServer:deleteBackend", backend),
+    onInstallLog: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, log: unknown) =>
+        callback(log);
+      ipcRenderer.on("decisionLlamaServer:installLog", subscription);
+      return () =>
+        ipcRenderer.removeListener(
+          "decisionLlamaServer:installLog",
+          subscription,
+        );
+    },
+    onInstallProgress: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, progress: unknown) =>
+        callback(progress);
+      ipcRenderer.on("decisionLlamaServer:installProgress", subscription);
+      return () =>
+        ipcRenderer.removeListener(
+          "decisionLlamaServer:installProgress",
+          subscription,
+        );
+    },
+    onInstallComplete: (callback: GenericCallback) => {
+      const subscription = (_event: IpcRendererEvent, result: unknown) =>
+        callback(result);
+      ipcRenderer.on("decisionLlamaServer:installComplete", subscription);
+      return () =>
+        ipcRenderer.removeListener(
+          "decisionLlamaServer:installComplete",
+          subscription,
+        );
     },
   },
   whisperCpp: {

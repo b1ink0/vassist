@@ -43,6 +43,7 @@ import { createPythonServerManager } from "./main/services/pythonServerManager";
 import { createWhisperCppManager } from "./main/services/whisperCppManager";
 import { createLlamaServerManager } from "./main/services/llamaServerManager";
 import { createLLMBackendManager } from "./main/services/llmBackendManager";
+import { DEFAULT_SERVICE_PORTS } from "../src/config/serviceEndpoints";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,6 +70,8 @@ const state = {
 };
 
 const getModelsDir = createGetModelsDir({ app, fs, path, baseDir: __dirname });
+const getDecisionModelsDir = (customPath: string | null = null) =>
+  path.join(getModelsDir(customPath), "decisions");
 
 const runtimePaths = createRuntimePaths({
   app,
@@ -139,6 +142,17 @@ const llamaServerManager = createLlamaServerManager({
   app: app as unknown as { getPath: (name: string) => string },
 });
 
+// Native System One runs in a dedicated llama-server router. It can keep
+// several decision GGUFs available at once without replacing the chat model.
+const decisionLlamaServerManager = createLlamaServerManager({
+  fs,
+  path,
+  app: app as unknown as { getPath: (name: string) => string },
+  instanceName: "decision",
+  defaultPort: DEFAULT_SERVICE_PORTS.decisionLlamaServer,
+  routerModelsDir: getDecisionModelsDir(),
+});
+
 const whisperCppManager = createWhisperCppManager({
   ipcMain,
   fs,
@@ -170,6 +184,17 @@ const localServerManager = createLocalServerManager({
     markRequestComplete: () => llamaServerManager.markRequestComplete(),
     getEndpoint: () => llamaServerManager.getEndpoint(),
   },
+  decisionProxy: {
+    ensureForRequest: (r) =>
+      decisionLlamaServerManager.ensureForRequest({
+        ...r,
+        backend: r.backend as never,
+      }),
+    markRequestComplete: () => decisionLlamaServerManager.markRequestComplete(),
+    getEndpoint: () => decisionLlamaServerManager.getEndpoint(),
+  },
+  getDecisionModelsDir,
+  decisionModelsDir: getDecisionModelsDir(),
   onSTTRequestStart: pythonServerManager.markWhisperRequestStart,
   onSTTRequestComplete: pythonServerManager.markWhisperRequestComplete,
   onTTSRequestStart: pythonServerManager.markGPTSoVITSTTSRequestStart,
@@ -177,6 +202,7 @@ const localServerManager = createLocalServerManager({
   stopTTSBackend: pythonServerManager.stopGPTSoVITSServer,
   setTTSBackend: pythonServerManager.setGPTSoVITSTorchBackend,
   setLlamaServerPort: llamaServerManager.setPort,
+  setDecisionLlamaServerPort: decisionLlamaServerManager.setPort,
   setPythonServicePorts: pythonServerManager.setPorts,
   setWhisperCppPort: whisperCppManager.setPort,
 });
@@ -207,6 +233,12 @@ localServerManager.registerIPCHandlers(ipcMain);
 pythonServerManager.registerSetupIPCHandlers(ipcMain, localServerManager);
 
 ipcMain.handle("llamaServer:getStatus", () => llamaServerManager.getStatus());
+ipcMain.handle("decisionLlamaServer:getStatus", () =>
+  decisionLlamaServerManager.getStatus(),
+);
+ipcMain.handle("decisionLlamaServer:getLatestBuild", () =>
+  decisionLlamaServerManager.getLatestDecisionBuild(),
+);
 ipcMain.handle(
   "llamaServer:install",
   async (event: Electron.IpcMainInvokeEvent, backend: string) =>
@@ -215,6 +247,18 @@ ipcMain.handle(
 ipcMain.handle("llamaServer:deleteBackend", (_event, backend: string) =>
   llamaServerManager.deleteBackend(backend),
 );
+ipcMain.handle(
+  "decisionLlamaServer:install",
+  async (
+    event: Electron.IpcMainInvokeEvent,
+    backend: string,
+    channel: "pinned" | "latest" = "pinned",
+  ) =>
+    decisionLlamaServerManager.installBackend(backend, event.sender, channel),
+);
+ipcMain.handle("decisionLlamaServer:deleteBackend", (_event, backend: string) =>
+  decisionLlamaServerManager.deleteBackend(backend),
+);
 whisperCppManager.registerIPCHandlers();
 registerLLMHandlers({
   ipcMain,
@@ -222,6 +266,7 @@ registerLLMHandlers({
   path,
   require,
   getModelsDir,
+  getDecisionModelsDir,
   llmBackendManager,
 });
 
@@ -267,5 +312,15 @@ app.on("before-quit", (event) => {
     .catch((error) => {
       console.error("[LlamaServer] Graceful app-exit cleanup failed:", error);
     })
-    .finally(() => app.quit());
+    .finally(() =>
+      decisionLlamaServerManager
+        .stop("app quit")
+        .catch((error) => {
+          console.error(
+            "[DecisionLlamaServer] Graceful app-exit cleanup failed:",
+            error,
+          );
+        })
+        .finally(() => app.quit()),
+    );
 });

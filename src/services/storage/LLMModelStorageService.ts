@@ -70,6 +70,7 @@ interface DesktopLLMApi {
     query: string,
     cursor?: string,
     pageSize?: number,
+    filter?: string,
   ) => Promise<DiscoveryResult>;
   listHuggingFaceFiles: (
     repoId: string,
@@ -119,6 +120,7 @@ interface AndroidAIApi {
     query: string,
     cursor?: string,
     pageSize?: number,
+    filter?: string,
   ) => string;
   listHuggingFaceFiles?: (
     repoId: string,
@@ -239,10 +241,12 @@ class LLMModelStorageBase {
     query: string,
     cursor = "",
     pageSize = 20,
+    filter = "",
   ): Promise<DiscoveryResult> {
     void query;
     void cursor;
     void pageSize;
+    void filter;
     throw new Error("searchHuggingFaceModels() not implemented");
   }
 
@@ -391,8 +395,14 @@ class DesktopLLMModelStorage extends LLMModelStorageBase {
     query: string,
     cursor = "",
     pageSize = 20,
+    filter = "",
   ): Promise<DiscoveryResult> {
-    return await this.api.searchHuggingFaceModels(query, cursor, pageSize);
+    return await this.api.searchHuggingFaceModels(
+      query,
+      cursor,
+      pageSize,
+      filter,
+    );
   }
 
   async listHuggingFaceFiles(
@@ -694,12 +704,14 @@ class AndroidLLMModelStorage extends LLMModelStorageBase {
     query: string,
     cursor = "",
     pageSize = 20,
+    filter = "",
   ): Promise<DiscoveryResult> {
     const result = await this.callAndroidAsync<DiscoveryResult>(
       "searchHuggingFaceModels",
       query,
       cursor,
       pageSize,
+      filter,
     );
     return {
       ...result,

@@ -10,6 +10,13 @@ import {
   DEFAULT_SERVICE_PORTS,
   validateDesktopServicePorts,
 } from "./serviceEndpoints";
+import {
+  DefaultLLMSamplingParameters,
+  DefaultLLMRuntimeParameters,
+  validateLLMParameters,
+  type LLMParameters,
+  type LLMSamplingParameters,
+} from "./llmParameters";
 
 const isAndroidMode =
   typeof __ANDROID_MODE__ !== "undefined" && __ANDROID_MODE__;
@@ -231,7 +238,7 @@ export type AIRemoteProfileProvider =
   | "android-local"
   | "desktop-local";
 
-export interface AIRemoteProviderProfile {
+export interface AIRemoteProviderProfile extends LLMParameters {
   id: string;
   name: string;
   provider: AIRemoteProfileProvider;
@@ -251,6 +258,10 @@ export interface AIRemoteProviderProfile {
   enableAudioSupport?: boolean;
   thinkingEnabled?: boolean;
   thinkingEffort?: "low" | "medium" | "high" | "xhigh";
+  llmEngine?: "node-llama" | "llama-server";
+  llmBackend?: string;
+  computeUnit?: string;
+  apiFormat?: "openai" | "ollama";
 }
 
 export interface AIRoutingModelConfig {
@@ -264,6 +275,41 @@ export interface AIRoutingConfig {
   enabled?: boolean;
   visionModel?: AIRoutingModelConfig;
   routerModel?: AIRoutingModelConfig;
+}
+
+export type DecisionProvider = "remote" | "desktop-local" | "host";
+export type DecisionBackend =
+  | "auto"
+  | "cpu"
+  | "vulkan"
+  | "cuda"
+  | "rocm"
+  | "metal";
+
+export type DecisionRuntimeChannel = "pinned" | "latest";
+
+export interface DecisionRemoteProviderProfile {
+  id: string;
+  name: string;
+  provider: DecisionProvider;
+  endpoint?: string;
+  apiKey?: string;
+  model: string;
+  contextSize?: number;
+}
+
+export interface DecisionConfig {
+  enabled: boolean;
+  provider: DecisionProvider;
+  backend: DecisionBackend;
+  runtimeChannel: DecisionRuntimeChannel;
+  remoteProfiles: DecisionRemoteProviderProfile[];
+  /** Base URL, /v1, or a full /v1/systemone URL. */
+  endpoint: string;
+  apiKey: string;
+  model: string;
+  timeoutMs: number;
+  contextSize: number;
 }
 
 export interface TTSRemoteProviderProfile {
@@ -299,6 +345,21 @@ export const DefaultAIConfig = {
       : AIProviders.CHROME_AI,
   remoteProfiles: [] as AIRemoteProviderProfile[],
 
+  // Generic decision API configuration. This is a platform capability and is
+  // deliberately independent from the existing provider routing settings.
+  decision: {
+    enabled: false,
+    provider: (isDesktopMode ? "desktop-local" : "remote") as DecisionProvider,
+    backend: "auto" as DecisionBackend,
+    runtimeChannel: "pinned" as DecisionRuntimeChannel,
+    remoteProfiles: [] as DecisionRemoteProviderProfile[],
+    endpoint: "",
+    apiKey: "",
+    model: "",
+    timeoutMs: 1500,
+    contextSize: 4096,
+  } satisfies DecisionConfig,
+
   chromeAi: {
     temperature: 1.0,
     topK: 3,
@@ -314,6 +375,9 @@ export const DefaultAIConfig = {
   },
 
   openai: {
+    ...DefaultLLMSamplingParameters,
+    endpoint: DEFAULT_ENDPOINTS.openaiApi,
+    selectedBackendProfileId: "",
     apiKey: "",
     model: "gpt-4-turbo-preview",
     temperature: 0.7,
@@ -342,6 +406,11 @@ export const DefaultAIConfig = {
   },
 
   ollama: {
+    ...DefaultLLMSamplingParameters,
+    apiFormat: "openai" as "openai" | "ollama",
+    contextSize: 4096,
+    selectedBackendProfileId: "",
+    apiKey: "",
     endpoint: DEFAULT_ENDPOINTS.ollama,
     model: "llama2",
     temperature: 0.7,
@@ -370,6 +439,9 @@ export const DefaultAIConfig = {
   },
 
   "android-local": {
+    ...DefaultLLMSamplingParameters,
+    contextSize: 4096,
+    selectedBackendProfileId: "",
     endpoint: ANDROID_LOCAL_SERVER.baseUrl,
     model: "qwen3-local",
     temperature: 0.7,
@@ -400,6 +472,11 @@ export const DefaultAIConfig = {
   },
 
   "desktop-local": {
+    ...DefaultLLMSamplingParameters,
+    ...DefaultLLMRuntimeParameters,
+    llmEngine: "node-llama" as "node-llama" | "llama-server",
+    llmBackend: "auto",
+    selectedBackendProfileId: "",
     endpoint: DESKTOP_LOCAL_SERVER.baseUrl,
     model: "qwen3:0.6b", // Default model name
     customModelsPath: null,
@@ -407,6 +484,7 @@ export const DefaultAIConfig = {
     serverPort: DEFAULT_SERVICE_PORTS.server,
     internalPorts: {
       llamaServer: DEFAULT_SERVICE_PORTS.llamaServer,
+      decisionLlamaServer: DEFAULT_SERVICE_PORTS.decisionLlamaServer,
       gptSovits: DEFAULT_SERVICE_PORTS.gptSovits,
       fasterWhisper: DEFAULT_SERVICE_PORTS.fasterWhisper,
       supertonic: DEFAULT_SERVICE_PORTS.supertonic,
@@ -416,8 +494,8 @@ export const DefaultAIConfig = {
     temperature: 0.7,
     maxTokens: 2048,
     contextSize: 4096,
-    gpuLayers: 99, // Use GPU acceleration
-    threads: 4,
+    gpuLayers: -1, // Automatic GPU offloading
+    threads: 0, // Automatic thread selection
     thinkingEnabled: false,
     thinkingEffort: undefined,
     systemPromptType: "default",
@@ -634,7 +712,12 @@ type WidenConfigValue<T> = T extends string
 
 // Configuration loaded from IndexedDB may contain user-selected values, so
 // avoid making the inferred defaults into overly narrow literal types.
-export type AIConfig = WidenConfigValue<typeof DefaultAIConfig>;
+export type AIConfig = WidenConfigValue<typeof DefaultAIConfig> & {
+  openai: LLMSamplingParameters;
+  ollama: LLMSamplingParameters;
+  "android-local": LLMSamplingParameters;
+  "desktop-local": LLMParameters;
+};
 export type TTSConfig = typeof DefaultTTSConfig;
 export type STTConfig = typeof DefaultSTTConfig;
 
@@ -651,6 +734,44 @@ export function validateAIConfig(
   if (!config.provider) {
     errors.push("Provider not selected");
   }
+  const providerKey =
+    config.provider === AIProviders.CHROME_AI ? "chromeAi" : config.provider;
+  if (providerKey && providerKey in DefaultAIConfig) {
+    const parameters = (config as unknown as Record<string, LLMParameters>)[
+      providerKey
+    ];
+    if (parameters) errors.push(...validateLLMParameters(parameters));
+  }
+
+  if (config.decision?.enabled) {
+    if (
+      config.decision.contextSize !== undefined &&
+      (!Number.isInteger(config.decision.contextSize) ||
+        config.decision.contextSize < 512)
+    ) {
+      errors.push(
+        "Decision context size must be an integer of at least 512 tokens",
+      );
+    }
+    if (
+      config.decision.provider !== "desktop-local" &&
+      !config.decision.endpoint?.trim()
+    ) {
+      errors.push(
+        "Decision API Endpoint is required when decision support is enabled",
+      );
+    }
+    if (
+      config.decision.timeoutMs !== undefined &&
+      (!Number.isFinite(config.decision.timeoutMs) ||
+        config.decision.timeoutMs < 250 ||
+        config.decision.timeoutMs > 60000)
+    ) {
+      errors.push(
+        "Decision API timeout must be between 250 and 60000 milliseconds",
+      );
+    }
+  }
 
   if (config.provider === AIProviders.CHROME_AI) {
     if (!("LanguageModel" in self)) {
@@ -660,20 +781,34 @@ export function validateAIConfig(
     }
 
     if (config.chromeAi?.temperature !== undefined) {
-      if (config.chromeAi.temperature < 0 || config.chromeAi.temperature > 2) {
-        errors.push("Temperature must be between 0 and 2");
+      if (
+        !Number.isFinite(config.chromeAi.temperature) ||
+        config.chromeAi.temperature < 0
+      ) {
+        errors.push("Temperature must be a non-negative number");
       }
     }
 
     if (config.chromeAi?.topK !== undefined) {
-      if (config.chromeAi.topK < 1 || config.chromeAi.topK > 128) {
-        errors.push("TopK must be between 1 and 128");
+      if (!Number.isInteger(config.chromeAi.topK) || config.chromeAi.topK < 1) {
+        errors.push("Top K must be a positive integer");
       }
     }
   }
 
   if (config.provider === AIProviders.OPENAI) {
-    if (!config.openai?.apiKey || config.openai.apiKey.trim() === "") {
+    let usesOfficialEndpoint = true;
+    try {
+      usesOfficialEndpoint =
+        new URL(config.openai?.endpoint || DEFAULT_ENDPOINTS.openaiApi)
+          .origin === new URL(DEFAULT_ENDPOINTS.openaiApi).origin;
+    } catch {
+      errors.push("OpenAI endpoint must be a valid URL");
+    }
+    if (
+      usesOfficialEndpoint &&
+      (!config.openai?.apiKey || config.openai.apiKey.trim() === "")
+    ) {
       errors.push("OpenAI API Key is required");
     }
     if (!config.openai?.model || config.openai.model.trim() === "") {

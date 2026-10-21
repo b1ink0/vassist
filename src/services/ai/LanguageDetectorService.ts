@@ -8,7 +8,10 @@
 import OpenAI from "openai";
 import Logger from "../common/LoggerService";
 import { isExtension } from "../../utils/PlatformUtils";
-import { DEFAULT_ENDPOINTS } from "../../config/serviceEndpoints";
+import {
+  DEFAULT_ENDPOINTS,
+  normalizeOpenAIBaseUrl,
+} from "../../config/serviceEndpoints";
 
 type DetectorProvider = "chrome-ai" | "openai" | "ollama";
 type DetectorAvailability =
@@ -159,7 +162,11 @@ class LanguageDetectorService {
       } else if (provider === "openai") {
         const openaiConfig = config.openai;
         state.llmClient = new OpenAI({
-          apiKey: openaiConfig.apiKey,
+          apiKey: openaiConfig.apiKey || "local",
+          baseURL: normalizeOpenAIBaseUrl(
+            openaiConfig.endpoint,
+            DEFAULT_ENDPOINTS.openaiApi,
+          ),
           dangerouslyAllowBrowser: !this.isExtensionMode,
         });
 

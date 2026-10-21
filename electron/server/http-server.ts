@@ -19,6 +19,12 @@ import multer from "multer";
 import type { Express, NextFunction, Request, Response } from "express";
 import type { Server } from "http";
 import type { Multer } from "multer";
+import type { LLMRuntimeParameters } from "../../src/config/llmParameters";
+import { LLM_RUNTIME_REQUEST_KEYS } from "../../src/config/llmParameters";
+import type {
+  LlamaContextOptions,
+  LLamaChatGenerateResponseOptions,
+} from "node-llama-cpp";
 import {
   DEFAULT_SERVICE_PORTS,
   LOOPBACK_HOST,
@@ -33,7 +39,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 type LLMBackend = "auto" | "cpu" | "cuda" | "vulkan" | "metal" | "rocm";
 
 type ServerConfig = {
-  llm: {
+  llm: Omit<LLMRuntimeParameters, "gpuLayers"> & {
     llmServerBackend?: string;
     modelPath: string | null;
     defaultModelsDir: string | null;
@@ -66,6 +72,11 @@ type ServerConfig = {
     host: string;
     port?: number;
   };
+  decision: {
+    modelsDir: string | null;
+    backend?: string;
+    contextSize: number;
+  };
 };
 
 type LlamaApi = {
@@ -78,7 +89,7 @@ type LlamaApi = {
       gpuLayers: number | "auto";
     }) => Promise<{
       gpuLayers?: number;
-      createContext: (opts: { contextSize: number }) => Promise<{
+      createContext: (opts: LlamaContextOptions) => Promise<{
         getSequence: () => unknown;
         dispose: () => Promise<void>;
       }>;
@@ -88,11 +99,7 @@ type LlamaApi = {
   LlamaChat: new (opts: { contextSequence: unknown }) => {
     generateResponse: (
       history: unknown[],
-      opts: {
-        temperature: number;
-        maxTokens: number;
-        onTextChunk?: (chunk: string) => void;
-      },
+      opts: LLamaChatGenerateResponseOptions,
     ) => Promise<{ response: string }>;
   };
 };
@@ -115,14 +122,30 @@ type LocalAIServerDeps = {
   onTTSRequestStart?: (() => void) | null;
   onTTSRequestComplete?: (() => void) | null;
   llamaProxy?: {
+    ensureForRequest: (
+      req: Omit<LLMRuntimeParameters, "contextSize" | "gpuLayers"> & {
+        modelPath: string;
+        mmprojPath?: string;
+        backend?: string;
+        ctxSize?: number;
+        gpuLayers?: number | "auto";
+      },
+    ) => Promise<string>;
+    markRequestComplete: () => void;
+    getEndpoint?: () => string;
+  } | null;
+  decisionProxy?: {
     ensureForRequest: (req: {
       modelPath: string;
+      modelsDir?: string;
       mmprojPath?: string;
+      ctxSize?: number;
       backend?: string;
     }) => Promise<string>;
     markRequestComplete: () => void;
     getEndpoint?: () => string;
   } | null;
+  decisionModelsDir?: string | null;
 };
 
 function getErrorMessage(error: unknown): string {
@@ -275,7 +298,7 @@ export class LocalAIServer {
       gpuLayers: number | "auto";
     }) => Promise<{
       gpuLayers?: number;
-      createContext: (opts: { contextSize: number }) => Promise<{
+      createContext: (opts: LlamaContextOptions) => Promise<{
         getSequence: () => unknown;
         dispose: () => Promise<void>;
       }>;
@@ -284,12 +307,13 @@ export class LocalAIServer {
   } | null;
   llamaModel: {
     gpuLayers?: number;
-    createContext: (opts: {
-      contextSize: number;
-    }) => Promise<{ getSequence: () => unknown; dispose: () => Promise<void> }>;
+    createContext: (
+      opts: LlamaContextOptions,
+    ) => Promise<{ getSequence: () => unknown; dispose: () => Promise<void> }>;
     dispose: () => Promise<void>;
   } | null;
   llamaContext: {
+    contextSize?: number;
     getSequence: () => unknown;
     dispose: () => Promise<void>;
   } | null;
@@ -297,19 +321,11 @@ export class LocalAIServer {
   llamaChat: {
     generateResponse: (
       history: unknown[],
-      opts: {
-        temperature: number;
-        maxTokens: number;
-        onTextChunk?: (chunk: string) => void;
-        onResponseChunk?: (chunk: {
-          type?: undefined | string;
-          segmentType?: undefined | string;
-          text?: string;
-        }) => void;
-      },
+      opts: LLamaChatGenerateResponseOptions,
     ) => Promise<{ response: string }>;
   } | null;
   currentModelPath: string | null;
+  loadedRuntimeSignature: string | null = null;
   loadLlamaApi: (() => Promise<unknown>) | null;
   ensureTTSBackendRunning: (() => void | Promise<void>) | null;
   restartTTSBackend: ((reason: string) => void | Promise<void>) | null;
@@ -320,8 +336,22 @@ export class LocalAIServer {
   ensureSttBackendRunning: (() => void | Promise<void>) | null;
   onSTTRequestStart: (() => void) | null;
   llamaProxy?: {
+    ensureForRequest: (
+      req: Omit<LLMRuntimeParameters, "contextSize" | "gpuLayers"> & {
+        modelPath: string;
+        mmprojPath?: string;
+        ctxSize?: number;
+        backend?: string;
+        gpuLayers?: number | "auto";
+      },
+    ) => Promise<string>;
+    markRequestComplete: () => void;
+    getEndpoint?: () => string;
+  } | null;
+  decisionProxy?: {
     ensureForRequest: (req: {
       modelPath: string;
+      modelsDir?: string;
       mmprojPath?: string;
       ctxSize?: number;
       backend?: string;
@@ -329,6 +359,7 @@ export class LocalAIServer {
     markRequestComplete: () => void;
     getEndpoint?: () => string;
   } | null;
+  decisionModelsDir: string | null;
   onSTTRequestComplete: (() => void) | null;
   onTTSRequestStart: (() => void) | null;
   onTTSRequestComplete: (() => void) | null;
@@ -354,11 +385,18 @@ export class LocalAIServer {
     onTTSRequestStart,
     onTTSRequestComplete,
     llamaProxy,
+    decisionProxy,
+    decisionModelsDir,
   }: LocalAIServerDeps = {}) {
     this.llamaProxy =
       llamaProxy && typeof llamaProxy.ensureForRequest === "function"
         ? llamaProxy
         : null;
+    this.decisionProxy =
+      decisionProxy && typeof decisionProxy.ensureForRequest === "function"
+        ? decisionProxy
+        : null;
+    this.decisionModelsDir = decisionModelsDir ?? null;
     this.app = express();
     this.server = null;
     this.port = DEFAULT_SERVICE_PORTS.server;
@@ -438,6 +476,11 @@ export class LocalAIServer {
         shareOnNetwork: false,
         host: LOOPBACK_HOST,
       },
+      decision: {
+        modelsDir: this.decisionModelsDir,
+        backend: "auto",
+        contextSize: 4096,
+      },
     };
 
     this.setupMiddleware();
@@ -494,6 +537,20 @@ export class LocalAIServer {
     );
 
     this.app.post(
+      SERVICE_ROUTES.openai.systemOne,
+      async (req: Request, res: Response) => {
+        try {
+          await this.handleSystemOne(req, res);
+        } catch (error) {
+          console.error("[Decision] Error:", error);
+          if (!res.headersSent) {
+            res.status(500).json({ error: getErrorMessage(error) });
+          }
+        }
+      },
+    );
+
+    this.app.post(
       SERVICE_ROUTES.openai.audioTranscriptions,
       this.upload.single("file"),
       async (req: Request, res: Response) => {
@@ -521,15 +578,27 @@ export class LocalAIServer {
     this.app.get(
       SERVICE_ROUTES.openai.models,
       (_req: Request, res: Response) => {
-        const models = this.listAvailableLlmModels();
-        res.json({
-          object: "list",
-          data: models.map((modelId) => ({
+        const llmModels = this.listAvailableLlmModels().map((modelId) => ({
+          id: modelId,
+          object: "model",
+          created: Date.now(),
+          owned_by: "local",
+        }));
+        const decisionModels = this.listAvailableDecisionModels().map(
+          (modelId) => ({
             id: modelId,
             object: "model",
             created: Date.now(),
             owned_by: "local",
-          })),
+            architecture: {
+              input_modalities: ["text"],
+              output_modalities: ["decisions"],
+            },
+          }),
+        );
+        res.json({
+          object: "list",
+          data: [...llmModels, ...decisionModels],
         });
       },
     );
@@ -573,6 +642,42 @@ export class LocalAIServer {
     );
   }
 
+  listAvailableDecisionModels(): string[] {
+    const modelsDir = this.config.decision.modelsDir || this.decisionModelsDir;
+    if (!modelsDir || !fs.existsSync(modelsDir)) return [];
+
+    const modelIds = new Set<string>();
+    const pending = [modelsDir];
+    while (pending.length > 0) {
+      const directory = pending.pop();
+      if (!directory) continue;
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(directory, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          pending.push(path.join(directory, entry.name));
+          continue;
+        }
+        if (
+          !entry.isFile() ||
+          !entry.name.toLowerCase().endsWith(".gguf") ||
+          entry.name.toLowerCase().startsWith("mmproj")
+        ) {
+          continue;
+        }
+        modelIds.add(entry.name.slice(0, -".gguf".length));
+      }
+    }
+
+    return Array.from(modelIds).sort((left, right) =>
+      left.localeCompare(right),
+    );
+  }
+
   getClientIp(req: Request): string {
     const forwarded = req.headers["x-forwarded-for"];
     if (typeof forwarded === "string" && forwarded.length > 0) {
@@ -609,8 +714,8 @@ export class LocalAIServer {
     const {
       messages,
       stream = false,
-      temperature,
       max_tokens,
+      max_completion_tokens,
       model,
       customModelsPath,
       enable_thinking: enableThinkingRaw,
@@ -657,7 +762,7 @@ export class LocalAIServer {
           const exactPath = path.join(modelsDir, model);
           if (fs.existsSync(exactPath)) {
             modelPath = exactPath;
-          } else {
+          } else if (!model.toLowerCase().endsWith(".gguf")) {
             const files = fs.readdirSync(modelsDir);
             const modelLower = model.toLowerCase();
             const match = files.find(
@@ -682,6 +787,9 @@ export class LocalAIServer {
         modelPath === this.config.llm.modelPath,
       );
       console.log("[LLM] Model exists?", fs.existsSync(modelPath));
+      if (!fs.existsSync(modelPath)) {
+        return res.status(400).json({ error: "Model not found: " + model });
+      }
 
       if (modelPath !== this.config.llm.modelPath && fs.existsSync(modelPath)) {
         console.log("[LLM] Request specified different model, updating config");
@@ -690,6 +798,23 @@ export class LocalAIServer {
         this.config.llm.modelPath = modelPath;
       }
     }
+
+    if (typeof req.body.llmContextSize === "number")
+      this.config.llm.contextSize = req.body.llmContextSize;
+    if (
+      ["auto", "cpu", "cuda", "vulkan", "metal"].includes(req.body.llmBackend)
+    )
+      this.config.llm.backend = req.body.llmBackend;
+    if (typeof req.body.llmThreads === "number")
+      this.config.llm.threads = req.body.llmThreads;
+    if (typeof req.body.llmGpuLayers === "number")
+      this.config.llm.gpuLayers =
+        req.body.llmGpuLayers < 0 ? "auto" : req.body.llmGpuLayers;
+    if (typeof req.body.llmBatchSize === "number")
+      this.config.llm.batchSize =
+        req.body.llmBatchSize > 0 ? req.body.llmBatchSize : undefined;
+    if (["auto", "on", "off"].includes(req.body.llmFlashAttention))
+      this.config.llm.flashAttention = req.body.llmFlashAttention;
 
     try {
       await this.ensureModelLoaded();
@@ -763,8 +888,9 @@ export class LocalAIServer {
 
       try {
         await this.llamaChat.generateResponse(chatHistory, {
-          temperature: temperature ?? this.config.llm.temperature,
-          maxTokens: max_tokens ?? this.config.llm.maxTokens,
+          ...this.getNodeSamplingOptions(req.body),
+          maxTokens:
+            max_tokens ?? max_completion_tokens ?? this.config.llm.maxTokens,
           onResponseChunk: (chunk: {
             segmentType?: undefined | string;
             text?: string;
@@ -829,8 +955,9 @@ export class LocalAIServer {
       }
     } else {
       const result = await this.llamaChat.generateResponse(chatHistory, {
-        temperature: temperature ?? this.config.llm.temperature,
-        maxTokens: max_tokens ?? this.config.llm.maxTokens,
+        ...this.getNodeSamplingOptions(req.body),
+        maxTokens:
+          max_tokens ?? max_completion_tokens ?? this.config.llm.maxTokens,
       });
 
       const rawResponse = result.response;
@@ -993,13 +1120,19 @@ export class LocalAIServer {
     // Resolve model path using the same search rules as node-llama path
     const requestedModel =
       typeof req.body?.model === "string" ? req.body.model : "";
-    let modelPath = this.config.llm.modelPath || "";
-    const modelsDir = this.config.llm.defaultModelsDir;
+    let modelPath = requestedModel ? "" : this.config.llm.modelPath || "";
+    const modelsDir =
+      this.config.llm.defaultModelsDir ||
+      (this.config.llm.modelPath
+        ? path.dirname(this.config.llm.modelPath)
+        : "");
     if (requestedModel && modelsDir && fs.existsSync(modelsDir)) {
-      const exact = path.join(modelsDir, requestedModel);
+      const exact = path.isAbsolute(requestedModel)
+        ? requestedModel
+        : path.join(modelsDir, requestedModel);
       if (fs.existsSync(exact)) {
         modelPath = exact;
-      } else {
+      } else if (!requestedModel.toLowerCase().endsWith(".gguf")) {
         const match = fs
           .readdirSync(modelsDir)
           .find(
@@ -1020,7 +1153,17 @@ export class LocalAIServer {
     try {
       const upstreamModel = await this.llamaProxy.ensureForRequest({
         modelPath,
-        ctxSize: this.config.llm?.ctxSize ?? 4096,
+        ctxSize: req.body.llmContextSize ?? this.config.llm.contextSize,
+        gpuLayers: req.body.llmGpuLayers ?? this.config.llm.gpuLayers,
+        threads: req.body.llmThreads ?? this.config.llm.threads,
+        batchSize: req.body.llmBatchSize ?? this.config.llm.batchSize,
+        ubatchSize: req.body.llmUbatchSize ?? this.config.llm.ubatchSize,
+        flashAttention:
+          req.body.llmFlashAttention ?? this.config.llm.flashAttention,
+        cacheTypeK: req.body.llmCacheTypeK ?? this.config.llm.cacheTypeK,
+        cacheTypeV: req.body.llmCacheTypeV ?? this.config.llm.cacheTypeV,
+        ropeScaling: req.body.llmRopeScaling ?? this.config.llm.ropeScaling,
+        ropeScale: req.body.llmRopeScale ?? this.config.llm.ropeScale,
         backend:
           (typeof req.body?.llmBackend === "string"
             ? req.body.llmBackend
@@ -1034,6 +1177,7 @@ export class LocalAIServer {
       delete upstreamBody.llmEngine;
       delete upstreamBody.llmBackend;
       delete upstreamBody.customModelsPath;
+      for (const key of LLM_RUNTIME_REQUEST_KEYS) delete upstreamBody[key];
       upstreamBody.model = upstreamModel;
       // Thinking toggle via llama-server template kwargs (no prompt prefill)
       upstreamBody.chat_template_kwargs = {
@@ -1089,6 +1233,174 @@ export class LocalAIServer {
       }
     } finally {
       if (requestLeaseAcquired) this.llamaProxy.markRequestComplete();
+    }
+  }
+
+  private resolveDecisionModelPath(
+    requestedModel: string,
+    modelsDirOverride?: string | null,
+  ): string | null {
+    const modelsDir =
+      modelsDirOverride ||
+      this.config.decision.modelsDir ||
+      this.decisionModelsDir;
+    if (!modelsDir || !fs.existsSync(modelsDir)) return null;
+
+    const root = path.resolve(modelsDir);
+    const isInsideRoot = (candidate: string) => {
+      const resolved = path.resolve(candidate);
+      return resolved === root || resolved.startsWith(`${root}${path.sep}`);
+    };
+    const findGguf = (directory: string): string | null => {
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(directory, { withFileTypes: true });
+      } catch {
+        return null;
+      }
+      for (const entry of entries) {
+        if (entry.name.toLowerCase().startsWith("mmproj")) continue;
+        const candidate = path.join(directory, entry.name);
+        if (entry.isFile() && entry.name.toLowerCase().endsWith(".gguf")) {
+          return candidate;
+        }
+        if (entry.isDirectory()) {
+          const nested = findGguf(candidate);
+          if (nested) return nested;
+        }
+      }
+      return null;
+    };
+
+    const normalized = requestedModel.trim();
+    if (normalized && path.isAbsolute(normalized) && isInsideRoot(normalized)) {
+      if (fs.existsSync(normalized)) {
+        return fs.statSync(normalized).isDirectory()
+          ? findGguf(normalized)
+          : normalized;
+      }
+    }
+
+    if (normalized) {
+      const exact = path.join(root, path.basename(normalized));
+      if (isInsideRoot(exact) && fs.existsSync(exact)) {
+        return fs.statSync(exact).isDirectory() ? findGguf(exact) : exact;
+      }
+      const wanted = normalized.toLowerCase();
+      const stack = [root];
+      while (stack.length > 0) {
+        const directory = stack.pop();
+        if (!directory) continue;
+        let entries: fs.Dirent[];
+        try {
+          entries = fs.readdirSync(directory, { withFileTypes: true });
+        } catch {
+          continue;
+        }
+        for (const entry of entries) {
+          if (entry.name.toLowerCase().startsWith("mmproj")) continue;
+          const candidate = path.join(directory, entry.name);
+          if (entry.isDirectory()) {
+            if (entry.name.toLowerCase().includes(wanted)) {
+              const nested = findGguf(candidate);
+              if (nested) return nested;
+            }
+            stack.push(candidate);
+          } else if (
+            entry.name.toLowerCase().endsWith(".gguf") &&
+            entry.name.toLowerCase().includes(wanted)
+          ) {
+            return candidate;
+          }
+        }
+      }
+    }
+
+    return findGguf(root);
+  }
+
+  async handleSystemOne(req: Request, res: Response) {
+    if (!this.decisionProxy) {
+      return res.status(503).json({
+        error: "Native llama-server decision engine unavailable",
+      });
+    }
+    if (!req.body || typeof req.body !== "object") {
+      return res
+        .status(400)
+        .json({ error: "System One request must be an object" });
+    }
+    if (!req.body.questions || typeof req.body.questions !== "object") {
+      return res
+        .status(400)
+        .json({ error: "System One questions are required" });
+    }
+
+    const requestedModel =
+      typeof req.body.model === "string" ? req.body.model : "";
+    const requestModelsDir =
+      typeof req.body.customModelsPath === "string"
+        ? req.body.customModelsPath.trim()
+        : "";
+    const modelsDir =
+      requestModelsDir ||
+      this.config.decision.modelsDir ||
+      this.decisionModelsDir;
+    const modelPath = this.resolveDecisionModelPath(requestedModel, modelsDir);
+    if (!modelPath) {
+      return res.status(400).json({
+        error: requestedModel
+          ? `Decision model not found: ${requestedModel}`
+          : "No local decision model is installed",
+      });
+    }
+
+    let requestLeaseAcquired = false;
+    try {
+      const upstreamModel = await this.decisionProxy.ensureForRequest({
+        modelPath,
+        ...(modelsDir ? { modelsDir } : {}),
+        ctxSize: this.config.decision.contextSize,
+        backend:
+          typeof req.body?.llmBackend === "string"
+            ? req.body.llmBackend
+            : this.config.decision.backend || "auto",
+      });
+      requestLeaseAcquired = true;
+
+      const upstreamBody: Record<string, unknown> = { ...req.body };
+      delete upstreamBody.llmEngine;
+      delete upstreamBody.llmBackend;
+      delete upstreamBody.customModelsPath;
+      upstreamBody.model = upstreamModel;
+
+      const controller = new AbortController();
+      req.on("close", () => controller.abort());
+      const endpoint =
+        this.decisionProxy.getEndpoint?.() ||
+        endpointForPort(DEFAULT_SERVICE_PORTS.decisionLlamaServer);
+      const upstream = await fetch(
+        joinEndpointPath(endpoint, SERVICE_ROUTES.openai.systemOne),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(upstreamBody),
+          signal: controller.signal,
+        },
+      );
+      const contentType = upstream.headers.get("content-type");
+      const payload = Buffer.from(await upstream.arrayBuffer());
+      res.status(upstream.status);
+      if (contentType) res.setHeader("Content-Type", contentType);
+      return res.end(payload);
+    } catch (error) {
+      console.error("[Decision] llama-server error:", getErrorMessage(error));
+      if (!res.headersSent) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+      return res.end();
+    } finally {
+      if (requestLeaseAcquired) this.decisionProxy.markRequestComplete();
     }
   }
 
@@ -1448,7 +1760,78 @@ export class LocalAIServer {
    * If model is loading, wait for it to finish
    * If model is not loaded, load it now
    */
+  getNodeRuntimeSignature() {
+    const config = this.config.llm;
+    return JSON.stringify([
+      config.modelPath,
+      config.backend,
+      config.contextSize,
+      config.gpuLayers,
+      config.threads,
+      config.batchSize,
+      config.flashAttention,
+    ]);
+  }
+
+  getNodeSamplingOptions(
+    body: Record<string, unknown>,
+  ): LLamaChatGenerateResponseOptions {
+    const options: LLamaChatGenerateResponseOptions = {};
+    if (body.llmSamplingEnabled !== false) {
+      options.temperature =
+        typeof body.temperature === "number"
+          ? body.temperature
+          : this.config.llm.temperature;
+      for (const [wire, field] of [
+        ["top_p", "topP"],
+        ["top_k", "topK"],
+        ["min_p", "minP"],
+      ] as const) {
+        if (typeof body[wire] === "number") options[field] = body[wire];
+      }
+      if (typeof body.seed === "number" && body.seed >= 0)
+        options.seed = body.seed;
+      if (
+        [
+          "repeat_penalty",
+          "repeat_last_n",
+          "presence_penalty",
+          "frequency_penalty",
+        ].some((key) => typeof body[key] === "number")
+      ) {
+        options.repeatPenalty = {
+          ...(typeof body.repeat_penalty === "number"
+            ? { penalty: body.repeat_penalty }
+            : {}),
+          ...(typeof body.repeat_last_n === "number"
+            ? {
+                lastTokens:
+                  body.repeat_last_n < 0
+                    ? (this.llamaContext?.contextSize ??
+                      this.config.llm.contextSize)
+                    : body.repeat_last_n,
+              }
+            : {}),
+          ...(typeof body.presence_penalty === "number"
+            ? { presencePenalty: body.presence_penalty }
+            : {}),
+          ...(typeof body.frequency_penalty === "number"
+            ? { frequencyPenalty: body.frequency_penalty }
+            : {}),
+        };
+      }
+    }
+    if (Array.isArray(body.stop))
+      options.customStopTriggers = body.stop
+        .filter(
+          (item): item is string => typeof item === "string" && item.length > 0,
+        )
+        .map((item) => [item]);
+    return options;
+  }
+
   async ensureModelLoaded() {
+    const runtimeSignature = this.getNodeRuntimeSignature();
     console.log(
       "[LLM] ensureModelLoaded() - Current model:",
       this.currentModelPath,
@@ -1470,7 +1853,8 @@ export class LocalAIServer {
     if (
       this.llamaChat &&
       this.llamaModel &&
-      this.currentModelPath !== this.config.llm.modelPath
+      (this.currentModelPath !== this.config.llm.modelPath ||
+        this.loadedRuntimeSignature !== runtimeSignature)
     ) {
       console.log(
         "[LLM] Model changed from",
@@ -1486,7 +1870,8 @@ export class LocalAIServer {
     if (
       this.llamaChat &&
       this.llamaModel &&
-      this.currentModelPath === this.config.llm.modelPath
+      this.currentModelPath === this.config.llm.modelPath &&
+      this.loadedRuntimeSignature === runtimeSignature
     ) {
       this.lastUsed = Date.now();
       this.resetIdleTimer();
@@ -1576,7 +1961,19 @@ export class LocalAIServer {
       console.log("[LLM]   Layers on GPU:", this.llamaModel.gpuLayers);
 
       this.llamaContext = await this.llamaModel.createContext({
-        contextSize: this.config.llm.contextSize,
+        ...(this.config.llm.contextSize > 0
+          ? { contextSize: this.config.llm.contextSize }
+          : {}),
+        ...(this.config.llm.threads !== undefined
+          ? { threads: this.config.llm.threads }
+          : {}),
+        ...(this.config.llm.batchSize !== undefined
+          ? { batchSize: this.config.llm.batchSize }
+          : {}),
+        ...(this.config.llm.flashAttention &&
+        this.config.llm.flashAttention !== "auto"
+          ? { flashAttention: this.config.llm.flashAttention === "on" }
+          : {}),
       });
 
       this.llamaChat = new LlamaChatClass({
@@ -1584,6 +1981,7 @@ export class LocalAIServer {
       });
 
       this.currentModelPath = this.config.llm.modelPath;
+      this.loadedRuntimeSignature = this.getNodeRuntimeSignature();
 
       console.log("[LLM] Model loaded successfully");
     } catch (error) {
