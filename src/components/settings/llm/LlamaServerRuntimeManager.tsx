@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ElectronLlamaServerAPI } from "../../../types/electron";
 import { Button, Select } from "../../ui";
 import { Icon } from "../../icons";
+import Dialog from "../../common/Dialog";
 import { cn } from "../../../utils/cn";
 
 export interface LlamaRuntimePack {
@@ -104,6 +105,7 @@ const LlamaServerRuntimeManager = ({
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(
     null,
   );
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
   const [progress, setProgress] = useState<RuntimeProgress | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
@@ -324,8 +326,14 @@ const LlamaServerRuntimeManager = ({
                     {installedForSelectedBuild ? (
                       <button
                         type="button"
-                        onClick={() => onRequestDeleteBackend?.(pack.id)}
-                        disabled={!onRequestDeleteBackend}
+                        onClick={() => {
+                          if (onRequestDeleteBackend)
+                            onRequestDeleteBackend(pack.id);
+                          else setPendingDelete(pack.id);
+                        }}
+                        disabled={
+                          !onRequestDeleteBackend && !api?.deleteBackend
+                        }
                         data-testid={`${testIdPrefix}-delete-${pack.id}`}
                         className="flex flex-shrink-0 items-center gap-1 rounded bg-white/10 px-2 py-1 text-xs font-medium text-white/80 transition-colors hover:bg-white/20 disabled:opacity-40"
                       >
@@ -378,6 +386,22 @@ const LlamaServerRuntimeManager = ({
           </div>
         )}
       </div>
+      {pendingDelete && (
+        <Dialog
+          type="delete"
+          title="Delete runtime"
+          message={`Delete the installed ${pendingDelete} runtime?`}
+          isLightBackground={isLightBackground}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={async () => {
+            if (!api?.deleteBackend)
+              throw new Error("Runtime deletion is unavailable");
+            await api.deleteBackend(pendingDelete);
+            refreshStatus();
+            setPendingDelete(null);
+          }}
+        />
+      )}
     </div>
   );
 };

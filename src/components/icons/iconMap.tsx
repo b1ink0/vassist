@@ -161,6 +161,7 @@ export const iconMap = {
   unlock: HeroIconsSolid.LockOpenIcon,
   box: HeroIconsSolid.CubeIcon,
   "view-in-ar": MdViewInAr,
+  "sticker-border": HeroIconsSolid.Square2StackIcon,
 };
 
 export default iconMap;

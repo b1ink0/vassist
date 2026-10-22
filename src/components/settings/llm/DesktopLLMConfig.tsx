@@ -135,7 +135,6 @@ const DesktopLLMConfig = ({
   config = {},
   onChange,
   isLightBackground = false,
-  isSetupMode = false,
   onRequestDeleteModel,
   refreshTrigger,
 }: DesktopLLMConfigProps) => {
@@ -398,7 +397,7 @@ const DesktopLLMConfig = ({
         </div>
         <p className="text-xs text-white/60">
           Model: {config.model || "No model selected"} •{" "}
-          {config.llmEngine === "llama-server"
+          {config.llmEngine !== "node-llama"
             ? "llama-server"
             : "node-llama-cpp"}
         </p>
@@ -416,7 +415,7 @@ const DesktopLLMConfig = ({
         </h3>
         <Select
           data-testid="desktop-llm-engine-select"
-          value={config.llmEngine || "node-llama"}
+          value={config.llmEngine || "llama-server"}
           onChange={(e) => handleChange("llmEngine", e.target.value)}
           variant={isLightBackground ? "dark" : "default"}
           options={[
@@ -428,14 +427,16 @@ const DesktopLLMConfig = ({
           ]}
         />
 
-        {config.llmEngine === "llama-server" && (
+        {config.llmEngine !== "node-llama" && (
           <LlamaServerRuntimeManager
             api={api?.llamaServer}
             packs={CHAT_LLAMA_RUNTIME_PACKS}
             selectedBackend={config.llmBackend || "auto"}
             onBackendChange={(backend) => handleChange("llmBackend", backend)}
-            onRequestDeleteBackend={(backend) =>
-              onRequestDeleteModel?.(`llama-backend:${backend}`)
+            onRequestDeleteBackend={
+              onRequestDeleteModel
+                ? (backend) => onRequestDeleteModel(`llama-backend:${backend}`)
+                : null
             }
             refreshTrigger={refreshTrigger}
             isLightBackground={isLightBackground}
@@ -445,7 +446,7 @@ const DesktopLLMConfig = ({
       </div>
 
       {/* Backend Manager (node-llama-cpp engine only) */}
-      {config.llmEngine !== "llama-server" && (
+      {config.llmEngine === "node-llama" && (
         <div className="p-3 rounded-lg bg-white/5 border border-white/10 space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div>
@@ -555,12 +556,11 @@ const DesktopLLMConfig = ({
           config={config}
           onChange={handleChange}
           isLightBackground={isLightBackground}
-          openAdvanced={isSetupMode}
         />
       </div>
 
       {/* Model Management Section */}
-      {!isSetupMode && isDesktop && storageService && (
+      {isDesktop && storageService && (
         <LocalLLMModelManager
           storageService={storageService}
           selectedModel={config.model ?? null}

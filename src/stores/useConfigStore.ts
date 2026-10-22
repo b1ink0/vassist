@@ -26,7 +26,15 @@ import {
   validateSTTConfig,
   validateTTSConfig,
 } from "../config/aiConfig";
-import { DefaultUIConfig, type UIConfig } from "../config/uiConfig";
+import {
+  DEFAULT_BACKGROUND_FILL_SETTINGS,
+  DEFAULT_BACKGROUND_IMAGE_EFFECTS,
+  DefaultUIConfig,
+  type BackgroundFillSettings,
+  type BackgroundImageEffects,
+  type UIConfig,
+} from "../config/uiConfig";
+import { isBuiltInBackgroundId } from "../config/backgroundCatalog";
 import { mergeDeep, type ResolvedVAssistEmbedConfig } from "../embed/config";
 import { getEmbedConfig } from "../embed/runtimeStore";
 import Logger from "../services/common/LoggerService";
@@ -148,6 +156,9 @@ export interface ConfigStoreState {
   kokoroStatus: KokoroStatus;
   hydrateConfigStore: (
     embedConfig?: ResolvedVAssistEmbedConfig,
+  ) => Promise<void>;
+  applyEmbedConfigToCurrentState: (
+    embedConfig: ResolvedVAssistEmbedConfig,
   ) => Promise<void>;
   updateUIConfig: (
     path: string,
@@ -358,6 +369,11 @@ const normalizeAIConfig = (
 const normalizeUIConfig = (
   savedConfig: Partial<UIConfig> | null | undefined,
 ): UIConfig => {
+  const savedAndroidBackground = savedConfig?.androidBackground;
+  const savedDesktopBackground = savedConfig?.desktopBackground;
+  const savedSlideshowInterval =
+    savedDesktopBackground?.slideshowIntervalSeconds;
+  const savedFadeDuration = savedDesktopBackground?.fadeDurationSeconds;
   const savedDesktopMode = savedConfig?.desktopMode;
   const normalizedMode =
     savedDesktopMode?.mode === "app" ||
@@ -370,10 +386,159 @@ const normalizeUIConfig = (
     savedDesktopMode?.controlPlacement === "detached"
       ? savedDesktopMode.controlPlacement
       : DefaultUIConfig.desktopMode.controlPlacement;
+  const normalizeEffect = (
+    value: number | undefined,
+    fallback: number,
+    min: number,
+    max: number,
+  ) =>
+    typeof value === "number" && Number.isFinite(value)
+      ? Math.min(max, Math.max(min, value))
+      : fallback;
+  const normalizeBackgroundEffects = (
+    saved: Partial<BackgroundImageEffects> | undefined,
+  ): BackgroundImageEffects => ({
+    brightnessPercent: normalizeEffect(
+      saved?.brightnessPercent,
+      DEFAULT_BACKGROUND_IMAGE_EFFECTS.brightnessPercent,
+      20,
+      100,
+    ),
+    contrastPercent: normalizeEffect(
+      saved?.contrastPercent,
+      DEFAULT_BACKGROUND_IMAGE_EFFECTS.contrastPercent,
+      50,
+      150,
+    ),
+    saturationPercent: normalizeEffect(
+      saved?.saturationPercent,
+      DEFAULT_BACKGROUND_IMAGE_EFFECTS.saturationPercent,
+      0,
+      200,
+    ),
+    blurPixels: normalizeEffect(
+      saved?.blurPixels,
+      DEFAULT_BACKGROUND_IMAGE_EFFECTS.blurPixels,
+      0,
+      12,
+    ),
+    grayscalePercent: normalizeEffect(
+      saved?.grayscalePercent,
+      DEFAULT_BACKGROUND_IMAGE_EFFECTS.grayscalePercent,
+      0,
+      100,
+    ),
+    sepiaPercent: normalizeEffect(
+      saved?.sepiaPercent,
+      DEFAULT_BACKGROUND_IMAGE_EFFECTS.sepiaPercent,
+      0,
+      100,
+    ),
+    hueRotateDegrees: normalizeEffect(
+      saved?.hueRotateDegrees,
+      DEFAULT_BACKGROUND_IMAGE_EFFECTS.hueRotateDegrees,
+      0,
+      360,
+    ),
+  });
+  const normalizeBackgroundFill = (
+    saved: Partial<BackgroundFillSettings> | undefined,
+  ): BackgroundFillSettings => ({
+    mode:
+      saved?.mode === "solid" || saved?.mode === "gradient"
+        ? saved.mode
+        : "images",
+    solidColor:
+      typeof saved?.solidColor === "string" &&
+      /^#[\da-f]{6}$/i.test(saved.solidColor)
+        ? saved.solidColor
+        : DEFAULT_BACKGROUND_FILL_SETTINGS.solidColor,
+    gradientStartColor:
+      typeof saved?.gradientStartColor === "string" &&
+      /^#[\da-f]{6}$/i.test(saved.gradientStartColor)
+        ? saved.gradientStartColor
+        : DEFAULT_BACKGROUND_FILL_SETTINGS.gradientStartColor,
+    gradientEndColor:
+      typeof saved?.gradientEndColor === "string" &&
+      /^#[\da-f]{6}$/i.test(saved.gradientEndColor)
+        ? saved.gradientEndColor
+        : DEFAULT_BACKGROUND_FILL_SETTINGS.gradientEndColor,
+    gradientAngleDegrees: normalizeEffect(
+      saved?.gradientAngleDegrees,
+      DEFAULT_BACKGROUND_FILL_SETTINGS.gradientAngleDegrees,
+      0,
+      360,
+    ),
+  });
 
   return {
     ...DefaultUIConfig,
     ...(savedConfig ?? {}),
+    androidBackground: {
+      ...DefaultUIConfig.androidBackground,
+      ...(savedAndroidBackground ?? {}),
+      ...normalizeBackgroundFill(savedAndroidBackground),
+      ...normalizeBackgroundEffects(savedAndroidBackground),
+      enabled: savedAndroidBackground?.enabled !== false,
+      parallaxEnabled: savedAndroidBackground?.parallaxEnabled !== false,
+      slideshowEnabled: savedAndroidBackground?.slideshowEnabled === true,
+      builtInIds: Array.isArray(savedAndroidBackground?.builtInIds)
+        ? savedAndroidBackground.builtInIds.filter(
+            (id): id is string =>
+              typeof id === "string" && isBuiltInBackgroundId(id),
+          )
+        : DefaultUIConfig.androidBackground.builtInIds,
+      slideshowIntervalSeconds:
+        typeof savedAndroidBackground?.slideshowIntervalSeconds === "number" &&
+        Number.isFinite(savedAndroidBackground.slideshowIntervalSeconds)
+          ? Math.min(
+              3600,
+              Math.max(5, savedAndroidBackground.slideshowIntervalSeconds),
+            )
+          : DefaultUIConfig.androidBackground.slideshowIntervalSeconds,
+      fadeDurationSeconds:
+        typeof savedAndroidBackground?.fadeDurationSeconds === "number" &&
+        Number.isFinite(savedAndroidBackground.fadeDurationSeconds)
+          ? Math.min(
+              15,
+              Math.max(0, savedAndroidBackground.fadeDurationSeconds),
+            )
+          : DefaultUIConfig.androidBackground.fadeDurationSeconds,
+    },
+    desktopBackground: {
+      ...DefaultUIConfig.desktopBackground,
+      ...(savedDesktopBackground ?? {}),
+      ...normalizeBackgroundFill(savedDesktopBackground),
+      ...normalizeBackgroundEffects(savedDesktopBackground),
+      enabled: savedDesktopBackground?.enabled !== false,
+      parallaxEnabled: savedDesktopBackground?.parallaxEnabled !== false,
+      slideshowEnabled: savedDesktopBackground?.slideshowEnabled !== false,
+      builtInIds: Array.isArray(savedDesktopBackground?.builtInIds)
+        ? savedDesktopBackground.builtInIds.filter(
+            (id): id is string =>
+              typeof id === "string" && isBuiltInBackgroundId(id),
+          )
+        : DefaultUIConfig.desktopBackground.builtInIds,
+      folderPath:
+        typeof savedDesktopBackground?.folderPath === "string"
+          ? savedDesktopBackground.folderPath
+          : null,
+      imagePaths: Array.isArray(savedDesktopBackground?.imagePaths)
+        ? savedDesktopBackground.imagePaths.filter(
+            (imagePath): imagePath is string => typeof imagePath === "string",
+          )
+        : DefaultUIConfig.desktopBackground.imagePaths,
+      slideshowIntervalSeconds:
+        typeof savedSlideshowInterval === "number" &&
+        Number.isFinite(savedSlideshowInterval)
+          ? Math.min(3600, Math.max(5, savedSlideshowInterval))
+          : DefaultUIConfig.desktopBackground.slideshowIntervalSeconds,
+      fadeDurationSeconds:
+        typeof savedFadeDuration === "number" &&
+        Number.isFinite(savedFadeDuration)
+          ? Math.min(15, Math.max(0, savedFadeDuration))
+          : DefaultUIConfig.desktopBackground.fadeDurationSeconds,
+    },
     desktopMode: {
       ...DefaultUIConfig.desktopMode,
       ...(savedDesktopMode ?? {}),
@@ -594,6 +759,14 @@ const buildConfigsFromSetupData = (setupData: SetupData) => {
       voice: setupData.tts?.["openai-compatible"]?.voice || "default",
       speed: setupData.tts?.["openai-compatible"]?.speed || 1.0,
     },
+    "android-local": {
+      ...DefaultTTSConfig["android-local"],
+      ...(setupData.tts?.["android-local"] ?? {}),
+    },
+    "desktop-local": {
+      ...DefaultTTSConfig["desktop-local"],
+      ...(setupData.tts?.["desktop-local"] ?? {}),
+    },
   });
 
   const sttConfig = normalizeSTTConfig({
@@ -620,10 +793,110 @@ const buildConfigsFromSetupData = (setupData: SetupData) => {
       model: "whisper",
       language: setupData.sttConfig?.["openai-compatible"]?.language || "en",
     },
+    "android-local": {
+      ...DefaultSTTConfig["android-local"],
+      ...(setupData.sttConfig?.["android-local"] ?? {}),
+    },
+    "desktop-local": {
+      ...DefaultSTTConfig["desktop-local"],
+      ...(setupData.sttConfig?.["desktop-local"] ?? {}),
+    },
   });
 
   const uiConfig: UIConfig = {
     ...DefaultUIConfig,
+    androidBackground: {
+      ...DefaultUIConfig.androidBackground,
+      enabled: setupData.ui?.background?.enabled ?? true,
+      mode:
+        setupData.ui?.background?.mode ??
+        DefaultUIConfig.androidBackground.mode,
+      solidColor:
+        setupData.ui?.background?.solidColor ??
+        DefaultUIConfig.androidBackground.solidColor,
+      gradientStartColor:
+        setupData.ui?.background?.gradientStartColor ??
+        DefaultUIConfig.androidBackground.gradientStartColor,
+      gradientEndColor:
+        setupData.ui?.background?.gradientEndColor ??
+        DefaultUIConfig.androidBackground.gradientEndColor,
+      gradientAngleDegrees:
+        setupData.ui?.background?.gradientAngleDegrees ??
+        DefaultUIConfig.androidBackground.gradientAngleDegrees,
+      brightnessPercent:
+        setupData.ui?.background?.brightnessPercent ??
+        DefaultUIConfig.androidBackground.brightnessPercent,
+      contrastPercent:
+        setupData.ui?.background?.contrastPercent ??
+        DefaultUIConfig.androidBackground.contrastPercent,
+      saturationPercent:
+        setupData.ui?.background?.saturationPercent ??
+        DefaultUIConfig.androidBackground.saturationPercent,
+      blurPixels:
+        setupData.ui?.background?.blurPixels ??
+        DefaultUIConfig.androidBackground.blurPixels,
+      grayscalePercent:
+        setupData.ui?.background?.grayscalePercent ??
+        DefaultUIConfig.androidBackground.grayscalePercent,
+      sepiaPercent:
+        setupData.ui?.background?.sepiaPercent ??
+        DefaultUIConfig.androidBackground.sepiaPercent,
+      hueRotateDegrees:
+        setupData.ui?.background?.hueRotateDegrees ??
+        DefaultUIConfig.androidBackground.hueRotateDegrees,
+      builtInIds:
+        setupData.ui?.background?.builtInIds ??
+        DefaultUIConfig.androidBackground.builtInIds,
+      slideshowEnabled:
+        setupData.ui?.background?.androidSlideshowEnabled ??
+        DefaultUIConfig.androidBackground.slideshowEnabled,
+    },
+    desktopBackground: {
+      ...DefaultUIConfig.desktopBackground,
+      enabled: setupData.ui?.background?.enabled ?? true,
+      mode:
+        setupData.ui?.background?.mode ??
+        DefaultUIConfig.desktopBackground.mode,
+      solidColor:
+        setupData.ui?.background?.solidColor ??
+        DefaultUIConfig.desktopBackground.solidColor,
+      gradientStartColor:
+        setupData.ui?.background?.gradientStartColor ??
+        DefaultUIConfig.desktopBackground.gradientStartColor,
+      gradientEndColor:
+        setupData.ui?.background?.gradientEndColor ??
+        DefaultUIConfig.desktopBackground.gradientEndColor,
+      gradientAngleDegrees:
+        setupData.ui?.background?.gradientAngleDegrees ??
+        DefaultUIConfig.desktopBackground.gradientAngleDegrees,
+      brightnessPercent:
+        setupData.ui?.background?.brightnessPercent ??
+        DefaultUIConfig.desktopBackground.brightnessPercent,
+      contrastPercent:
+        setupData.ui?.background?.contrastPercent ??
+        DefaultUIConfig.desktopBackground.contrastPercent,
+      saturationPercent:
+        setupData.ui?.background?.saturationPercent ??
+        DefaultUIConfig.desktopBackground.saturationPercent,
+      blurPixels:
+        setupData.ui?.background?.blurPixels ??
+        DefaultUIConfig.desktopBackground.blurPixels,
+      grayscalePercent:
+        setupData.ui?.background?.grayscalePercent ??
+        DefaultUIConfig.desktopBackground.grayscalePercent,
+      sepiaPercent:
+        setupData.ui?.background?.sepiaPercent ??
+        DefaultUIConfig.desktopBackground.sepiaPercent,
+      hueRotateDegrees:
+        setupData.ui?.background?.hueRotateDegrees ??
+        DefaultUIConfig.desktopBackground.hueRotateDegrees,
+      builtInIds:
+        setupData.ui?.background?.builtInIds ??
+        DefaultUIConfig.desktopBackground.builtInIds,
+      slideshowEnabled:
+        setupData.ui?.background?.desktopSlideshowEnabled ??
+        DefaultUIConfig.desktopBackground.slideshowEnabled,
+    },
     enableModelLoading: setupData.ui?.enableModelLoading ?? true,
     enablePortraitMode: setupData.ui?.enablePortraitMode ?? false,
     position: {
@@ -661,7 +934,9 @@ const applyEmbedUiPolicy = (
     return uiConfig;
   }
 
-  const nextUiConfig = mergeDeep(uiConfig, {});
+  const nextUiConfig = normalizeUIConfig(
+    mergeDeep<UIConfig>(uiConfig, embedConfig.ui),
+  );
 
   if (!embedConfig.features.liveAssistant3d) {
     nextUiConfig.enableModelLoading = false;
@@ -1332,6 +1607,38 @@ export const useConfigStore = create<ConfigStoreState>()(
             savedSttConfig,
           );
         }
+      },
+      applyEmbedConfigToCurrentState: async (embedConfig) => {
+        if (!get().hasHydrated) {
+          return;
+        }
+
+        const current = get();
+        const applied = applyEmbedConfigToConfigs(
+          {
+            uiConfig: current.uiConfig,
+            aiConfig: current.aiConfig,
+            ttsConfig: current.ttsConfig,
+            sttConfig: current.sttConfig,
+          },
+          embedConfig,
+        );
+
+        set((state) => {
+          state.uiConfig = applied.uiConfig;
+          state.aiConfig = applied.aiConfig;
+          state.ttsConfig = applied.ttsConfig;
+          state.sttConfig = applied.sttConfig;
+        });
+
+        await configureAIAndFeatureServices(applied.aiConfig);
+        TTSServiceProxy.configure(applied.ttsConfig);
+        STTServiceProxy.configure(applied.sttConfig);
+        await syncDesktopServerForProviders(
+          applied.aiConfig,
+          applied.ttsConfig,
+          applied.sttConfig,
+        );
       },
       updateUIConfig: (path, value, options) => {
         scheduleConfigPathUpdate("ui", path, value, options);

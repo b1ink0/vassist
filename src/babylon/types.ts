@@ -77,6 +77,8 @@ export interface CameraUIConfigLike {
 export interface UIPositionConfigLike {
   preset?: string;
   lastLocation?: SavedModelPositionLike | null;
+  offset?: CameraOffset;
+  portraitZoomMultiplier?: number;
 }
 
 export interface UIConfigLike {
@@ -326,6 +328,7 @@ export interface SceneMetadataLike {
   animationManager?: AnimationManagerOffsetLike | unknown;
   defaultGround?: Mesh;
   stageMesh?: Mesh | null;
+  setShadowsEnabled?: (enabled: boolean) => void;
   interactionManager?: unknown;
   modelMesh?: unknown;
   mmdModel?: unknown;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useSetup } from "../../../contexts/SetupContext";
 import { AIServiceProxy } from "../../../services/proxies";
 import ProviderSelection from "../shared/ProviderSelection";
@@ -11,6 +11,11 @@ import { isAndroid, isDesktop } from "../../../utils/PlatformUtils";
 import FlagCopyButton from "../../common/FlagCopyButton";
 import { Button, Input } from "../../ui";
 import { DEFAULT_ENDPOINTS } from "../../../config/serviceEndpoints";
+import { useAndroidApi } from "../../../hooks/useAndroidStore";
+import ComputeUnitCard from "../../settings/llm/ComputeUnitCard";
+import LocalLLMModelManager from "../../settings/llm/LocalLLMModelManager";
+import LLMParameterSettings from "../../settings/llm/LLMParameterSettings";
+import { getLLMModelStorage } from "../../../services/storage/LLMModelStorageService";
 
 type LLMProviderId =
   | "android-local"
@@ -48,8 +53,15 @@ interface LLMConfigShape {
   provider?: string;
   openai?: { apiKey?: string; model?: string };
   ollama?: { endpoint?: string; model?: string };
-  "android-local"?: { endpoint?: string; model?: string };
-  "desktop-local"?: { endpoint?: string; model?: string };
+  "android-local"?: Record<string, unknown> & {
+    endpoint?: string;
+    model?: string;
+    computeUnit?: string;
+  };
+  "desktop-local"?: Record<string, unknown> & {
+    endpoint?: string;
+    model?: string;
+  };
 }
 
 interface LLMTestConfig {
@@ -57,13 +69,13 @@ interface LLMTestConfig {
   chromeAi?: { enableImageSupport: boolean; enableAudioSupport: boolean };
   openai?: { apiKey: string; model: string };
   ollama?: { endpoint: string; model: string };
-  "android-local"?: {
+  "android-local"?: Record<string, unknown> & {
     endpoint: string;
     model: string;
     temperature: number;
     maxTokens: number;
   };
-  "desktop-local"?: {
+  "desktop-local"?: Record<string, unknown> & {
     endpoint: string;
     model: string;
     temperature: number;
@@ -90,6 +102,7 @@ const LLMProviderStep = ({
   isLightBackground = false,
 }: LLMProviderStepProps) => {
   const { setupData, updateSetupData } = useSetup();
+  const androidAPI = useAndroidApi();
   const initialLoadRef = useRef(true);
   const isWebMode = !isAndroid && !isDesktop;
   const defaultProvider = isAndroid
@@ -108,10 +121,26 @@ const LLMProviderStep = ({
   const [androidEndpoint, setAndroidEndpoint] = useState(
     DEFAULT_ENDPOINTS.androidLocal,
   );
+  const [androidLocalConfig, setAndroidLocalConfig] = useState<
+    Record<string, unknown>
+  >({ computeUnit: "auto", model: "qwen3-local" });
+  const androidStorageService = useMemo(
+    () => (isAndroid ? getLLMModelStorage(androidAPI) : null),
+    [androidAPI],
+  );
+
+  useEffect(() => {
+    if (isAndroid && typeof androidLocalConfig.computeUnit === "string") {
+      androidAPI?.setLLMComputeUnit?.(androidLocalConfig.computeUnit);
+    }
+  }, [androidAPI, androidLocalConfig.computeUnit]);
   const [desktopEndpoint, setDesktopEndpoint] = useState(
     DEFAULT_ENDPOINTS.desktopLocal,
   );
   const [desktopModel, setDesktopModel] = useState("qwen3:0.6b");
+  const [desktopLocalConfig, setDesktopLocalConfig] = useState<
+    Record<string, unknown>
+  >({ llmEngine: "llama-server", backend: "auto" });
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResultState | null>(null);
   const [chromeAIStatus, setChromeAIStatus] = useState<ChromeAIStatusState>({
@@ -153,10 +182,17 @@ const LLMProviderStep = ({
       if (llmData.ollama?.model) setOllamaModel(llmData.ollama.model);
       if (llmData["android-local"]?.endpoint)
         setAndroidEndpoint(llmData["android-local"].endpoint);
+      if (llmData["android-local"])
+        setAndroidLocalConfig(llmData["android-local"]);
       if (llmData["desktop-local"]?.endpoint)
         setDesktopEndpoint(llmData["desktop-local"].endpoint);
       if (llmData["desktop-local"]?.model)
         setDesktopModel(llmData["desktop-local"].model);
+      if (llmData["desktop-local"])
+        setDesktopLocalConfig((current) => ({
+          ...current,
+          ...llmData["desktop-local"],
+        }));
     }
 
     // Mark initial load complete after first load
@@ -187,19 +223,25 @@ const LLMProviderStep = ({
         model: ollamaModel,
       },
       "android-local": {
-        endpoint: androidEndpoint,
-        model: "qwen3-local",
         temperature: 0.7,
         maxTokens: 2048,
+        contextSize: 4096,
+        ...androidLocalConfig,
+        endpoint: androidEndpoint,
+        model:
+          typeof androidLocalConfig.model === "string"
+            ? androidLocalConfig.model
+            : "qwen3-local",
       },
       "desktop-local": {
-        endpoint: desktopEndpoint,
-        model: desktopModel,
         temperature: 0.7,
         maxTokens: 2048,
         contextSize: 4096,
         gpuLayers: 99,
         threads: 4,
+        ...desktopLocalConfig,
+        endpoint: desktopEndpoint,
+        model: desktopModel,
       },
     };
 
@@ -210,8 +252,10 @@ const LLMProviderStep = ({
     ollamaEndpoint,
     ollamaModel,
     androidEndpoint,
+    androidLocalConfig,
     desktopEndpoint,
     desktopModel,
+    desktopLocalConfig,
     updateSetupData,
   ]);
 
@@ -350,7 +394,7 @@ const LLMProviderStep = ({
           {
             id: "android-local",
             name: "Android Local",
-            description: "On-device AI using Qwen3-0.6B",
+            description: "On-device AI using local models",
             iconName: "cpu",
             available: true,
             recommended: true,
@@ -479,20 +523,26 @@ const LLMProviderStep = ({
 
       if (selectedProvider === "android-local") {
         testConfig["android-local"] = {
-          endpoint: androidEndpoint,
-          model: "qwen3-local",
           temperature: 0.7,
           maxTokens: 2048,
+          contextSize: 4096,
+          ...androidLocalConfig,
+          endpoint: androidEndpoint,
+          model:
+            typeof androidLocalConfig.model === "string"
+              ? androidLocalConfig.model
+              : "qwen3-local",
         };
       } else if (selectedProvider === "desktop-local") {
         testConfig["desktop-local"] = {
-          endpoint: desktopEndpoint,
-          model: desktopModel,
           temperature: 0.7,
           maxTokens: 2048,
           contextSize: 4096,
           gpuLayers: 99,
           threads: 4,
+          ...desktopLocalConfig,
+          endpoint: desktopEndpoint,
+          model: desktopModel,
         };
       } else if (selectedProvider === "chrome-ai") {
         testConfig.chromeAi = {
@@ -581,13 +631,64 @@ const LLMProviderStep = ({
             <div className="flex items-center gap-2 mb-2">
               <div className="w-2 h-2 rounded-full bg-white/70"></div>
               <span className="text-sm font-semibold text-white/90">
-                Ready to use!
+                {androidLocalConfig.model
+                  ? "Model selected"
+                  : "Using default model"}
               </span>
             </div>
             <p className="text-xs text-white/60">
               Model: Qwen3-0.6B-Q4 (400MB) • Optimized for mobile devices
             </p>
           </div>
+
+          <ComputeUnitCard
+            androidAPI={androidAPI}
+            value={
+              typeof androidLocalConfig.computeUnit === "string"
+                ? androidLocalConfig.computeUnit
+                : "auto"
+            }
+            onChange={(computeUnit) => {
+              setAndroidLocalConfig((current) => ({ ...current, computeUnit }));
+              androidAPI?.setLLMComputeUnit?.(computeUnit);
+            }}
+          />
+
+          <LocalLLMModelManager
+            storageService={androidStorageService}
+            selectedModel={
+              typeof androidLocalConfig.model === "string"
+                ? androidLocalConfig.model
+                : "qwen3-local"
+            }
+            onModelSelect={(model) =>
+              setAndroidLocalConfig((current) => ({ ...current, model }))
+            }
+            customModelsPath={null}
+            onCustomPathChange={null}
+            isLightBackground={isLightBackground}
+            supportsCustomFolder={false}
+          />
+
+          <LLMParameterSettings
+            provider="android-local"
+            config={
+              {
+                ...androidLocalConfig,
+                model:
+                  typeof androidLocalConfig.model === "string"
+                    ? androidLocalConfig.model
+                    : "qwen3-local",
+              } as Parameters<typeof LLMParameterSettings>[0]["config"]
+            }
+            onChange={(field, value) =>
+              setAndroidLocalConfig((current) => ({
+                ...current,
+                [field]: value,
+              }))
+            }
+            isLightBackground={isLightBackground}
+          />
 
           {/* Advanced Config (collapsed by default) */}
           <details className="group">
@@ -623,10 +724,12 @@ const LLMProviderStep = ({
       {selectedProvider === "desktop-local" && (
         <DesktopLLMConfig
           config={{
+            ...desktopLocalConfig,
             endpoint: desktopEndpoint,
             model: desktopModel,
           }}
           onChange={(updates) => {
+            setDesktopLocalConfig((current) => ({ ...current, ...updates }));
             if (typeof updates.endpoint === "string")
               setDesktopEndpoint(updates.endpoint);
             if (typeof updates.model === "string")
@@ -895,7 +998,7 @@ const LLMProviderStep = ({
           </div>
 
           {/* Required Flags - Always visible */}
-          <details className="group" open>
+          <details className="group">
             <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
               <span>Required Chrome Flags</span>
               <Icon

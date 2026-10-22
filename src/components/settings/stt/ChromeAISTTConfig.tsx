@@ -40,7 +40,6 @@ const ChromeAISTTConfig = ({
   onCheckStatus,
   onStartDownload,
   isLightBackground = false,
-  isSetupMode = false,
 }: ChromeAISTTConfigProps) => {
   const hasCheckedRef = useRef(false);
 
@@ -186,7 +185,7 @@ const ChromeAISTTConfig = ({
       </div>
 
       {/* Required Flags */}
-      <details className="group" open={isSetupMode}>
+      <details className="group">
         <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
           <span>Required Chrome Flags</span>
           <Icon

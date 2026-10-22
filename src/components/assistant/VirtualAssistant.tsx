@@ -936,7 +936,16 @@ const VirtualAssistant = forwardRef<AssistantHandle, VirtualAssistantProps>(
     const sceneUiConfig: UIConfigLike | undefined = isPreview
       ? {
           enablePortraitMode: portraitMode,
-          position: { preset: previewPosition },
+          camera: { mode: portraitMode ? "2D" : "3D" },
+          position: {
+            preset: previewPosition,
+            ...(portraitMode
+              ? {
+                  offset: { x: 0, y: 4.1 },
+                  portraitZoomMultiplier: 1.5,
+                }
+              : {}),
+          },
         }
       : forcePortraitMode
         ? { ...(baseUiConfig ?? {}), enablePortraitMode: true }
@@ -991,6 +1000,7 @@ const VirtualAssistant = forwardRef<AssistantHandle, VirtualAssistantProps>(
             previewWidth={previewWidth}
             previewHeight={previewHeight}
             previewClassName={previewClassName}
+            enableAvatarShadow={uiConfig?.enableAvatarShadow !== false}
             sceneConfig={sceneBuildConfig}
           />
         )}

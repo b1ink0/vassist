@@ -1,8 +1,6 @@
 # Windows desktop host addon
 
-This folder contains the Windows-only native boundary used by Electron Live
-Wallpaper mode. It is deliberately under `electron/`; it is not part of the
-shared web, Android, or renderer application.
+Windows-only native module for Electron's live-wallpaper integration.
 
 ## Build
 
@@ -20,6 +18,7 @@ globally installed `node-gyp`.
 The build requires:
 
 - Windows 10/11;
+- Node.js;
 - Visual Studio C++ build tools with the MSVC v143 toolset;
 - a Windows SDK;
 - Python supported by `node-gyp`;

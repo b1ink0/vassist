@@ -11,6 +11,10 @@ import { isAndroid, isDesktop } from "../utils/PlatformUtils";
 import { getErrorMessage } from "./storeUtils";
 import { useConfigStore } from "./useConfigStore";
 import { DEFAULT_ENDPOINTS } from "../config/serviceEndpoints";
+import {
+  DEFAULT_BACKGROUND_FILL_SETTINGS,
+  DEFAULT_BACKGROUND_IMAGE_EFFECTS,
+} from "../config/uiConfig";
 
 const DEFAULT_LLM_PROVIDER = isAndroid
   ? "android-local"
@@ -28,7 +32,7 @@ const DEFAULT_STT_PROVIDER = isAndroid
     ? "desktop-local"
     : "chrome-ai-multimodal";
 
-export const TOTAL_SETUP_STEPS = 5;
+export const TOTAL_SETUP_STEPS = isAndroid || isDesktop ? 7 : 6;
 
 export const DEFAULT_SETUP_STATE = {
   setupCompleted: false,
@@ -69,6 +73,30 @@ export const DEFAULT_SETUP_STATE = {
         voice: "default",
         speed: 1.0,
       },
+      "android-local": {
+        endpoint: DEFAULT_ENDPOINTS.androidLocal,
+        model: "vits-local",
+        voice: "vits-local",
+        speakerId: 0,
+        speed: 1.0,
+      },
+      "desktop-local": {
+        endpoint: DEFAULT_ENDPOINTS.desktopLocal,
+        model: "gpt-sovits",
+        engine: "gpt-sovits",
+        supertonicVoice: "F1",
+        supertonicLang: "en",
+        supertonicSteps: 8,
+        pytorchBackend: "auto",
+        referenceAudio: null,
+        referenceText: "",
+        referenceLanguage: "en",
+        speed: 1.0,
+        topK: 15,
+        topP: 0.7,
+        temperature: 0.7,
+        trained: false,
+      },
     },
     sttConfig: {
       chromeAi: {
@@ -89,6 +117,18 @@ export const DEFAULT_SETUP_STATE = {
         language: "en",
         temperature: 0,
       },
+      "android-local": {
+        endpoint: DEFAULT_ENDPOINTS.androidLocal,
+        model: "whisper-local",
+        language: "en",
+        provider: "auto",
+      },
+      "desktop-local": {
+        endpoint: DEFAULT_ENDPOINTS.desktopLocal,
+        model: "tiny",
+        language: "auto",
+        threads: 4,
+      },
     },
     stt: {
       enabled: false,
@@ -106,6 +146,14 @@ export const DEFAULT_SETUP_STATE = {
       enablePortraitMode: false,
       position: "bottom-right",
       enableAIToolbar: true,
+      background: {
+        ...DEFAULT_BACKGROUND_FILL_SETTINGS,
+        ...DEFAULT_BACKGROUND_IMAGE_EFFECTS,
+        enabled: true,
+        builtInIds: ["milky-way"],
+        androidSlideshowEnabled: false,
+        desktopSlideshowEnabled: true,
+      },
       shortcuts: {
         enabled: false,
         openChat: "",

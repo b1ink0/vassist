@@ -7,6 +7,8 @@ import { Icon } from "../icons";
 import { Button } from "../ui";
 import { cn } from "../../utils/cn";
 
+export const ZOOM_CONTROL_PANEL_OFFSET = 171;
+
 interface ZoomControlProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -87,7 +89,8 @@ const ZoomControl = ({
           className="absolute flex w-40 flex-col items-center gap-2"
           style={{
             top: 0,
-            [isLeftSide ? "right" : "left"]: "-171px",
+            [isLeftSide ? "right" : "left"]:
+              `-${ZOOM_CONTROL_PANEL_OFFSET}px`,
           }}
         >
           <div

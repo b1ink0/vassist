@@ -1,3 +1,7 @@
+<script setup lang="ts">
+import AppIcon from "../.vitepress/theme/components/AppIcon.vue"
+</script>
+
 # Chat and Voice
 
 The chat window is where full conversations happen: typed or spoken, with attachments, and saved history.
@@ -9,7 +13,7 @@ The chat window is where full conversations happen: typed or spoken, with attach
 
 ## Opening chat
 
-- Click the floating **chat button** (AI spark icon) to open the chat view.
+- Click the floating <AppIcon name="ai" /> **chat button** to open the chat view.
 - On desktop, a lightweight input window is also available separately from the main window.
 - If the avatar is off, VAssist opens in chat layout by default.
 
@@ -17,7 +21,7 @@ The chat window is where full conversations happen: typed or spoken, with attach
 
 Each time you send your first message in a blank session, VAssist creates a new conversation and saves it automatically.
 
-To reopen an old conversation, click **Chat History** (clock icon, bottom-left of the chat window) to browse saved chats. Select any entry to pick up where you left off.
+To reopen an old conversation, click **Chat History** (<AppIcon name="history" />, bottom-left of the chat window) to browse saved chats. Select any entry to pick up where you left off.
 
 [Saved chats and branches](/guide/chat-history-and-branches)
 
@@ -56,11 +60,14 @@ Type in the text area. The toolbar sits below it:
 | Image      | Blue with count when attached                       | Opens a file picker to attach images.                             |
 | Audio      | Purple with count when attached                     | Opens a file picker to attach audio files.                        |
 | Mic        | Red pulse when recording, hourglass when processing | Records a voice clip and attaches it as audio. Tap again to stop. |
+| Thinking   | <AppIcon name="bulb" />, dimmed when off             | Requests reasoning from providers and models that support it.     |
 | Voice Mode | Phone icon                                          | Switches to hands-free voice conversation mode.                   |
 | Close      | X                                                   | Closes the input area.                                            |
 | Send       | Paper plane, disabled when nothing to send          | Sends the message.                                                |
 
 You can also **drag and drop** images or audio files directly onto the input area.
+
+When the model returns reasoning text, the message shows a collapsible **Thought process** panel above the answer. Click its header to expand or collapse it. **Auto-expand Thinking** in Settings → LLM controls whether the panel opens while reasoning is streaming.
 
 ## While a reply is coming in
 
@@ -85,7 +92,7 @@ Hover or tap a message to see its action menu:
 
 ## Voice mode
 
-Voice mode replaces the text input with a live conversation bar. Tap the **phone icon** to start.
+Voice mode replaces the text input with a live conversation bar. Tap the <AppIcon name="phone" /> icon to start.
 
 When voice mode is active the bar shows:
 
@@ -120,14 +127,14 @@ The AI behavior is controlled by the active **system prompt profile** in Setting
 
 ## Quick access panel
 
-The **Quick Access** button (wrench/tools icon, right side of the input bar) opens a compact overlay panel without leaving the chat. Use it to change common settings.
+Click the <AppIcon name="tools" /> **Quick Access** button on the right side of the input bar to open a compact overlay panel without leaving the chat. Use it to change common settings.
 
 | Section        | What you can change                                                                                   |
 | -------------- | ----------------------------------------------------------------------------------------------------- |
-| LLM Provider   | Switch AI provider, apply a saved backend profile, pick a model, and change the active system prompt. |
+| LLM Provider   | Switch AI provider, apply a saved backend profile, pick a model, change the active system prompt, and set Thinking and its effort when supported. |
 | Text-to-Speech | Toggle TTS on/off and switch provider.                                                                |
 | Speech-to-Text | Toggle STT on/off and switch provider.                                                                |
-| Interface      | Enable or disable the AI toolbar; toggle Temporary Chat (messages not saved to history).              |
+| Interface      | Change the assistant theme, enable or disable the AI toolbar, set Auto-expand Thinking, and toggle Temporary Chat (messages are not saved to history). |
 
 Each section has a **More** link that jumps straight to the corresponding settings tab if you need deeper configuration.
 

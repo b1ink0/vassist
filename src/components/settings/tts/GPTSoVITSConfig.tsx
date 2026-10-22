@@ -113,6 +113,10 @@ const GPTSoVITSConfig = ({
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
+    setEngine(config?.engine === "supertonic" ? "supertonic" : "gpt-sovits");
+  }, [config?.engine]);
+
+  useEffect(() => {
     if (typeof externalErrorMessage === "string") {
       setErrorMessage(externalErrorMessage);
     }
@@ -594,87 +598,89 @@ const GPTSoVITSConfig = ({
         </div>
 
         {/* Advanced TTS Parameters */}
-        {!isSetupMode && (
-          <details className="group">
-            <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
-              <span>Advanced Settings</span>
-              <Icon
-                name="chevron-down"
-                size={14}
-                className="group-open:rotate-180 transition-transform"
-              />
-            </summary>
-            <div className="mt-2 p-3 rounded-lg backdrop-blur-sm bg-white/5 border border-white/10 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-white/90 mb-1">
-                    Speed ({config?.speed || 1.0})
-                  </label>
-                  <input
-                    type="range"
-                    min="0.5"
-                    max="2.0"
-                    step="0.1"
-                    value={config?.speed || 1.0}
-                    onChange={(e) =>
-                      onChange && onChange("speed", parseFloat(e.target.value))
-                    }
-                    className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-white/90 mb-1">
-                    Top K ({config?.topK || 15})
-                  </label>
-                  <input
-                    type="range"
-                    min="10"
-                    max="20"
-                    step="1"
-                    value={config?.topK || 15}
-                    onChange={(e) =>
-                      onChange && onChange("topK", parseInt(e.target.value))
-                    }
-                    className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-white/90 mb-1">
-                    Top P ({(config?.topP || 0.7).toFixed(2)})
-                  </label>
-                  <input
-                    type="range"
-                    min="0.5"
-                    max="0.9"
-                    step="0.05"
-                    value={config?.topP || 0.7}
-                    onChange={(e) =>
-                      onChange && onChange("topP", parseFloat(e.target.value))
-                    }
-                    className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-white/90 mb-1">
-                    Temperature ({(config?.temperature || 0.7).toFixed(2)})
-                  </label>
-                  <input
-                    type="range"
-                    min="0.5"
-                    max="1.0"
-                    step="0.05"
-                    value={config?.temperature || 0.7}
-                    onChange={(e) =>
-                      onChange &&
-                      onChange("temperature", parseFloat(e.target.value))
-                    }
-                    className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
+        <details className="group">
+          <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
+            <span>
+              {isSetupMode
+                ? "Advanced Settings (Optional)"
+                : "Advanced Settings"}
+            </span>
+            <Icon
+              name="chevron-down"
+              size={14}
+              className="group-open:rotate-180 transition-transform"
+            />
+          </summary>
+          <div className="mt-2 p-3 rounded-lg backdrop-blur-sm bg-white/5 border border-white/10 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-white/90 mb-1">
+                  Speed ({config?.speed || 1.0})
+                </label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="2.0"
+                  step="0.1"
+                  value={config?.speed || 1.0}
+                  onChange={(e) =>
+                    onChange && onChange("speed", parseFloat(e.target.value))
+                  }
+                  className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-white/90 mb-1">
+                  Top K ({config?.topK || 15})
+                </label>
+                <input
+                  type="range"
+                  min="10"
+                  max="20"
+                  step="1"
+                  value={config?.topK || 15}
+                  onChange={(e) =>
+                    onChange && onChange("topK", parseInt(e.target.value))
+                  }
+                  className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-white/90 mb-1">
+                  Top P ({(config?.topP || 0.7).toFixed(2)})
+                </label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="0.9"
+                  step="0.05"
+                  value={config?.topP || 0.7}
+                  onChange={(e) =>
+                    onChange && onChange("topP", parseFloat(e.target.value))
+                  }
+                  className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-white/90 mb-1">
+                  Temperature ({(config?.temperature || 0.7).toFixed(2)})
+                </label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="1.0"
+                  step="0.05"
+                  value={config?.temperature || 0.7}
+                  onChange={(e) =>
+                    onChange &&
+                    onChange("temperature", parseFloat(e.target.value))
+                  }
+                  className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                />
               </div>
             </div>
-          </details>
-        )}
+          </div>
+        </details>
       </div>
     </div>
   );

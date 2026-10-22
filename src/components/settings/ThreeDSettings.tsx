@@ -2032,6 +2032,25 @@ const ThreeDSettings = ({
                         </div>
                       </div>
 
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex-1">
+                          <label className="text-sm text-white font-medium">
+                            Avatar Shadow
+                          </label>
+                          <p className="text-xs text-white/50 mt-0.5">
+                            {uiConfig.enableAvatarShadow !== false
+                              ? "Show a translucent shadow behind the avatar. Stages receive cast shadows."
+                              : "Avatar shadows are turned off"}
+                          </p>
+                        </div>
+                        <Toggle
+                          checked={uiConfig.enableAvatarShadow !== false}
+                          onChange={(checked) =>
+                            updateUIConfig("enableAvatarShadow", checked)
+                          }
+                        />
+                      </div>
+
                       {/* Reload Scene Button */}
                       {uiConfig.enableModelLoading && (
                         <div className="space-y-2">

@@ -32,6 +32,7 @@ export {
   type VAssistPortalContainersConfig,
   type VAssistProviderBridge,
   type VAssistProviderBridgeAI,
+  type VAssistProviderBridgeDecision,
   type VAssistProviderBridgeSTT,
   type VAssistProviderBridgeTTS,
   type VAssistProviderMode,
@@ -59,7 +60,14 @@ export {
   type VAssistToolbarActionId,
   type VAssistTransportMode,
   type VAssistTriggerToolbarActionOptions,
+  type VAssistUIConfig,
 } from "../../../src/embed/config";
+
+export type {
+  DecisionModelInfo,
+  SystemOneRequest,
+  SystemOneResponse,
+} from "../../../src/services/ai/DecisionClient";
 
 export {
   createStorageManager,

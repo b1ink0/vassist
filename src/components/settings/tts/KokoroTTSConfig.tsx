@@ -374,25 +374,22 @@ const KokoroTTSConfig = ({
         </summary>
 
         <div className="space-y-4 pt-2">
-          {/* Model ID - Hidden in setup mode for simplicity */}
-          {!isSetupMode && (
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-white/90">
-                Model ID
-              </label>
-              <Input
-                type="text"
-                value={config.modelId || ""}
-                onChange={(e) => handleChange("modelId", e.target.value)}
-                placeholder="onnx-community/Kokoro-82M-v1.0-ONNX"
-                variant={isLightBackground ? "dark" : "default"}
-              />
-              <p className="text-xs text-white/50">
-                HuggingFace model ID (Leave empty to use default:
-                onnx-community/Kokoro-82M-v1.0-ONNX)
-              </p>
-            </div>
-          )}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-white/90">
+              Model ID
+            </label>
+            <Input
+              type="text"
+              value={config.modelId || ""}
+              onChange={(e) => handleChange("modelId", e.target.value)}
+              placeholder="onnx-community/Kokoro-82M-v1.0-ONNX"
+              variant={isLightBackground ? "dark" : "default"}
+            />
+            <p className="text-xs text-white/50">
+              HuggingFace model ID (Leave empty to use default:
+              onnx-community/Kokoro-82M-v1.0-ONNX)
+            </p>
+          </div>
 
           {/* Keep Model Loaded */}
           <div className="space-y-2">

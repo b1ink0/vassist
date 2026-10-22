@@ -10,11 +10,16 @@ import { Icon } from "../icons";
 import { lazy, Suspense, useEffect, useRef } from "react";
 import { cn } from "../../utils/cn";
 import { Button } from "../ui";
+import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
 
 const WelcomeStep = lazy(() => import("./steps/WelcomeStep"));
 const CharacterIntroStep = lazy(() => import("./steps/CharacterIntroStep"));
+const BackgroundSelectionStep = lazy(
+  () => import("./steps/BackgroundSelectionStep"),
+);
 const LLMProviderStep = lazy(() => import("./steps/LLMProviderStep"));
 const TTSProviderStep = lazy(() => import("./steps/TTSProviderStep"));
+const STTProviderStep = lazy(() => import("./steps/STTProviderStep"));
 const AIFeaturesOverviewStep = lazy(
   () => import("./steps/AIFeaturesOverviewStep"),
 );
@@ -39,6 +44,7 @@ const SetupWizard = ({ onMinimizeSetup }: SetupWizardProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const isLightBackground = true;
+  const hasBackgroundSetup = isAndroid || isDesktop;
 
   // Scroll to top whenever step changes
   useEffect(() => {
@@ -55,12 +61,32 @@ const SetupWizard = ({ onMinimizeSetup }: SetupWizardProps) => {
       case 2:
         return <CharacterIntroStep isLightBackground={isLightBackground} />;
       case 3:
-        return <LLMProviderStep isLightBackground={isLightBackground} />;
+        return hasBackgroundSetup ? (
+          <BackgroundSelectionStep isLightBackground={isLightBackground} />
+        ) : (
+          <LLMProviderStep isLightBackground={isLightBackground} />
+        );
       case 4:
-        return <TTSProviderStep isLightBackground={isLightBackground} />;
+        return hasBackgroundSetup ? (
+          <LLMProviderStep isLightBackground={isLightBackground} />
+        ) : (
+          <TTSProviderStep isLightBackground={isLightBackground} />
+        );
       case 5:
+        return hasBackgroundSetup ? (
+          <TTSProviderStep isLightBackground={isLightBackground} />
+        ) : (
+          <STTProviderStep isLightBackground={isLightBackground} />
+        );
+      case 6:
+        return hasBackgroundSetup ? (
+          <STTProviderStep isLightBackground={isLightBackground} />
+        ) : (
+          <AIFeaturesOverviewStep isLightBackground={isLightBackground} />
+        );
+      case 7:
         return <AIFeaturesOverviewStep isLightBackground={isLightBackground} />;
-      // case 6: return <TutorialStep isLightBackground={isLightBackground} />; // Disabled - no GIFs yet
+      // case 7: return <TutorialStep isLightBackground={isLightBackground} />; // Disabled - no GIFs yet
       default:
         return <WelcomeStep isLightBackground={isLightBackground} />;
     }
@@ -74,12 +100,16 @@ const SetupWizard = ({ onMinimizeSetup }: SetupWizardProps) => {
       case 2:
         return "Live Assistant";
       case 3:
-        return "AI Configuration";
+        return hasBackgroundSetup ? "Background" : "AI Configuration";
       case 4:
-        return "Voice";
+        return hasBackgroundSetup ? "AI Configuration" : "Text-to-Speech";
       case 5:
+        return hasBackgroundSetup ? "Text-to-Speech" : "Speech-to-Text";
+      case 6:
+        return hasBackgroundSetup ? "Speech-to-Text" : "AI+ Features";
+      case 7:
         return "AI+ Features";
-      // case 6: return 'Tutorial'; // Disabled - no GIFs yet
+      // case 7: return 'Tutorial'; // Disabled - no GIFs yet
       default:
         return "Setup";
     }
@@ -92,7 +122,7 @@ const SetupWizard = ({ onMinimizeSetup }: SetupWizardProps) => {
   // Handle Next/Finish button click
   const handleNextClick = () => {
     if (isLastStep) {
-      // On last step (AI Features Overview), complete setup
+      // Finish after the AI features overview.
       void completeSetup();
     } else {
       // Regular next step

@@ -1,3 +1,4 @@
+import Dialog from "../../common/Dialog";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../../icons";
 import { useDesktopApi } from "../../../hooks/useDesktopStore";
@@ -112,7 +113,6 @@ interface DesktopSTTConfigProps {
 const DesktopSTTConfig = ({
   config = {},
   onChange,
-  isSetupMode = false,
   isLightBackground = false,
   onRequestDeleteDialog,
   externalDeleteTick,
@@ -120,6 +120,7 @@ const DesktopSTTConfig = ({
   const desktopAPI = useDesktopApi();
   const whisperSetup = desktopAPI?.whisperSetup as WhisperSetupApi | undefined;
   const whisperCpp = desktopAPI?.whisperCpp as WhisperCppApi | undefined;
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [cppStatus, setCppStatus] = useState<WhisperCppStatus | null>(null);
   const [cppLog, setCppLog] = useState<string[]>([]);
   const [cppInstalling, setCppInstalling] = useState(false);
@@ -347,6 +348,11 @@ const DesktopSTTConfig = ({
   };
 
   const isInstalled = Boolean(setupStatus?.isSetup);
+  const isWhisperCppInstalled = Boolean(
+    cppStatus?.variants.some((variant) => variant.installed),
+  );
+  const isSelectedEngineInstalled =
+    config.engine === "whispercpp" ? isWhisperCppInstalled : isInstalled;
   const isPartialInstall = Boolean(
     setupStatus &&
     !setupStatus.isSetup &&
@@ -379,11 +385,17 @@ const DesktopSTTConfig = ({
           <div
             className={cn(
               "w-2 h-2 rounded-full",
-              isInstalled ? "bg-green-400" : "bg-yellow-400",
+              isSelectedEngineInstalled ? "bg-green-400" : "bg-yellow-400",
             )}
           ></div>
           <span className="text-sm font-semibold text-white/90">
-            {isInstalled ? "Whisper is ready to use" : "Whisper setup required"}
+            {config.engine === "whispercpp"
+              ? isWhisperCppInstalled
+                ? "whisper.cpp runtime is ready"
+                : "whisper.cpp runtime setup required"
+              : isInstalled
+                ? "faster-whisper is ready to use"
+                : "faster-whisper setup required"}
           </span>
         </div>
         <p className="text-xs text-white/60">
@@ -393,7 +405,7 @@ const DesktopSTTConfig = ({
       </div>
 
       {/* Setup actions */}
-      {canManageSetup && (
+      {config.engine !== "whispercpp" && canManageSetup && (
         <div className="space-y-2">
           <div className="flex gap-2">
             <Button
@@ -496,7 +508,7 @@ const DesktopSTTConfig = ({
         </div>
       )}
 
-      {/* ── STT Engine selector ── */}
+      {/* Engine selection and runtime setup are available in both setup and settings. */}
       <div className="space-y-3 p-3 rounded-lg bg-white/5 border border-white/10">
         <div>
           <label className="block text-xs font-medium text-white/90 mb-1">
@@ -694,11 +706,15 @@ const DesktopSTTConfig = ({
                         <div className="flex gap-1 flex-shrink-0">
                           {model.downloaded ? (
                             <button
-                              onClick={() =>
-                                onRequestDeleteDialog?.(
-                                  `whispercpp:${model.id}`,
-                                )
-                              }
+                              onClick={() => {
+                                if (onRequestDeleteDialog) {
+                                  onRequestDeleteDialog(
+                                    `whispercpp:${model.id}`,
+                                  );
+                                } else {
+                                  setPendingDelete(model.id);
+                                }
+                              }}
                               data-testid={`stt-cpp-model-delete-${model.id}`}
                               className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white/80 text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0"
                             >
@@ -731,32 +747,34 @@ const DesktopSTTConfig = ({
 
       {/* Core model settings */}
       <div className="space-y-3 p-3 rounded-lg bg-white/5 border border-white/10">
-        <div>
-          <label className="block text-xs font-medium text-white/90 mb-1">
-            Whisper Model
-          </label>
-          <Select
-            value={config.model || "tiny"}
-            onChange={(e) => handleChange("model", e.target.value)}
-            variant={isLightBackground ? "dark" : "default"}
-            options={[
-              {
-                value: "tiny",
-                label: "tiny (multilingual, ~75-80MB, fastest)",
-              },
-              {
-                value: "base",
-                label: "base (multilingual, ~140-150MB, better accuracy)",
-              },
-              { value: "tiny.en", label: "tiny.en (English-only, ~75MB)" },
-              { value: "base.en", label: "base.en (English-only, ~140MB)" },
-            ]}
-          />
-          <p className="text-[10px] text-white/50 mt-1">
-            Pick multilingual tiny/base for multi-language STT, or *.en for
-            English-only.
-          </p>
-        </div>
+        {config.engine !== "whispercpp" && (
+          <div>
+            <label className="block text-xs font-medium text-white/90 mb-1">
+              Whisper Model
+            </label>
+            <Select
+              value={config.model || "tiny"}
+              onChange={(e) => handleChange("model", e.target.value)}
+              variant={isLightBackground ? "dark" : "default"}
+              options={[
+                {
+                  value: "tiny",
+                  label: "tiny (multilingual, ~75-80MB, fastest)",
+                },
+                {
+                  value: "base",
+                  label: "base (multilingual, ~140-150MB, better accuracy)",
+                },
+                { value: "tiny.en", label: "tiny.en (English-only, ~75MB)" },
+                { value: "base.en", label: "base.en (English-only, ~140MB)" },
+              ]}
+            />
+            <p className="text-[10px] text-white/50 mt-1">
+              Pick multilingual tiny/base for multi-language STT, or *.en for
+              English-only.
+            </p>
+          </div>
+        )}
 
         <div>
           <label className="block text-xs font-medium text-white/90 mb-1">
@@ -783,7 +801,7 @@ const DesktopSTTConfig = ({
       </div>
 
       {/* Advanced Config */}
-      <details className="group" open={isSetupMode}>
+      <details className="group">
         <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
           <span>Advanced Settings</span>
           <Icon
@@ -829,6 +847,26 @@ const DesktopSTTConfig = ({
           </div>
         </div>
       </details>
+      {pendingDelete && (
+        <Dialog
+          type="delete"
+          title="Delete speech model"
+          message={`Delete the installed ${pendingDelete} model?`}
+          isLightBackground={isLightBackground}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={async () => {
+            if (!whisperCpp?.deleteModel)
+              throw new Error("Model deletion is unavailable");
+            const result = await whisperCpp.deleteModel({
+              modelId: pendingDelete,
+            });
+            if (!result.deleted)
+              throw new Error("The model could not be deleted");
+            refreshCppStatus();
+            setPendingDelete(null);
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -35,6 +35,7 @@ interface PositionPresetApplyOptions {
   modelSizePx?: { width?: number; height?: number };
   padding?: number;
   offset?: CameraOffset;
+  portraitZoomMultiplier?: number;
 }
 
 interface PositionBoundaryConfig {
@@ -154,7 +155,10 @@ export class PositionManager implements PositionManagerLike {
    * Call this after model is fully loaded
    * @param {string} savedPreset - Optional saved preset from settings (default: 'bottom-right')
    */
-  initialize(savedPreset = "bottom-right"): void {
+  initialize(
+    savedPreset = "bottom-right",
+    options: PositionPresetApplyOptions = {},
+  ): void {
     Logger.log("PositionManager", "Initializing...");
 
     this.updateCanvasDimensions();
@@ -162,7 +166,7 @@ export class PositionManager implements PositionManagerLike {
 
     // Apply saved position preset from settings (or default bottom-right)
     // This will trigger modelPositionChange event
-    this.applyPreset(savedPreset);
+    this.applyPreset(savedPreset, options);
 
     Logger.log("PositionManager", "Initialized with preset:", savedPreset, {
       canvas: { width: this.canvasWidth, height: this.canvasHeight },
@@ -346,8 +350,8 @@ export class PositionManager implements PositionManagerLike {
     let effectiveHeight = modelHeight; // Height used for positioning/boundaries
 
     if (isPortraitMode) {
-      // For zoom: Use larger height (3x normal) → makes camera zoom IN
-      cameraHeight = modelHeight * 3;
+      // Increase camera zoom while keeping the layout height unchanged.
+      cameraHeight = modelHeight * (options.portraitZoomMultiplier ?? 3);
 
       // For positioning: Keep normal height so boundaries work correctly
       effectiveHeight = modelHeight;
@@ -370,7 +374,11 @@ export class PositionManager implements PositionManagerLike {
     if (isPortraitMode && config.portraitOffset) {
       offset = options.offset || config.portraitOffset;
     } else {
-      offset = options.offset || config.offset || { x: 0, y: 0 };
+      // Center presets are already centered by pixel coordinates, so skip
+      // platform corner offsets.
+      const presetOffset =
+        isDesktop && preset === "center" ? baseConfig.offset : config.offset;
+      offset = options.offset || presetOffset || { x: 0, y: 0 };
     }
 
     // Apply preset's custom boundaries (if defined)

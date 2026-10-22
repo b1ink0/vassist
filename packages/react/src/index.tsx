@@ -125,6 +125,7 @@ export {
   type VAssistPortalContainersConfig,
   type VAssistProviderBridge,
   type VAssistProviderBridgeAI,
+  type VAssistProviderBridgeDecision,
   type VAssistProviderBridgeSTT,
   type VAssistProviderBridgeTTS,
   type VAssistProviderMode,
@@ -152,7 +153,14 @@ export {
   type VAssistThemeSurfaceStyle,
   type VAssistThemeTokens,
   type VAssistTransportMode,
+  type VAssistUIConfig,
 } from "../../../src/embed/config";
+
+export type {
+  DecisionModelInfo,
+  SystemOneRequest,
+  SystemOneResponse,
+} from "../../../src/services/ai/DecisionClient";
 
 export {
   clearVAssistReactCustomizations,

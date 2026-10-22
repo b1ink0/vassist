@@ -10,7 +10,7 @@ VAssist stores lightweight config and heavier user assets. The exact storage lay
 | Chat history  | Messages, linked attachments, temporary or persistent sessions |
 | Visual assets | Models, stages, motions, emotes, backgrounds                   |
 | Voice assets  | Saved reference voices and related metadata                    |
-| Local models  | Desktop-local and Android-local model files                    |
+| Local models  | Desktop-local and Android-local model files managed by native runtimes |
 
 ## Backup-visible categories
 
@@ -38,10 +38,14 @@ Shared web-facing flows lean on browser-friendly storage patterns for config and
 
 Desktop local model and runtime assets live in desktop-managed locations rather than only in browser storage. This is necessary because local inference backends and voice tooling need filesystem access.
 
+Desktop includes bundled full-resolution wallpapers in Electron resources. User-selected images stay at their original paths, and folders remain folder paths in UI configuration. The renderer reads external image data through Electron IPC without copying files into app storage. Backups can preserve those settings, but do not include the external image files. The paths must remain accessible on the destination machine.
+
 ### Android local storage
 
 Android local models and related assets are managed through the Android runtime and do not automatically mirror desktop-local storage.
 
+Android includes lightweight bundled wallpaper files with the app. Custom backgrounds are imported image blobs in the app's background asset category. The active custom image is stored with those assets, while selected built-in IDs, slideshow enablement, parallax, and timing live in UI configuration. Include both config and backgrounds when transferring custom background setup in a backup.
+
 ## Why backup matters
 
-VAssist mixes config, media, and model assets. Backup/restore is the only built-in way to move a complete setup between machines without manually re-importing every model, motion, emote, voice, or background.
+Backups move the configuration, history, and app-stored assets included in the selected categories. They do not archive local LLM model folders or installed desktop runtimes managed outside app storage. Install or download those native runtime assets separately on another device.

@@ -26,6 +26,11 @@ import type {
   VAssistSettingsSubTabId,
   VAssistSettingsTargetId,
 } from "../../embed/config";
+import { useEmbedHost } from "../../embed/EmbedHostContext";
+import {
+  isSettingsTargetHidden,
+  isSettingsTargetReadOnly,
+} from "../../embed/settingsPolicy";
 import { PromptConfig } from "../../config/promptConfig";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
 import { useAndroidApi } from "../../hooks/useAndroidStore";
@@ -1491,6 +1496,7 @@ const LLMSettings = ({
   requestedSubTab = null,
   onActiveTargetChange,
 }: LLMSettingsProps) => {
+  const { embedConfig } = useEmbedHost();
   const chromeAiStatus = useChromeAIStatus();
   const { checkChromeAIAvailability, startChromeAIDownload } =
     useConfigStatusActions();
@@ -1759,6 +1765,28 @@ const LLMSettings = ({
   }, []);
 
   const [activeSubTab, setActiveSubTab] = useState<LLMSubTabId>("provider");
+  const subTabs = useMemo(
+    () =>
+      (
+        [
+          { id: "provider", label: "Provider" },
+          { id: "routing", label: "Routing" },
+          { id: "decision", label: "Decision" },
+          { id: "profiles", label: "Profiles" },
+        ] as const
+      ).filter(
+        (tab) =>
+          !isSettingsTargetHidden(
+            embedConfig,
+            `llm.${tab.id}` as VAssistSettingsSubTabId,
+          ),
+      ),
+    [embedConfig],
+  );
+  const activeSubTabReadOnly = isSettingsTargetReadOnly(
+    embedConfig,
+    `llm.${activeSubTab}` as VAssistSettingsSubTabId,
+  );
   const requestedLocalSubTab =
     requestedSubTab === "llm.routing"
       ? "routing"
@@ -1791,12 +1819,24 @@ const LLMSettings = ({
   }, [activeSubTab]);
 
   useEffect(() => {
-    if (!requestedLocalSubTab || requestedLocalSubTab === activeSubTab) {
+    if (
+      !requestedLocalSubTab ||
+      requestedLocalSubTab === activeSubTab ||
+      !subTabs.some((tab) => tab.id === requestedLocalSubTab)
+    ) {
       return;
     }
 
     setActiveSubTab(requestedLocalSubTab);
-  }, [activeSubTab, requestedLocalSubTab]);
+  }, [activeSubTab, requestedLocalSubTab, subTabs]);
+
+  useEffect(() => {
+    if (subTabs.some((tab) => tab.id === activeSubTab)) {
+      return;
+    }
+
+    setActiveSubTab(subTabs[0]?.id ?? "provider");
+  }, [activeSubTab, subTabs]);
 
   useEffect(() => {
     onActiveTargetChange?.(`llm.${activeSubTab}` as VAssistSettingsSubTabId);
@@ -2606,6 +2646,8 @@ const LLMSettings = ({
     );
   };
 
+  if (subTabs.length === 0) return null;
+
   return (
     <div className="flex flex-col h-full">
       <div className="relative">
@@ -2617,12 +2659,7 @@ const LLMSettings = ({
           }}
         />
         <TabBar
-          tabs={[
-            { id: "provider", label: "Provider" },
-            { id: "routing", label: "Routing" },
-            { id: "decision", label: "Decision" },
-            { id: "profiles", label: "Profiles" },
-          ]}
+          tabs={subTabs}
           size="compact"
           activeTab={activeSubTab}
           onTabChange={(tabId) => setActiveSubTab(tabId as LLMSubTabId)}
@@ -2645,20 +2682,29 @@ const LLMSettings = ({
           >
             <SettingsSubTabContent
               render={() => (
-                <div className="px-4 md:px-6 py-2 md:py-4 space-y-6">
-                  {activeSubTab === "provider" && renderProviderSettings()}
-                  {activeSubTab === "routing" && renderRoutingSettings()}
-                  {activeSubTab === "decision" && (
-                    <DecisionSettings
-                      aiConfig={aiConfig}
-                      provider={aiConfig.provider}
-                      isLightBackground={isLightBackground}
-                      updateAIConfig={updateAIConfig}
-                      storageService={desktopStorageService}
-                      decisionModelsPath={desktopDecisionModelsPath}
-                    />
-                  )}
-                  {activeSubTab === "profiles" && renderProfileSettings()}
+                <div
+                  className={
+                    activeSubTabReadOnly
+                      ? "pointer-events-none opacity-70"
+                      : undefined
+                  }
+                  inert={activeSubTabReadOnly}
+                >
+                  <div className="px-4 md:px-6 py-2 md:py-4 space-y-6">
+                    {activeSubTab === "provider" && renderProviderSettings()}
+                    {activeSubTab === "routing" && renderRoutingSettings()}
+                    {activeSubTab === "decision" && (
+                      <DecisionSettings
+                        aiConfig={aiConfig}
+                        provider={aiConfig.provider}
+                        isLightBackground={isLightBackground}
+                        updateAIConfig={updateAIConfig}
+                        storageService={desktopStorageService}
+                        decisionModelsPath={desktopDecisionModelsPath}
+                      />
+                    )}
+                    {activeSubTab === "profiles" && renderProfileSettings()}
+                  </div>
                 </div>
               )}
             />

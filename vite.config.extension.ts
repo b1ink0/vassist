@@ -4,7 +4,6 @@
  */
 
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "path";
 import { fileURLToPath } from "url";
@@ -14,6 +13,12 @@ import {
   copyAssetsPlugin,
 } from "./tools/vite-plugins/extension-plugins";
 import { vadAssetsPlugin } from "./tools/vite-plugins/vad-assets-plugin";
+import { excludeBackgroundAssetsPlugin } from "./tools/vite-plugins/background-assets-scope-plugin";
+import {
+  createAppAliases,
+  createReactPlugin,
+  createViteDefines,
+} from "./tools/vite/shared-config";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,22 +30,15 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
-      react(),
+      createReactPlugin(),
       tailwindcss(),
       wrapContentScriptPlugin(), // Wrap content script as IIFE
       copyAssetsPlugin(shouldZip), // Copy assets and manifest to dist-extension
       vadAssetsPlugin(outDir),
+      excludeBackgroundAssetsPlugin(outDir),
     ],
 
-    define: {
-      // Build-time constants for mode detection
-      __EXTENSION_MODE__: JSON.stringify(true),
-      __ANDROID_MODE__: JSON.stringify(false),
-      __DESKTOP_MODE__: JSON.stringify(false),
-      __EMBED_MODE__: JSON.stringify(false),
-      __DEV_MODE__: JSON.stringify(!isProduction),
-      __PROD_MODE__: JSON.stringify(isProduction),
-    },
+    define: createViteDefines(isProduction, "extension"),
 
     build: {
       outDir,
@@ -130,10 +128,7 @@ export default defineConfig(({ mode }) => {
 
     resolve: {
       alias: {
-        "@": resolve(__dirname, "./src"),
-        "@services": resolve(__dirname, "./src/services"),
-        "@components": resolve(__dirname, "./src/components"),
-        "@utils": resolve(__dirname, "./src/utils"),
+        ...createAppAliases(__dirname),
         "@extension": resolve(__dirname, "./extension"),
       },
     },

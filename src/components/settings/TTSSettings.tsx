@@ -31,7 +31,7 @@ import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
 import TTSServiceProxy from "../../services/proxies/TTSServiceProxy";
 import KokoroTTSConfig from "./tts/KokoroTTSConfig";
 import GPTSoVITSConfig from "./tts/GPTSoVITSConfig";
-import AndroidTtsPackDownloader from "./tts/AndroidTtsPackDownloader";
+import AndroidLocalTTSConfig from "./tts/AndroidLocalTTSConfig";
 import RemoteModelPicker from "./shared/RemoteModelPicker";
 import Toggle from "../common/Toggle";
 import Logger from "../../services/common/LoggerService";
@@ -408,55 +408,24 @@ const TTSSettings = ({
         <>
           {/* Android Local TTS Configuration */}
           {ttsConfig.provider === TTSProviders.ANDROID_LOCAL && (
-            <>
-              {/* TTS language packs: install/delete + active voice picker */}
-              <AndroidTtsPackDownloader
-                androidAPI={androidAPI}
-                isLightBackground={isLightBackground}
-                activePackId={ttsConfig["android-local"]?.model}
-                onActivePackChange={(packId) =>
-                  updateTTSConfig("android-local.model", packId)
-                }
-                speakerId={ttsConfig["android-local"]?.speakerId || 0}
-                onSpeakerIdChange={(speakerId) =>
-                  updateTTSConfig("android-local.speakerId", speakerId)
-                }
-                onRequestDeleteDialog={onRequestDeleteTtsPack}
-                externalDeleteTick={externalDeleteTick}
-              />
-
-              <div className="space-y-4 p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
-                <h4 className="text-sm font-semibold text-white/90">
-                  Android Local TTS
-                </h4>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-white/90">
-                    Speed
-                  </label>
-                  <input
-                    type="range"
-                    min="0.5"
-                    max="2.0"
-                    step="0.1"
-                    value={ttsConfig["android-local"]?.speed || 1.0}
-                    onChange={(e) =>
-                      updateTTSConfig(
-                        "android-local.speed",
-                        parseFloat(e.target.value),
-                      )
-                    }
-                    className="w-full"
-                  />
-                  <span className="text-xs text-white/60">
-                    {ttsConfig["android-local"]?.speed || 1.0}x
-                  </span>
-                </div>
-                <p className="text-xs text-white/50">
-                  Offline voices running locally on your device (CPU via
-                  sherpa-onnx)
-                </p>
-              </div>
-            </>
+            <AndroidLocalTTSConfig
+              androidAPI={androidAPI}
+              model={ttsConfig["android-local"]?.model || "vits-local"}
+              speakerId={ttsConfig["android-local"]?.speakerId || 0}
+              speed={ttsConfig["android-local"]?.speed || 1}
+              onModelChange={(packId) =>
+                updateTTSConfig("android-local.model", packId)
+              }
+              onSpeakerIdChange={(speakerId) =>
+                updateTTSConfig("android-local.speakerId", speakerId)
+              }
+              onSpeedChange={(speed) =>
+                updateTTSConfig("android-local.speed", speed)
+              }
+              isLightBackground={isLightBackground}
+              onRequestDeleteDialog={onRequestDeleteTtsPack}
+              externalDeleteTick={externalDeleteTick}
+            />
           )}
 
           {/* Desktop Local TTS Configuration */}

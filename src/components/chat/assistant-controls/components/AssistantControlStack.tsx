@@ -1,7 +1,9 @@
 import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
 import { Button } from "../../../../components/ui";
 import { Icon } from "../../../../components/icons";
-import ZoomControl from "../../../common/ZoomControl";
+import ZoomControl, {
+  ZOOM_CONTROL_PANEL_OFFSET,
+} from "../../../common/ZoomControl";
 import { cn } from "../../../../utils/cn";
 import type { EmoteButtonProgressMode } from "../../../../config/uiConfig";
 import type { AssistantControlLayout } from "../types";
@@ -12,7 +14,6 @@ interface AssistantControlStackProps {
   isAndroid: boolean;
   isLightBackground: boolean;
   isChatOpen: boolean;
-  isNormalDesktop: boolean;
   modelDisabled: boolean;
   isVisible: boolean;
   isAppearing: boolean;
@@ -57,7 +58,6 @@ export function AssistantControlStack({
   isAndroid,
   isLightBackground,
   isChatOpen,
-  isNormalDesktop,
   modelDisabled,
   isVisible,
   isAppearing,
@@ -87,6 +87,16 @@ export function AssistantControlStack({
   onMouseDown,
 }: AssistantControlStackProps) {
   const variant = themedVariant(isLightBackground);
+  const buttonLeft = Number.parseFloat(layout.button.left);
+  const availableSpaceLeft = buttonLeft;
+  const availableSpaceRight = window.innerWidth - buttonLeft - 48;
+  const canOpenZoomControlsOnLeft =
+    availableSpaceLeft >= ZOOM_CONTROL_PANEL_OFFSET;
+  const canOpenZoomControlsOnRight =
+    availableSpaceRight >= ZOOM_CONTROL_PANEL_OFFSET;
+  const zoomControlIsOnLeftSide = canOpenZoomControlsOnRight
+    ? !canOpenZoomControlsOnLeft || availableSpaceRight >= availableSpaceLeft
+    : !canOpenZoomControlsOnLeft && availableSpaceRight >= availableSpaceLeft;
   const visibilityClass = isAppearing
     ? "animate-fade-in"
     : !isVisible
@@ -232,13 +242,7 @@ export function AssistantControlStack({
             onRotateLeft={onRotateLeft}
             onRotateRight={onRotateRight}
             isZoomOutDisabled={isZoomOutDisabled}
-            isLeftSide={
-              isNormalDesktop
-                ? layout.isLeftSide
-                : isChatOpen
-                  ? !layout.isLeftSide
-                  : layout.isLeftSide
-            }
+            isLeftSide={zoomControlIsOnLeftSide}
             isLightBackground={isLightBackground}
             isVisible={isVisible}
             isExpanded={isZoomExpanded}

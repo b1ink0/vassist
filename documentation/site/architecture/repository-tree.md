@@ -4,50 +4,50 @@ VAssist repository tree and file metrics.
 
 ## Totals
 
-- Directories: 183
-- Files: 621
-- Text files counted for metrics: 534
-- Total text lines: 167125
-- Code files counted for metrics: 431
-- Total code lines: 151435
+- Directories: 202
+- Files: 714
+- Text files counted for metrics: 604
+- Total text lines: 231714
+- Code files counted for metrics: 461
+- Total code lines: 160042
 
 ## Line Counts by File Type
 
-| File Type    | Extensions              | Files | Lines |
-| ------------ | ----------------------- | ----: | ----: |
-| Batch Script | .bat                    |     1 |    94 |
-| C and C++    | .c, .cc, .cpp, .h, .hpp |     7 |  2003 |
-| CSS          | .css, .scss, .less      |     7 |  2751 |
-| HTML         | .html                   |     5 |   191 |
-| Java         | .java                   |     4 |   215 |
-| JavaScript   | .js, .mjs, .cjs         |     1 |    32 |
-| Kotlin       | .kt                     |    20 | 11030 |
-| Shell Script | (no extension)          |     5 |   654 |
-| TSX          | .tsx                    |   118 | 54303 |
-| TypeScript   | .ts, .mts, .cts         |   263 | 80162 |
-| Gradle       | .gradle                 |     7 |   579 |
-| JSON         | .json                   |    17 |   581 |
-| Markdown     | .md                     |    35 |  6087 |
-| Other Text   | mixed                   |    15 |  3593 |
-| Plain Text   | (no extension)          |    11 |  4049 |
-| Properties   | .properties             |     2 |    29 |
-| SVG          | .svg                    |     4 |   342 |
-| XML          | .xml                    |    12 |   430 |
+| File Type | Extensions | Files | Lines |
+| --- | --- | ---: | ---: |
+| Batch Script | .bat | 1 | 94 |
+| C and C++ | .c, .cc, .cpp, .h, .hpp | 7 | 2003 |
+| CSS | .css, .scss, .less | 7 | 2935 |
+| HTML | .html | 5 | 191 |
+| Java | .java | 4 | 215 |
+| JavaScript | .js, .mjs, .cjs | 1 | 32 |
+| Kotlin | .kt | 21 | 11382 |
+| Shell Script | (no extension) | 5 | 654 |
+| TSX | .tsx | 129 | 57341 |
+| TypeScript | .ts, .mts, .cts | 281 | 85195 |
+| Gradle | .gradle | 7 | 579 |
+| JSON | .json | 19 | 627 |
+| Markdown | .md | 40 | 6675 |
+| Other Text | mixed | 40 | 58832 |
+| Plain Text | (no extension) | 19 | 4158 |
+| Properties | .properties | 2 | 29 |
+| SVG | .svg | 4 | 342 |
+| XML | .xml | 12 | 430 |
 
 ## Top-Level Summary
 
 - .husky/: 1 directories, 1 files
-- android/: 64 directories, 92 files
+- android/: 64 directories, 93 files
 - android-src/: 1 directories, 3 files
-- documentation/: 13 directories, 49 files
-- electron/: 17 directories, 60 files
+- documentation/: 14 directories, 52 files
+- electron/: 19 directories, 72 files
 - embed/: 1 directories, 1 files
 - extension/: 6 directories, 19 files
-- packages/: 5 directories, 12 files
-- public/: 5 directories, 20 files
-- src/: 59 directories, 271 files
+- packages/: 5 directories, 16 files
+- public/: 12 directories, 55 files
+- src/: 67 directories, 309 files
 - tests/: 9 directories, 57 files
-- tools/: 2 directories, 7 files
+- tools/: 3 directories, 10 files
 - .gitignore: file
 - .prettierignore: file
 - .prettierrc.json: file
@@ -55,6 +55,7 @@ VAssist repository tree and file metrics.
 - capacitor.config.json: file
 - CONTRIBUTING.md: file
 - electron-builder.mac.json: file
+- electron-builder.shared.json: file
 - electron-builder.win.json: file
 - eslint.config.ts: file
 - index.html: file
@@ -67,15 +68,11 @@ VAssist repository tree and file metrics.
 - tsconfig.electron.json: file
 - tsconfig.extension.json: file
 - tsconfig.json: file
-- tsconfig.package.embed.types.json: file
-- tsconfig.package.react.types.json: file
 - tsconfig.tools.json: file
 - vercel.json: file
 - vite.config.android.ts: file
 - vite.config.desktop.ts: file
 - vite.config.extension.ts: file
-- vite.config.package.embed.ts: file
-- vite.config.package.react.ts: file
 - vite.config.ts: file
 
 ## Full Tree
@@ -123,6 +120,7 @@ vassist/
 │   │   │   │   │               ├── service/
 │   │   │   │   │               │   └── VAssistWallpaperService.kt
 │   │   │   │   │               ├── webview/
+│   │   │   │   │               │   ├── BackgroundMotionBridge.kt
 │   │   │   │   │               │   └── RendererWebView.kt
 │   │   │   │   │               ├── AITestActivity.kt
 │   │   │   │   │               ├── FullAppActivity.kt
@@ -251,6 +249,7 @@ vassist/
 │   │   ├── .vitepress/
 │   │   │   ├── theme/
 │   │   │   │   ├── components/
+│   │   │   │   │   ├── AppIcon.vue
 │   │   │   │   │   └── VAssistDocsDemo.vue
 │   │   │   │   ├── custom.css
 │   │   │   │   ├── custom.d.ts
@@ -278,6 +277,9 @@ vassist/
 │   │   │   ├── index.md
 │   │   │   ├── page-context.md
 │   │   │   └── virtual-companion.md
+│   │   ├── legal/
+│   │   │   ├── stages.md
+│   │   │   └── wallpapers.md
 │   │   ├── platforms/
 │   │   │   ├── android.md
 │   │   │   ├── desktop.md
@@ -308,6 +310,20 @@ vassist/
 │   └── README.md
 ├── electron/
 │   ├── assets/
+│   │   ├── backgrounds/
+│   │   │   ├── previews/
+│   │   │   │   ├── aurora-homes.jpg
+│   │   │   │   ├── city-night.jpg
+│   │   │   │   ├── fog-cabin.jpg
+│   │   │   │   ├── milky-way.jpg
+│   │   │   │   ├── night-fence.jpg
+│   │   │   │   └── soft-lights.jpg
+│   │   │   ├── aurora-homes.webp
+│   │   │   ├── city-night.webp
+│   │   │   ├── fog-cabin.webp
+│   │   │   ├── milky-way.webp
+│   │   │   ├── night-fence.webp
+│   │   │   └── soft-lights.webp
 │   │   ├── icon.iconset/
 │   │   │   ├── icon_128x128.png
 │   │   │   ├── icon_128x128@2x.png
@@ -418,7 +434,9 @@ vassist/
 │   │   │   ├── full.ts
 │   │   │   ├── index.ts
 │   │   │   └── toolbar.ts
-│   │   └── package.json
+│   │   ├── package.json
+│   │   ├── tsconfig.types.json
+│   │   └── vite.config.ts
 │   └── react/
 │       ├── src/
 │       │   ├── chat-toolbar.tsx
@@ -426,31 +444,75 @@ vassist/
 │       │   ├── full.tsx
 │       │   ├── index.tsx
 │       │   └── toolbar.tsx
-│       └── package.json
+│       ├── package.json
+│       ├── tsconfig.types.json
+│       └── vite.config.ts
 ├── public/
 │   ├── res/
 │   │   └── assets/
+│   │       ├── backgrounds/
+│   │       │   ├── aurora-homes.webp
+│   │       │   ├── city-night.webp
+│   │       │   ├── fog-cabin.webp
+│   │       │   ├── milky-way.webp
+│   │       │   ├── night-fence.webp
+│   │       │   └── soft-lights.webp
 │   │       ├── model/
 │   │       │   └── vassist_default.bpmx
-│   │       └── motion/
-│   │           ├── blink3.bvmd
-│   │           ├── clap1.bvmd
-│   │           ├── generic-mouth.bvmd
-│   │           ├── hi1.bvmd
-│   │           ├── hi2.bvmd
-│   │           ├── idle1.bvmd
-│   │           ├── idle2.bvmd
-│   │           ├── idle4-short.bvmd
-│   │           ├── intro1.bvmd
-│   │           ├── intro2.bvmd
-│   │           ├── talk1-excited.bvmd
-│   │           ├── talk2-nervous.bvmd
-│   │           ├── talk3-calm.bvmd
-│   │           ├── talk4-angry.bvmd
-│   │           ├── think1.bvmd
-│   │           ├── think2.bvmd
-│   │           ├── ywan1.bvmd
-│   │           └── ywan2.bvmd
+│   │       ├── motion/
+│   │       │   ├── blink3.bvmd
+│   │       │   ├── clap1.bvmd
+│   │       │   ├── generic-mouth.bvmd
+│   │       │   ├── hi1.bvmd
+│   │       │   ├── hi2.bvmd
+│   │       │   ├── idle1.bvmd
+│   │       │   ├── idle2.bvmd
+│   │       │   ├── idle4-short.bvmd
+│   │       │   ├── intro1.bvmd
+│   │       │   ├── intro2.bvmd
+│   │       │   ├── talk1-excited.bvmd
+│   │       │   ├── talk2-nervous.bvmd
+│   │       │   ├── talk3-calm.bvmd
+│   │       │   ├── talk4-angry.bvmd
+│   │       │   ├── think1.bvmd
+│   │       │   ├── think2.bvmd
+│   │       │   ├── ywan1.bvmd
+│   │       │   └── ywan2.bvmd
+│   │       └── stages/
+│   │           ├── aster-observatory/
+│   │           │   ├── Textures/
+│   │           │   │   └── colormap.png
+│   │           │   ├── aster-planet.jpg
+│   │           │   ├── chair-armrest-headrest.glb
+│   │           │   ├── computer-system.glb
+│   │           │   ├── computer-wide.glb
+│   │           │   ├── wall-detail.glb
+│   │           │   └── wall-switch.glb
+│   │           ├── moss-house/
+│   │           │   ├── Bush_Common_Flowers.glb
+│   │           │   ├── chairModernCushion.glb
+│   │           │   ├── CommonTree_1.glb
+│   │           │   ├── CommonTree_4.glb
+│   │           │   ├── Fern_1.glb
+│   │           │   ├── Flower_3_Group.glb
+│   │           │   ├── Flower_4_Group.glb
+│   │           │   ├── Grass_Common_Short.glb
+│   │           │   ├── Grass_Wispy_Tall.glb
+│   │           │   ├── Rock_Medium_1.glb
+│   │           │   └── TwistedTree_3.glb
+│   │           ├── rainlight-library/
+│   │           │   ├── bookcaseOpen.glb
+│   │           │   └── loungeChairRelax.glb
+│   │           └── shared/
+│   │               ├── books.glb
+│   │               ├── pillow.glb
+│   │               ├── pillowLong.glb
+│   │               ├── plantSmall1.glb
+│   │               ├── plantSmall2.glb
+│   │               ├── studio-light.hdr
+│   │               ├── wood-arm.jpg
+│   │               ├── wood-Diffuse.jpg
+│   │               └── wood-nor_gl.jpg
 │   └── VA.svg
 ├── src/
 │   ├── assets/
@@ -483,6 +545,37 @@ vassist/
 │   │   │   └── StickerBorder.ts
 │   │   ├── scenes/
 │   │   │   └── MmdModelScene.ts
+│   │   ├── stages/
+│   │   │   ├── builtins/
+│   │   │   │   ├── AsterObservatory.ts
+│   │   │   │   ├── MossHouse.ts
+│   │   │   │   ├── QuietStages.ts
+│   │   │   │   └── RainlightLibrary.ts
+│   │   │   ├── licenses/
+│   │   │   │   ├── aster-observatory/
+│   │   │   │   │   ├── ASSETS.md
+│   │   │   │   │   ├── Kenney-CC0.txt
+│   │   │   │   │   └── LICENSE-original.txt
+│   │   │   │   ├── moss-house/
+│   │   │   │   │   ├── ASSETS.md
+│   │   │   │   │   ├── Kenney-CC0.txt
+│   │   │   │   │   ├── LICENSE-original.txt
+│   │   │   │   │   └── Quaternius-CC0.txt
+│   │   │   │   ├── quiet/
+│   │   │   │   │   └── LICENSE-original.txt
+│   │   │   │   └── rainlight-library/
+│   │   │   │       ├── ASSETS.md
+│   │   │   │       ├── Kenney-CC0.txt
+│   │   │   │       └── LICENSE-original.txt
+│   │   │   ├── assetMap.json
+│   │   │   ├── StageAssets.ts
+│   │   │   ├── stageAvailability.ts
+│   │   │   ├── StageGeometry.ts
+│   │   │   ├── StageManager.ts
+│   │   │   ├── StagePlacement.ts
+│   │   │   ├── StageRegistry.ts
+│   │   │   ├── StageTextures.ts
+│   │   │   └── types.ts
 │   │   └── types.ts
 │   ├── components/
 │   │   ├── android/
@@ -493,6 +586,11 @@ vassist/
 │   │   │   ├── BabylonScene.tsx
 │   │   │   ├── LiveAssistantShell.tsx
 │   │   │   └── VirtualAssistant.tsx
+│   │   ├── background/
+│   │   │   ├── BackgroundEffectsControl.tsx
+│   │   │   ├── BackgroundFillControls.tsx
+│   │   │   ├── BackgroundSelectionControls.tsx
+│   │   │   └── BuiltInBackgroundGallery.tsx
 │   │   ├── chat/
 │   │   │   ├── assistant-controls/
 │   │   │   │   ├── components/
@@ -532,6 +630,7 @@ vassist/
 │   │   │   └── DocumentInteractionDemo.tsx
 │   │   ├── desktop/
 │   │   │   ├── AppModeSplitter.tsx
+│   │   │   ├── DesktopBackground.tsx
 │   │   │   ├── DesktopModeController.tsx
 │   │   │   ├── DesktopModeHost.tsx
 │   │   │   ├── DesktopModeSurface.tsx
@@ -562,12 +661,14 @@ vassist/
 │   │   │   │   ├── ModelDownloader.tsx
 │   │   │   │   └── RemoteModelPicker.tsx
 │   │   │   ├── stt/
+│   │   │   │   ├── AndroidLocalSTTConfig.tsx
 │   │   │   │   ├── ChromeAISTTConfig.tsx
 │   │   │   │   ├── DesktopSTTConfig.tsx
 │   │   │   │   ├── OpenAICompatibleSTTConfig.tsx
 │   │   │   │   ├── OpenAISTTConfig.tsx
 │   │   │   │   └── WhisperModelDownloader.tsx
 │   │   │   ├── tts/
+│   │   │   │   ├── AndroidLocalTTSConfig.tsx
 │   │   │   │   ├── AndroidTtsPackDownloader.tsx
 │   │   │   │   ├── GPTSoVITSConfig.tsx
 │   │   │   │   ├── GPTSoVITSSetup.tsx
@@ -576,9 +677,11 @@ vassist/
 │   │   │   │   └── VitsModelDownloader.tsx
 │   │   │   ├── AIFeaturesSettings.tsx
 │   │   │   ├── BackgroundSettings.tsx
+│   │   │   ├── DesktopBackgroundSettings.tsx
 │   │   │   ├── DesktopModeSettings.tsx
 │   │   │   ├── LLMSettings.tsx
 │   │   │   ├── SettingsSubTabContent.tsx
+│   │   │   ├── StageSettings.tsx
 │   │   │   ├── STTSettings.tsx
 │   │   │   ├── ThreeDSettings.tsx
 │   │   │   ├── TTSSettings.tsx
@@ -589,9 +692,11 @@ vassist/
 │   │   │   │   └── ProviderSelection.tsx
 │   │   │   ├── steps/
 │   │   │   │   ├── AIFeaturesOverviewStep.tsx
+│   │   │   │   ├── BackgroundSelectionStep.tsx
 │   │   │   │   ├── CharacterIntroStep.tsx
 │   │   │   │   ├── ChromeAISetupStep.tsx
 │   │   │   │   ├── LLMProviderStep.tsx
+│   │   │   │   ├── STTProviderStep.tsx
 │   │   │   │   ├── TTSProviderStep.tsx
 │   │   │   │   ├── TutorialStep.tsx
 │   │   │   │   └── WelcomeStep.tsx
@@ -621,10 +726,12 @@ vassist/
 │   │   ├── androidTtsModels.ts
 │   │   ├── androidWhisperModels.ts
 │   │   ├── animationConfig.ts
+│   │   ├── backgroundCatalog.ts
 │   │   ├── llmParameters.ts
 │   │   ├── promptConfig.ts
 │   │   ├── sceneConfig.ts
 │   │   ├── serviceEndpoints.ts
+│   │   ├── stageConfig.ts
 │   │   └── uiConfig.ts
 │   ├── contexts/
 │   │   ├── AnimationContext.tsx
@@ -721,6 +828,7 @@ vassist/
 │   │       ├── LLMModelStorageService.ts
 │   │       ├── ModelStorageService.ts
 │   │       ├── MotionStorageService.ts
+│   │       ├── StageImportService.ts
 │   │       └── StageStorageService.ts
 │   ├── storage/
 │   │   ├── adapters/
@@ -849,11 +957,15 @@ vassist/
 │   ├── extensionTestHost.ts
 │   └── llm-parameters-check.ts
 ├── tools/
+│   ├── vite/
+│   │   └── shared-config.ts
 │   ├── vite-plugins/
 │   │   ├── android-models-plugin.ts
+│   │   ├── background-assets-scope-plugin.ts
 │   │   ├── extension-plugins.ts
 │   │   ├── extension-test-host-plugin.ts
 │   │   ├── package-runtime-assets-plugin.ts
+│   │   ├── stage-assets-scope-plugin.ts
 │   │   └── vad-assets-plugin.ts
 │   ├── create-node-llama-runtime-core.ts
 │   └── write-package-type-entries.ts
@@ -864,6 +976,7 @@ vassist/
 ├── capacitor.config.json
 ├── CONTRIBUTING.md
 ├── electron-builder.mac.json
+├── electron-builder.shared.json
 ├── electron-builder.win.json
 ├── eslint.config.ts
 ├── index.html
@@ -876,14 +989,10 @@ vassist/
 ├── tsconfig.electron.json
 ├── tsconfig.extension.json
 ├── tsconfig.json
-├── tsconfig.package.embed.types.json
-├── tsconfig.package.react.types.json
 ├── tsconfig.tools.json
 ├── vercel.json
 ├── vite.config.android.ts
 ├── vite.config.desktop.ts
 ├── vite.config.extension.ts
-├── vite.config.package.embed.ts
-├── vite.config.package.react.ts
 └── vite.config.ts
 ```

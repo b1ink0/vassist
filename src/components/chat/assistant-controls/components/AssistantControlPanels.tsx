@@ -39,6 +39,7 @@ interface AssistantControlPanelsProps {
   cameraMode: "2D" | "3D";
   cameraLocked: boolean;
   cameraSaveEnabled: boolean;
+  stickerBorderEnabled: boolean;
   actions: AssistantControlActions;
   onSeek: (progress: number) => void;
 }
@@ -315,6 +316,7 @@ function CameraControlsPanel({
   cameraMode,
   cameraLocked,
   cameraSaveEnabled,
+  stickerBorderEnabled,
   actions,
   isAvatarPanelOpen,
   panelMode,
@@ -326,6 +328,7 @@ function CameraControlsPanel({
   | "cameraMode"
   | "cameraLocked"
   | "cameraSaveEnabled"
+  | "stickerBorderEnabled"
   | "actions"
   | "isAvatarPanelOpen"
   | "panelMode"
@@ -403,6 +406,27 @@ function CameraControlsPanel({
           </div>
         </Button>
         <Button
+          onClick={actions.onStickerBorderToggle}
+          variant={variant}
+          className={cn(
+            buttonClass,
+            stickerBorderEnabled && "ring-2 ring-white/50",
+          )}
+          title={
+            stickerBorderEnabled
+              ? "Disable Sticker Border"
+              : "Enable Sticker Border"
+          }
+          aria-label={
+            stickerBorderEnabled
+              ? "Disable Sticker Border"
+              : "Enable Sticker Border"
+          }
+          aria-pressed={stickerBorderEnabled}
+        >
+          <Icon name="sticker-border" size={16} />
+        </Button>
+        <Button
           onClick={actions.onToggleStagePanel}
           variant={variant}
           className={buttonClass}
@@ -453,6 +477,7 @@ export function AssistantControlPanels({
   cameraMode,
   cameraLocked,
   cameraSaveEnabled,
+  stickerBorderEnabled,
   actions,
   onSeek,
 }: AssistantControlPanelsProps) {
@@ -512,6 +537,7 @@ export function AssistantControlPanels({
               cameraMode={cameraMode}
               cameraLocked={cameraLocked}
               cameraSaveEnabled={cameraSaveEnabled}
+              stickerBorderEnabled={stickerBorderEnabled}
               actions={actions}
               isAvatarPanelOpen={isAvatarPanelOpen}
               panelMode={panelMode}

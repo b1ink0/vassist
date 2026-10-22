@@ -706,7 +706,7 @@ export class LocalAIServer {
     const llmEngine =
       (typeof req.body?.llmEngine === "string" && req.body.llmEngine) ||
       this.config.llm?.engine ||
-      "node-llama";
+      "llama-server";
     if (llmEngine === "llama-server") {
       return await this.handleLlamaServerCompletion(req, res);
     }

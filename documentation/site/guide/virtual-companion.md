@@ -1,3 +1,7 @@
+<script setup lang="ts">
+import AppIcon from "../.vitepress/theme/components/AppIcon.vue"
+</script>
+
 # Live Assistant
 
 The live 3D assistant sits alongside the chat and page tools. It animates, reacts while you talk to it, plays emotes, and stays visible while you work on other things. You can swap avatars, stages, and motions on the fly from the floating controls without touching Settings.
@@ -31,10 +35,10 @@ These buttons hide when the chat is open.
 
 ## Switching avatars and stages
 
-Click the **avatar button** to open the picker panel. It lists all your imported models starting with **VAssist Default**.
+Click the <AppIcon name="user" /> **avatar button** to open the picker panel. It lists all your imported models starting with **VAssist Default**.
 
 - Click any model to switch immediately. A check mark shows the current selection.
-- Click the **stage icon** (box) in the camera controls row below the list to switch the panel to stage selection. Click the **person icon** to switch back to avatars.
+- Click the <AppIcon name="box" /> stage icon in the camera controls row below the list to switch the panel to stage selection. Click the <AppIcon name="user" /> person icon to switch back to avatars.
 - **No Stage** renders the avatar with no background.
 
 ## Camera controls (below the avatar list)
@@ -48,14 +52,15 @@ When the avatar panel is open, a row of small buttons appears below the model li
 | Lock / Unlock (lock icon, highlighted when unlocked) | Freezes or releases camera movement.                                     |
 | Pin position (pin icon, highlighted when saving)     | Saves dragged camera placement across sessions. Turn off to stop saving. |
 | Stage toggle (box / person icon)                     | Switches the panel between the avatar list and stage list.               |
+| <AppIcon name="sticker-border" /> Sticker Border     | Toggles the avatar outline. Change its color or thickness in **Settings → 3D → Display**. |
 
 ## Playing emotes
 
-Click the **emote button** (music note) to open the emote panel.
+Click the <AppIcon name="music" /> **emote button** to open the emote panel.
 
 1. Use the **category dropdown** at the top to filter by category.
 2. Click any emote name to play it immediately. A spinning icon marks the currently playing emote.
-3. Click the emote button again to close the panel. The emote keeps playing in the background.
+3. Click the <AppIcon name="music" /> emote button again to close the panel. The emote keeps playing in the background.
 
 The emote panel also shows an auto-play toggle and category selector so the Live Assistant plays emotes automatically during matching animation states.
 

@@ -65,6 +65,7 @@ interface BabylonSceneProps {
   sceneConfig?: Partial<SceneBuildConfig>;
   positionManagerRef?: MutableRefObject<PositionManagerLike | null>;
   isPreview?: boolean;
+  enableAvatarShadow?: boolean;
   previewWidth?: string;
   previewHeight?: string;
   previewClassName?: string;
@@ -159,6 +160,7 @@ const BabylonScene = ({
   sceneConfig = {},
   positionManagerRef: externalPositionManagerRef,
   isPreview = false,
+  enableAvatarShadow = true,
   previewWidth = "100%",
   previewHeight = "100%",
   previewClassName = "",
@@ -408,6 +410,11 @@ const BabylonScene = ({
       setShowModelLoadingOverlay(false);
     }
   }, [isReady, setShowModelLoadingOverlay, isPreview]);
+
+  useEffect(() => {
+    const scene = sceneRef.current as SceneWithMetadata | null;
+    scene?.metadata?.setShadowsEnabled?.(enableAvatarShadow);
+  }, [enableAvatarShadow, isReady]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

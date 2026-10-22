@@ -222,30 +222,28 @@ const UISettings = ({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {isDesktop && (
-        <div className="relative">
-          <div
-            className="absolute bottom-0 z-10 h-0.5 bg-white transition-all duration-300 ease-out"
-            style={{
-              left: `${subTabIndicatorStyle.left}px`,
-              width: `${subTabIndicatorStyle.width}px`,
-            }}
-          />
-          <TabBar
-            tabs={[
-              { id: "display", label: "Display" },
-              { id: "chat", label: "Chat" },
-              ...(showModeTab ? [{ id: "mode", label: "Mode" }] : []),
-              { id: "tools", label: "Tools" },
-            ]}
-            activeTab={activeSubTab}
-            onTabChange={(tabId) => setActiveSubTab(tabId as UITab)}
-            size="compact"
-            ariaLabel="UI settings"
-            tabsRef={subTabsRef}
-          />
-        </div>
-      )}
+      <div className="relative">
+        <div
+          className="absolute bottom-0 z-10 h-0.5 bg-white transition-all duration-300 ease-out"
+          style={{
+            left: `${subTabIndicatorStyle.left}px`,
+            width: `${subTabIndicatorStyle.width}px`,
+          }}
+        />
+        <TabBar
+          tabs={[
+            { id: "display", label: "Display" },
+            { id: "chat", label: "Chat" },
+            ...(showModeTab ? [{ id: "mode", label: "Mode" }] : []),
+            { id: "tools", label: "Tools" },
+          ]}
+          activeTab={activeSubTab}
+          onTabChange={(tabId) => setActiveSubTab(tabId as UITab)}
+          size="compact"
+          ariaLabel="UI settings"
+          tabsRef={subTabsRef}
+        />
+      </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">
         <div className="h-full overflow-y-auto scrollbar-glass px-4 py-3 md:px-6 md:py-4">

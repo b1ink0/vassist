@@ -6,6 +6,7 @@ import Toggle from "../common/Toggle";
 import ShortcutsConfig from "../common/ShortcutsConfig";
 import { Button, Card, Input, Select, SettingsRow } from "../ui";
 import BackgroundSettings from "./BackgroundSettings";
+import DesktopBackgroundSettings from "./DesktopBackgroundSettings";
 import type { BackupSelection } from "../../services/storage/AppDataBackupService";
 
 export type UpdateUIConfig = (path: string, value: unknown) => void;
@@ -30,6 +31,7 @@ export const DisplayTab = ({
   updateUIConfig,
   isLightBackground,
   isAndroid,
+  isDesktop,
   isExtension,
   allowPositionSelection,
   isResetting,
@@ -214,6 +216,9 @@ export const DisplayTab = ({
     </div>
 
     {isAndroid && <BackgroundSettings isLightBackground={isLightBackground} />}
+    {isDesktop && (
+      <DesktopBackgroundSettings isLightBackground={isLightBackground} />
+    )}
   </div>
 );
 

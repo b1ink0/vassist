@@ -76,7 +76,7 @@ If the docs and the exports ever disagree, `packages/embed/src/index.ts`, `packa
 | Browser VAD               | `@ricky0123/vad-web` | Voice activity detection                         |
 | Browser TTS               | `kokoro-js`          | ONNX-backed speech synthesis in browser contexts |
 | Browser inference runtime | `onnxruntime-web`    | ONNX execution for supported browser features    |
-| Desktop local LLM         | `node-llama-cpp`     | GGUF model execution on desktop                  |
+| Desktop local LLM         | `llama-server`       | Default GGUF model execution on desktop          |
 | Persistence               | `dexie`              | IndexedDB-backed storage layer                   |
 | Android bridge            | Capacitor            | Web-to-Android runtime bridge                    |
 

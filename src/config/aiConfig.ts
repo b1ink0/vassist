@@ -474,7 +474,7 @@ export const DefaultAIConfig = {
   "desktop-local": {
     ...DefaultLLMSamplingParameters,
     ...DefaultLLMRuntimeParameters,
-    llmEngine: "node-llama" as "node-llama" | "llama-server",
+    llmEngine: "llama-server" as "node-llama" | "llama-server",
     llmBackend: "auto",
     selectedBackendProfileId: "",
     endpoint: DESKTOP_LOCAL_SERVER.baseUrl,
@@ -754,7 +754,7 @@ export function validateAIConfig(
       );
     }
     if (
-      config.decision.provider !== "desktop-local" &&
+      config.decision.provider === "remote" &&
       !config.decision.endpoint?.trim()
     ) {
       errors.push(

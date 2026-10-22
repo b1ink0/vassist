@@ -1,8 +1,12 @@
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { extensionTestHostPlugin } from "./tools/vite-plugins/extension-test-host-plugin.js";
 import { vadAssetsPlugin } from "./tools/vite-plugins/vad-assets-plugin";
+import { excludeBackgroundAssetsPlugin } from "./tools/vite-plugins/background-assets-scope-plugin";
+import {
+  createReactPlugin,
+  createViteDefines,
+} from "./tools/vite/shared-config";
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -10,25 +14,14 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
-      react({
-        babel: {
-          plugins: [["babel-plugin-react-compiler"]],
-        },
-      }),
+      createReactPlugin(true),
       tailwindcss(),
       vadAssetsPlugin("dist"),
+      excludeBackgroundAssetsPlugin("dist"),
       extensionTestHostPlugin(),
     ],
     publicDir: "public",
-    define: {
-      // Build-time constants for mode detection
-      __EXTENSION_MODE__: JSON.stringify(false),
-      __ANDROID_MODE__: JSON.stringify(false),
-      __DESKTOP_MODE__: JSON.stringify(false),
-      __EMBED_MODE__: JSON.stringify(false),
-      __DEV_MODE__: JSON.stringify(!isProduction),
-      __PROD_MODE__: JSON.stringify(isProduction),
-    },
+    define: createViteDefines(isProduction, "web"),
     server: {
       headers: {
         // Required for SharedArrayBuffer support in babylon-mmd bullet physics

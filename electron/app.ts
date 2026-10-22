@@ -15,6 +15,7 @@ import {
   session,
   desktopCapturer,
   nativeImage,
+  dialog,
 } from "electron";
 import { fileURLToPath } from "url";
 import { createRequire } from "module";
@@ -219,7 +220,10 @@ registerPrivilegedSchemes(protocol);
 registerUIIPCHandlers({
   ipcMain,
   BrowserWindow,
+  dialog,
   screen,
+  fs,
+  path,
   app,
   process,
   state,

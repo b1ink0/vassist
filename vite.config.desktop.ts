@@ -4,7 +4,6 @@
  */
 
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import electron from "vite-plugin-electron/simple";
 import { resolve } from "path";
@@ -12,6 +11,12 @@ import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
 import { vadAssetsPlugin } from "./tools/vite-plugins/vad-assets-plugin";
+import { excludeBackgroundAssetsPlugin } from "./tools/vite-plugins/background-assets-scope-plugin";
+import {
+  createAppAliases,
+  createReactPlugin,
+  createViteDefines,
+} from "./tools/vite/shared-config";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,13 +28,10 @@ export default defineConfig(({ mode }) => {
     publicDir: "public",
 
     plugins: [
-      react({
-        babel: {
-          plugins: [["babel-plugin-react-compiler"]],
-        },
-      }),
+      createReactPlugin(true),
       tailwindcss(),
       vadAssetsPlugin("dist-desktop"),
+      excludeBackgroundAssetsPlugin("dist-desktop"),
       {
         name: "copy-server-files-production",
         closeBundle() {
@@ -125,6 +127,7 @@ export default defineConfig(({ mode }) => {
               rollupOptions: {
                 external: [
                   "electron",
+                  "sharp",
                   "node-llama-cpp",
                   "express",
                   "axios",
@@ -173,15 +176,7 @@ export default defineConfig(({ mode }) => {
       }),
     ].filter(Boolean),
 
-    define: {
-      // Build-time constants for mode detection
-      __EXTENSION_MODE__: JSON.stringify(false),
-      __ANDROID_MODE__: JSON.stringify(false),
-      __DESKTOP_MODE__: JSON.stringify(true),
-      __EMBED_MODE__: JSON.stringify(false),
-      __DEV_MODE__: JSON.stringify(!isProduction),
-      __PROD_MODE__: JSON.stringify(isProduction),
-    },
+    define: createViteDefines(isProduction, "desktop"),
 
     build: {
       outDir: "dist-desktop",
@@ -217,12 +212,7 @@ export default defineConfig(({ mode }) => {
     },
 
     resolve: {
-      alias: {
-        "@": resolve(__dirname, "./src"),
-        "@services": resolve(__dirname, "./src/services"),
-        "@components": resolve(__dirname, "./src/components"),
-        "@utils": resolve(__dirname, "./src/utils"),
-      },
+      alias: createAppAliases(__dirname),
     },
 
     server: {

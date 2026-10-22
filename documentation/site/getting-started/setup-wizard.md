@@ -1,6 +1,6 @@
 # Set Up VAssist
 
-The setup wizard runs on first launch and covers five screens: Live Assistant mode, AI provider, voice, and extra tools. Most people are done in under five minutes if they stick with the defaults for their platform.
+The setup wizard runs on first launch and starts with a welcome screen, followed by Live Assistant mode, AI provider, text-to-speech, speech-to-text, and extra tools. Android and desktop also have a background step after Live Assistant. Local engine and model downloads can take additional time.
 
 ::: info Android wallpaper
 If you're on Android and plan to use the live wallpaper, do setup in the main app first. The wallpaper reads its settings from the app.
@@ -12,8 +12,10 @@ If you're on Android and plan to use the live wallpaper, do setup in the main ap
 | ---------------- | ------------------------------------------------------------------ |
 | Welcome          | Intro and docs link. Chrome builds show Chrome AI guidance here.   |
 | Live Assistant   | Avatar on/off, display mode, position (browser/extension installs) |
+| Background       | Android and desktop only. Enable a bundled wallpaper and choose which ones to include. |
 | AI Configuration | Your main AI provider                                              |
-| Voice            | Speech output (TTS) and speech input (STT) separately              |
+| Text-to-Speech   | Choose and configure spoken replies                                |
+| Speech-to-Text   | Choose and configure microphone input                              |
 | AI+ Features     | Optional tools: translate, summarize, rewrite, write               |
 
 ## 1. Welcome
@@ -29,7 +31,17 @@ Pick whether you want the 3D Live Assistant or a chat-first layout.
 
 You can change all of this later in Settings → 3D.
 
-## 3. AI Configuration
+## 3. Background
+
+Blue Milky Way is selected and enabled by default. Choose other bundled wallpapers to include them in the fade slideshow, or turn the background off. You can change this later in **Settings > UI > Display**. Desktop floating mode stays clear.
+
+The setup step shares the background controls from Settings. Adjust brightness directly or open **More image effects** to choose a preset and tune contrast, saturation, blur, grayscale, sepia, or hue.
+
+Choose **Images**, **Solid color**, or **Gradient** for the background. Gradient presets include Midnight, Ocean, Aurora, Sunset, and Forest. You can customize both colors and the angle.
+
+On Android, the same selected wallpapers appear in the full app and live wallpaper. You can import your own images later in Settings. On desktop, you can combine the selected wallpapers with image files or a folder. See [wallpaper credits](/legal/wallpapers) for image sources and licensing.
+
+## 4. AI Configuration
 
 This is the most involved step. Pick one AI provider and finish only the fields it shows you.
 
@@ -43,21 +55,23 @@ This is the most involved step. Pick one AI provider and finish only the fields 
 
 ### What each provider asks you to do
 
-| Provider      | What the wizard shows                                                                      |
-| ------------- | ------------------------------------------------------------------------------------------ |
-| Android Local | Ready state, model label, Test Connection, endpoint field in Advanced Settings             |
-| Desktop Local | Backend picker, install status, Install button, progress bar, Test Connection              |
-| Chrome AI     | Status, required Chrome flags, Start Model Download, Refresh Status, Chrome internal links |
-| OpenAI        | API key field, Test Connection                                                             |
-| Ollama        | Endpoint, model name, Test Connection                                                      |
+| Provider      | What the wizard shows                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------------------ |
+| Android Local | Model download and selection, compute unit, model parameters, Test Connection, endpoint in Advanced Settings |
+| Desktop Local | Engine and runtime setup, model downloads and selection, model parameters, Test Connection                   |
+| Chrome AI     | Status, required Chrome flags, Start Model Download, Refresh Status, Chrome internal links                   |
+| OpenAI        | API key field, Test Connection                                                                               |
+| Ollama        | Endpoint, model name, Test Connection                                                                        |
 
 ### Android Local
 
-The default on Android. Runs Qwen3-0.6B-Q4 on-device.
+The default on Android. Runs local GGUF or LiteRT-LM models on-device.
 
 1. Leave `Android Local` selected.
-2. Hit **Test Connection**.
-3. Continue when it responds.
+2. Download or select a model in the model manager.
+3. Choose a compute unit if you want to change the default `Auto` selection.
+4. Adjust model parameters if needed, then use **Test Connection**.
+5. Continue when it responds.
 
 The Advanced Settings endpoint field only matters if you've changed the default local address.
 
@@ -66,21 +80,21 @@ The Advanced Settings endpoint field only matters if you've changed the default 
 The default on desktop. Uses llama.cpp through the Electron runtime.
 
 1. Leave `Desktop Local` selected.
-2. Open **Runtime Backend** and pick your backend:
+2. Keep the default `llama-server` engine, or choose `node-llama-cpp` in **Inference Engine**.
+3. Install a llama-server runtime pack, or open **Runtime Backend** for node-llama-cpp and pick your backend:
    - `auto`: safest first pick, lets the runtime figure it out
    - `cpu`: CPU only, slowest, but works everywhere
    - `cuda`: NVIDIA GPUs
    - `vulkan`: AMD GPUs or other Vulkan-capable hardware
    - `metal`: macOS (Apple Silicon and supported Intel Macs)
-3. If the backend needs installing, hit **Install** and wait for it to finish.
-4. Hit **Test Connection**.
-5. Continue when it responds.
+4. If the runtime needs installing, hit **Install** and wait for it to finish.
+5. Download or import a GGUF model in the model manager and select it.
+6. Adjust model parameters if needed, then hit **Test Connection**.
+7. Continue when it responds.
 
 ::: tip
-`auto` is fine for a first pass. You can switch backends later in Settings → LLM if you want to tune things.
+`auto` is fine for a first pass. You can change the engine and backend later in Settings → LLM.
 :::
-
-The backend install and the GGUF model library are separate. After setup, go to Settings → LLM → Desktop Local to download or import models.
 
 Advanced fields (Temperature, Max Tokens, Context Size, GPU Layers, Threads) can all stay at defaults during setup.
 
@@ -124,9 +138,9 @@ Model selection and token limits are in Settings → LLM.
 
 Change the endpoint only if Ollama is running on a different machine.
 
-## 4. Voice
+## 5. Text-to-Speech
 
-Voice is split into two sections: TTS (spoken replies) at the top, and STT (microphone input) below. They're independent. You can have both on, one on, or both off.
+Choose how the assistant speaks. This is a separate step from Speech-to-Text, so you can configure either feature without the other.
 
 ::: tip
 `Disabled` is always a valid choice for either side. You can enable and configure voice later in Settings → TTS and Settings → STT.
@@ -134,21 +148,22 @@ Voice is split into two sections: TTS (spoken replies) at the top, and STT (micr
 
 ### Quick defaults by platform
 
-| Platform            | TTS (spoken replies) | STT (mic input)      |
-| ------------------- | -------------------- | -------------------- |
-| Android             | Android Local        | Android Local        |
-| Desktop             | Desktop Local        | Desktop Local        |
-| Browser / extension | Kokoro               | Chrome AI (if ready) |
+| Platform            | Default TTS provider |
+| ------------------- | -------------------- |
+| Android             | Android Local        |
+| Desktop             | Desktop Local        |
+| Browser / extension | Kokoro               |
 
 ### What each choice asks you to do
 
-| Provider                | What the wizard shows                                                           |
-| ----------------------- | ------------------------------------------------------------------------------- |
-| Android Local TTS / STT | Ready state, endpoint in Advanced Settings                                      |
-| Desktop Local TTS       | GPT-SoVITS install, backend picker, install log, reference voice form           |
-| Desktop Local STT       | Whisper setup, Initialize/Verify buttons, setup log, model and language pickers |
-| Kokoro TTS              | Voice picker, speed, backend, Initialize Model, status, Test Voice              |
-| Chrome AI STT           | Status, required flags, Start Model Download, output language, Refresh Status   |
+| Provider          | What the wizard shows                                                                                      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------- |
+| Android Local TTS | Voice-pack downloads, active pack and speaker selectors, speed, Test TTS                                   |
+| Android Local STT | Model downloads, model, language and compute selectors, Test Recording                                     |
+| Desktop Local TTS | Engine picker, GPT-SoVITS install and reference voice form, or Supertonic options                          |
+| Desktop Local STT | Engine picker, faster-whisper setup or whisper.cpp runtime and model downloads, model and language pickers |
+| Kokoro TTS        | Voice picker, speed, backend, Initialize Model, status, Test Voice                                         |
+| Chrome AI STT     | Status, required flags, Start Model Download, output language, Refresh Status                              |
 
 ---
 
@@ -156,21 +171,25 @@ Voice is split into two sections: TTS (spoken replies) at the top, and STT (micr
 
 #### Android Local TTS
 
-1. Leave `Android Local` selected.
-2. Continue if it looks ready.
-3. Advanced Settings only matters if the endpoint changed.
+The wizard lets you manage Android voice packs directly during setup.
 
-The VITS model download, speaker selection, and speed are all in Settings → TTS if you need them.
+1. Leave `Android Local` selected to use the default VITS VCTK pack, or download another available pack.
+2. Select the active pack and speaker, then adjust speed if needed.
+3. Use **Test TTS** to check speech before continuing.
 
-#### Desktop Local TTS (GPT-SoVITS)
+You can change these choices later in **Settings → TTS**.
+
+#### Desktop Local TTS
 
 1. Leave `Desktop Local` selected.
-2. Choose a PyTorch backend:
+2. Choose the TTS engine:
+   - `GPT-SoVITS` supports reference voice cloning. Continue with the installation and reference voice steps below.
+   - `Supertonic 3` uses its available voice, language, and quality controls. It does not need a GPT-SoVITS reference voice.
+3. For GPT-SoVITS, choose a PyTorch backend:
    - `auto` for the first pass
    - `cpu`, `cuda`, `rocm`, `sycl`, or `metal` if you know your hardware
-3. Hit **Install GPT-SoVITS** (or **Re-install** if it's partially broken).
-4. Wait for the install log to finish.
-5. Add a reference voice:
+4. Hit **Install GPT-SoVITS** (or **Re-install** if it's partially broken) and wait for the install log to finish.
+5. For GPT-SoVITS, add a reference voice:
    - a name for the voice
    - the exact words spoken in the audio sample
    - the language of that sample
@@ -211,27 +230,43 @@ For setups that already have a compatible speech server running.
 
 ---
 
-### Microphone input (STT)
+## 6. Speech-to-Text
+
+Choose how the assistant transcribes microphone input. This is a separate step from Text-to-Speech. You can disable either one independently.
+
+### Quick defaults by platform
+
+| Platform            | Default STT provider |
+| ------------------- | -------------------- |
+| Android             | Android Local        |
+| Desktop             | Desktop Local        |
+| Browser / extension | Chrome AI, if ready  |
+
+### What each choice asks you to do
 
 #### Android Local STT
 
-1. Leave `Android Local` selected.
-2. Continue if it looks ready.
-3. Advanced Settings only matters if the endpoint changed.
+The wizard provides the Android model downloader and the same model, language, and compute choices available in Settings.
 
-The Whisper model download and language picker are in Settings → STT.
+1. Leave `Android Local` selected to use the downloaded model automatically, or download and select a specific model.
+2. Choose the transcription language and compute provider. Use a multilingual Whisper model or SenseVoice for Chinese or Japanese. English-only Whisper models ignore the language setting.
+3. Use **Test Recording** to check transcription before continuing.
+
+NNAPI and XNNPACK may require a custom build. The experimental Snapdragon QNN option requires a compatible device and SenseVoice. You can change these choices later in **Settings → STT**.
 
 #### Desktop Local STT
 
 1. Leave `Desktop Local` selected.
-2. Pick a Whisper model:
+2. Choose `faster-whisper` or [whisper.cpp](https://github.com/ggml-org/whisper.cpp) in **STT Engine**.
+3. For faster-whisper, initialize or verify its runtime. For whisper.cpp, install a runtime pack and download a GGML model.
+4. Pick a Whisper model:
    - `tiny` / `tiny.en`: faster, smaller, good enough for most uses
    - `base` / `base.en`: more accurate, larger download
    - `.en` variants are English-only but slightly faster
-3. Hit **Initialize Whisper** (or **Complete Whisper Setup**).
-4. Wait for the setup log.
-5. Pick a transcription language (or leave on auto-detect).
-6. Continue when the service is ready.
+5. Hit **Initialize Whisper** (or **Complete Whisper Setup**) when using faster-whisper.
+6. Wait for the setup log when installing faster-whisper or a whisper.cpp runtime.
+7. Pick a transcription language (or leave on auto-detect), then use **Test Recording (3s)**.
+8. Continue when the selected service is ready.
 
 #### Chrome AI STT
 
@@ -263,7 +298,7 @@ If Chrome AI is still blocked, switch to `Disabled` or `OpenAI Whisper`.
 3. Model name.
 4. Language (or leave on auto-detect).
 
-## 5. AI+ Features
+## 7. AI+ Features
 
 Five optional tools that sit on top of your main AI provider:
 

@@ -30,6 +30,7 @@ import {
   isEmbed,
   isInputWindow,
   isScreenPicker,
+  isDesktopAttachedModeWindow,
 } from "./utils/PlatformUtils";
 import { useConfigStore } from "./stores/useConfigStore";
 import {
@@ -91,6 +92,10 @@ function StoreBootstrapInner({
   const desktopThemeMode = useConfigStore(
     (state) => state.uiConfig.backgroundDetection?.mode,
   );
+  const hasConfigHydrated = useConfigStore((state) => state.hasHydrated);
+  const applyEmbedConfigToCurrentState = useConfigStore(
+    (state) => state.applyEmbedConfigToCurrentState,
+  );
 
   const refreshDesktopApi = useRefreshDesktopApi();
   const refreshAndroidApi = useRefreshAndroidApi();
@@ -105,6 +110,12 @@ function StoreBootstrapInner({
     setActiveEmbedHostId(embedConfig.mount.hostId);
   }, [embedConfig]);
 
+  useEffect(() => {
+    if (hasConfigHydrated) {
+      void applyEmbedConfigToCurrentState(embedConfig);
+    }
+  }, [applyEmbedConfigToCurrentState, embedConfig, hasConfigHydrated]);
+
   const themeRoot = useMemo(
     () => getVAssistThemeRootAttributes(embedConfig),
     [embedConfig],
@@ -117,7 +128,11 @@ function StoreBootstrapInner({
         data-vassist-host-id={embedConfig.mount.hostId}
         data-vassist-theme-mode={themeRoot.mode}
         data-vassist-surface-style={themeRoot.surfaceStyle}
-        data-vassist-desktop-theme={isDesktop ? desktopThemeMode : undefined}
+        data-vassist-desktop-theme={
+          isDesktop && !isDesktopAttachedModeWindow
+            ? desktopThemeMode
+            : undefined
+        }
         style={themeRoot.style}
         onMouseEnter={() => setActiveEmbedHostId(embedConfig.mount.hostId)}
         onPointerDownCapture={() =>

@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vitepress";
 import { vadAssetsPlugin } from "../../../tools/vite-plugins/vad-assets-plugin";
+import { excludeBackgroundAssetsPlugin } from "../../../tools/vite-plugins/background-assets-scope-plugin";
 
 const base = process.env.VASSIST_DOCS_BASE ?? "/";
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -13,7 +14,7 @@ export default defineConfig({
   description:
     "Guides for installing, setting up, and using VAssist on desktop, Android, and the browser extension.",
   base,
-  appearance: "force-dark",
+  appearance: "dark",
   cleanUrls: true,
   lastUpdated: true,
   ignoreDeadLinks: true,
@@ -163,6 +164,10 @@ export default defineConfig({
             { text: "Use VAssist", link: "/guide/" },
           ],
         },
+        {
+          text: "Credits",
+          items: [{ text: "Wallpaper Images", link: "/legal/wallpapers" }],
+        },
       ],
     },
     outline: {
@@ -186,6 +191,7 @@ export default defineConfig({
       react(),
       tailwindcss(),
       vadAssetsPlugin("documentation/site/.vitepress/dist"),
+      excludeBackgroundAssetsPlugin("documentation/site/.vitepress/dist"),
     ],
     resolve: {
       dedupe: ["react", "react-dom"],

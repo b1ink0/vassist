@@ -1,6 +1,10 @@
 # @vassist/react
 
-React components wrapping the same runtime as `@vassist/embed`. Requires React 18 or 19.
+React components wrapping the same browser runtime as `@vassist/embed`. The current package declares React 19 and React DOM 19 as peer dependencies.
+
+::: warning Not published yet
+`@vassist/react` is currently a Bun workspace package inside the VAssist repository. It is not installable from npm yet. See [Package Integration](/architecture/packages-and-integration) for current availability and browser feature limits.
+:::
 
 ## Entry Points
 
@@ -76,7 +80,7 @@ function AppAssistant({ overrides }: { overrides?: VAssistEmbedConfig }) {
 }
 ```
 
-The `config` prop is reactive. Changing it between renders calls `updateVAssistEmbedConfig()` internally; you do not need to remount the component.
+The `config` prop is reactive. Changing it between renders calls `updateVAssistEmbedConfig()` internally. You do not need to remount the component.
 
 ## Secure Host Bridge From React
 
@@ -183,9 +187,9 @@ export function SecureAssistant() {
 
 The same runtime rules from `@vassist/embed` apply here:
 
-- The bridge can implement `ai`, `tts`, `stt`, or any combination of them. All three are part of the public React package surface.
+- The bridge can implement `ai`, `tts`, `stt`, and `decision` services independently.
 - `providers.mode: "host-managed"` changes who owns provider settings.
-- `transport.mode: "host-bridge"` delegates provider I/O to your host.
+- `transport.mode: "host-bridge"` delegates provider I/O to your host, including Decision API checks when the decision provider is `"host"`.
 - `ai.getCurrentProvider` and `tts.getCurrentProvider` should return a plain string or `null` synchronously in the current runtime.
 
 ## React Customizations

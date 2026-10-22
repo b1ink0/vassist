@@ -1,18 +1,12 @@
 /**
  * @fileoverview Desktop window controls component for Electron app.
  * Provides minimize, maximize, and close buttons for frameless window.
- * TODO: Replace SVG icons with @heroicons/react/24/outline (MinusIcon, XMarkIcon, Square2StackIcon)
  */
 
-import {
-  MinusIcon,
-  XMarkIcon,
-  Square2StackIcon,
-} from "@heroicons/react/24/outline";
 import { useState } from "react";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
 import { isAppModeWindow } from "../../utils/PlatformUtils";
-import Button from "../ui/Button";
+import Icon from "../icons/Icon";
 
 /**
  * Window controls for Electron desktop app
@@ -60,43 +54,43 @@ export default function DesktopWindowControls() {
       <div
         data-testid="desktop-window-controls"
         data-electron-interactive="true"
-        className="fixed top-2 right-2 z-[99999] flex items-center gap-1 px-2 py-1 bg-black/20 backdrop-blur-sm rounded-full app-region-no-drag"
+        className="fixed left-1 top-1 z-[99999] flex items-center gap-0.5 app-region-no-drag"
       >
         {!electronAvailable && (
           <span className="text-xs text-red-500 mr-2">
             Electron API not loaded
           </span>
         )}
-        <Button
-          variant="unstyled"
-          tooltipVariant="default"
+        <button
+          type="button"
           onClick={handleMinimize}
           data-testid="desktop-window-minimize-button"
-          className="p-1 rounded-full hover:bg-white/10 transition-colors"
+          aria-label="Minimize window"
+          className="flex h-6 w-6 items-center justify-center rounded text-white/90 transition-colors hover:bg-white/15"
           title="Minimize"
         >
-          <MinusIcon className="w-3 h-3 text-white/70" />
-        </Button>
-        <Button
-          variant="unstyled"
-          tooltipVariant="default"
+          <Icon name="minus" size={12} className="text-white" />
+        </button>
+        <button
+          type="button"
           onClick={handleMaximize}
           data-testid="desktop-window-maximize-button"
-          className="p-1 rounded-full hover:bg-white/10 transition-colors"
+          aria-label="Maximize or restore window"
+          className="flex h-6 w-6 items-center justify-center rounded text-white/90 transition-colors hover:bg-white/15"
           title="Maximize/Restore"
         >
-          <Square2StackIcon className="w-3 h-3 text-white/70" />
-        </Button>
-        <Button
-          variant="unstyled"
-          tooltipVariant="default"
+          <Icon name="maximize" size={13} className="text-white" />
+        </button>
+        <button
+          type="button"
           onClick={handleClose}
           data-testid="desktop-window-close-button"
-          className="p-1 rounded-full hover:bg-red-500/30 transition-colors"
+          aria-label="Close window"
+          className="flex h-6 w-6 items-center justify-center rounded text-white/90 transition-colors hover:bg-red-500/80"
           title="Close"
         >
-          <XMarkIcon className="w-3 h-3 text-white/70" />
-        </Button>
+          <Icon name="close" size={12} className="text-white" />
+        </button>
       </div>
     </>
   );

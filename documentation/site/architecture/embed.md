@@ -2,6 +2,10 @@
 
 Imperative browser-side API for VAssist. Works in any JavaScript environment: vanilla JS, Vue, Svelte, Angular, or any other non-React host.
 
+::: warning Not published yet
+`@vassist/embed` is currently a Bun workspace package inside the VAssist repository. It is not installable from npm yet. See [Package Integration](/architecture/packages-and-integration) for current availability and browser feature limits.
+:::
+
 ## Entry Points
 
 | Import                        | Exports                                                                                 |
@@ -293,6 +297,7 @@ Current runtime behavior for host-bridge mode:
 - AI bridge methods drive provider configuration checks, message generation, stop-generation behavior, connection tests, and remote model listing.
 - TTS bridge methods generate audio in the host, but playback, chunk queueing, and lip-sync scheduling still happen in the browser runtime.
 - STT still captures microphone audio in the browser runtime, then forwards bytes and MIME type to `stt.transcribeAudio`.
+- Decision settings use `transport.bridge.decision` when the provider is `"host"`, keeping the endpoint and credentials with the embedding host.
 - If you omit `transport.mode` but provide `transport.bridge`, config normalization resolves the mode to `"host-bridge"` automatically.
 - `providers.mode: "host-managed"` controls the settings UX. It does not replace the bridge.
 - `ai.getCurrentProvider` and `tts.getCurrentProvider` should return a plain string or `null` synchronously in the current runtime, even though the public type also allows promises.

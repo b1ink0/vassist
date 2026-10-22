@@ -11,8 +11,9 @@ import { Camera } from "@babylonjs/core/Cameras/camera";
 import type { Engine } from "@babylonjs/core/Engines/engine";
 import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imageProcessingConfiguration";
 import { ColorCurves } from "@babylonjs/core/Materials/colorCurves";
-import { Color4 } from "@babylonjs/core/Maths/math.color";
+import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 import { Plane } from "@babylonjs/core/Maths/math.plane";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
@@ -24,6 +25,7 @@ import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
+import { ShadowOnlyMaterial } from "@babylonjs/materials/shadowOnly";
 import havokPhysics from "@babylonjs/havok";
 import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader";
 
@@ -505,12 +507,16 @@ export const buildMmdModelScene = async (
     } else {
       mmdCamera.mode = Camera.ORTHOGRAPHIC_CAMERA;
       mmdCamera.distance = cameraDistance;
-      // Reset frustum to default size
-      const aspectRatio = engine.getAspectRatio(mmdCamera);
-      mmdCamera.orthoTop = orthoHeight;
-      mmdCamera.orthoBottom = -orthoHeight;
-      mmdCamera.orthoLeft = -orthoHeight * aspectRatio;
-      mmdCamera.orthoRight = orthoHeight * aspectRatio;
+      const positionManager = scene.metadata?.positionManager;
+      if (isDesktop && positionManager) {
+        positionManager.updateCameraFrustum();
+      } else {
+        const aspectRatio = engine.getAspectRatio(mmdCamera);
+        mmdCamera.orthoTop = orthoHeight;
+        mmdCamera.orthoBottom = -orthoHeight;
+        mmdCamera.orthoLeft = -orthoHeight * aspectRatio;
+        mmdCamera.orthoRight = orthoHeight * aspectRatio;
+      }
     }
   };
 
@@ -699,7 +705,6 @@ export const buildMmdModelScene = async (
     if (finalConfig.updateUIConfig) {
       finalConfig.updateUIConfig("camera.mode", newMode);
     }
-
     return newMode;
   };
 
@@ -813,6 +818,9 @@ export const buildMmdModelScene = async (
   const shadowGenerator = finalConfig.enableShadows
     ? new ShadowGenerator(2048, directionalLight, true)
     : null;
+  let avatarShadowReceiver: Mesh | null = null;
+  let avatarShadowLight: DirectionalLight | null = null;
+  let avatarShadowEnabled = finalConfig.uiConfig?.enableAvatarShadow !== false;
   if (shadowGenerator) {
     shadowGenerator.usePercentageCloserFiltering = true;
     shadowGenerator.forceBackFacesOnly = false;
@@ -839,6 +847,15 @@ export const buildMmdModelScene = async (
   scene.metadata.defaultGround = ground;
   scene.metadata.directionalLight = directionalLight;
   scene.metadata.shadowGenerator = shadowGenerator;
+  if (shadowGenerator) {
+    const defaultShadowDarkness = shadowGenerator.getDarkness();
+    scene.metadata.setShadowsEnabled = (enabled: boolean) => {
+      avatarShadowEnabled = enabled;
+      avatarShadowReceiver?.setEnabled(enabled);
+      avatarShadowLight?.setEnabled(enabled);
+      shadowGenerator.setDarkness(enabled ? defaultShadowDarkness : 1);
+    };
+  }
 
   // ========================================
   // MMD RUNTIME INITIALIZATION
@@ -1277,6 +1294,171 @@ export const buildMmdModelScene = async (
 
   modelMesh.parent = mmdRoot;
 
+  // Cast the avatar's shadow onto a camera-facing plane behind it. Keeping this
+  // receiver in the 3D scene makes the shadow follow pose and camera movement.
+  if (shadowGenerator && !isDedicatedARScene && !stageMesh) {
+    const modelMetadata = modelMesh.metadata as MeshMetadataState | undefined;
+    const shadowMeshes = Array.isArray(modelMetadata?.meshes)
+      ? modelMetadata.meshes
+      : [modelMesh];
+    const vertexBounds = shadowMeshes.flatMap((mesh) => {
+      const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
+      if (!positions || positions.length < 3) return [];
+
+      const min = new Vector3(Infinity, Infinity, Infinity);
+      const max = new Vector3(-Infinity, -Infinity, -Infinity);
+      for (let i = 0; i < positions.length; i += 3) {
+        const x = positions[i];
+        const y = positions[i + 1];
+        const z = positions[i + 2];
+        if (x === undefined || y === undefined || z === undefined) continue;
+        min.x = Math.min(min.x, x);
+        min.y = Math.min(min.y, y);
+        min.z = Math.min(min.z, z);
+        max.x = Math.max(max.x, x);
+        max.y = Math.max(max.y, y);
+        max.z = Math.max(max.z, z);
+      }
+      return [{ mesh, min, max }];
+    });
+
+    const getShadowBounds = () => {
+      const min = new Vector3(Infinity, Infinity, Infinity);
+      const max = new Vector3(-Infinity, -Infinity, -Infinity);
+      const point = Vector3.Zero();
+      const localPoint = Vector3.Zero();
+
+      for (const { mesh, min: localMin, max: localMax } of vertexBounds) {
+        const world = mesh.computeWorldMatrix();
+        for (const x of [localMin.x, localMax.x]) {
+          for (const y of [localMin.y, localMax.y]) {
+            for (const z of [localMin.z, localMax.z]) {
+              Vector3.TransformCoordinatesToRef(
+                localPoint.set(x, y, z),
+                world,
+                point,
+              );
+              min.x = Math.min(min.x, point.x);
+              min.y = Math.min(min.y, point.y);
+              min.z = Math.min(min.z, point.z);
+              max.x = Math.max(max.x, point.x);
+              max.y = Math.max(max.y, point.y);
+              max.z = Math.max(max.z, point.z);
+            }
+          }
+        }
+      }
+
+      return Number.isFinite(min.x) ? { min, max } : null;
+    };
+
+    const bounds = getShadowBounds();
+    const modelSize = bounds
+      ? bounds.max.subtract(bounds.min)
+      : new Vector3(1, 1, 1);
+    const modelHeight = Math.max(modelSize.y, 0.001);
+    const backdropLight = new DirectionalLight(
+      "avatarShadowLight",
+      Vector3.Forward(),
+      scene,
+    );
+    avatarShadowLight = backdropLight;
+    backdropLight.autoCalcShadowZBounds = false;
+    backdropLight.autoUpdateExtends = false;
+    backdropLight.shadowFrustumSize = modelHeight * 3;
+    backdropLight.shadowMinZ = modelHeight * 0.01;
+    backdropLight.shadowMaxZ = modelHeight * 6;
+
+    const backdropShadows = new ShadowGenerator(2048, backdropLight, true);
+    backdropShadows.usePercentageCloserFiltering = true;
+    backdropShadows.filteringQuality = ShadowGenerator.QUALITY_LOW;
+    backdropShadows.bias = 0.0001;
+    backdropShadows.transparencyShadow = true;
+    for (const mesh of shadowMeshes) {
+      backdropShadows.addShadowCaster(mesh, false);
+    }
+    const receiverMaterial = new ShadowOnlyMaterial(
+      "avatarShadowMaterial",
+      scene,
+    );
+    receiverMaterial.activeLight = backdropLight;
+    receiverMaterial.shadowColor = Color3.Black();
+    receiverMaterial.alpha = 0.3;
+    receiverMaterial.backFaceCulling = false;
+    receiverMaterial.disableDepthWrite = true;
+
+    avatarShadowReceiver = MeshBuilder.CreatePlane(
+      "avatarShadowReceiver",
+      {
+        width: Math.max(modelSize.x * 2.5, modelHeight * 1.5),
+        height: modelHeight * 2,
+      },
+      scene,
+    );
+    avatarShadowReceiver.material = receiverMaterial;
+    avatarShadowReceiver.receiveShadows = true;
+    avatarShadowReceiver.isPickable = false;
+    avatarShadowReceiver.alwaysSelectAsActiveMesh = true;
+    avatarShadowReceiver.setEnabled(avatarShadowEnabled);
+    // This light only illuminates the receiver; avatar lighting stays with the
+    // scene's lights while its animated geometry casts into this shadow map.
+    backdropLight.includedOnlyMeshes = [avatarShadowReceiver];
+    backdropLight.setEnabled(avatarShadowEnabled);
+
+    const updateShadowReceiver = () => {
+      if (!avatarShadowReceiver || !avatarShadowEnabled) return;
+
+      const currentBounds = getShadowBounds();
+      const currentCenter = currentBounds
+        ? currentBounds.min.add(currentBounds.max).scale(0.5)
+        : modelMesh.getAbsolutePosition();
+      const activeCamera = scene.activeCamera ?? mmdCamera;
+      const cameraDirection = activeCamera
+        .getDirection(Vector3.Forward())
+        .normalize();
+      const halfSize = currentBounds
+        ? currentBounds.max.subtract(currentBounds.min).scale(0.5)
+        : modelSize.scale(0.5);
+      const backmostDepth =
+        Math.abs(cameraDirection.x) * halfSize.x +
+        Math.abs(cameraDirection.y) * halfSize.y +
+        Math.abs(cameraDirection.z) * halfSize.z;
+      const depth = backmostDepth + modelHeight * 0.08;
+
+      const cameraRight = activeCamera.getDirection(Vector3.Right()).normalize();
+      const cameraUp = activeCamera.getDirection(Vector3.Up()).normalize();
+      // Keep the projected offset proportional to avatar height as the camera
+      // orbits and the required receiver depth changes.
+      backdropLight.direction.copyFrom(
+        cameraDirection
+          .scale(depth)
+          .subtract(cameraRight.scale(modelHeight * 0.09))
+          .subtract(cameraUp.scale(modelHeight * 0.025))
+          .normalize(),
+      );
+      backdropLight.position.copyFrom(
+        currentCenter.subtract(backdropLight.direction.scale(modelHeight * 2)),
+      );
+
+      avatarShadowReceiver.position.copyFrom(
+        currentCenter.add(cameraDirection.scale(depth)),
+      );
+      avatarShadowReceiver.lookAt(currentCenter);
+    };
+
+    updateShadowReceiver();
+    const shadowReceiverObserver = scene.onBeforeRenderObservable.add(
+      updateShadowReceiver,
+    );
+    scene.onDisposeObservable.add(() => {
+      scene.onBeforeRenderObservable.remove(shadowReceiverObserver);
+      backdropShadows.dispose();
+      backdropLight.dispose();
+      avatarShadowLight = null;
+      avatarShadowReceiver = null;
+    });
+  }
+
   // Create MMD model
   mmdModel = mmdRuntime.createMmdModel(modelMesh, {
     buildPhysics: mmdPhysics !== null && mmdPhysics !== undefined,
@@ -1633,15 +1815,20 @@ export const buildMmdModelScene = async (
 
     // Get the correct offset based on Portrait Mode
     const offset =
-      isPortraitMode && presetData.portraitOffset
-        ? presetData.portraitOffset
+      isPortraitMode &&
+      (finalConfig.uiConfig?.position?.offset || presetData.portraitOffset)
+        ? (finalConfig.uiConfig?.position?.offset ??
+          presetData.portraitOffset ??
+          presetData.offset ?? { x: 0, y: 0 })
         : presetData.offset || { x: 0, y: 0 };
 
     // Apply two-height system for Portrait Mode
     let cameraHeight = finalHeight;
     let effectiveHeight = finalHeight;
     if (isPortraitMode) {
-      cameraHeight = finalHeight * 3; // 1500px for zoom
+      cameraHeight =
+        finalHeight *
+        (finalConfig.uiConfig?.position?.portraitZoomMultiplier ?? 3);
       effectiveHeight = finalHeight; // 500px for positioning
     }
 
@@ -1665,7 +1852,17 @@ export const buildMmdModelScene = async (
       actualPreset,
       isAndroid ? "(Android mode)" : "",
     );
-    positionManager.initialize(actualPreset);
+    positionManager.initialize(actualPreset, {
+      ...(finalConfig.uiConfig?.position?.portraitZoomMultiplier !== undefined
+        ? {
+            portraitZoomMultiplier:
+              finalConfig.uiConfig.position.portraitZoomMultiplier,
+          }
+        : {}),
+      ...(finalConfig.uiConfig?.position?.offset
+        ? { offset: finalConfig.uiConfig.position.offset }
+        : {}),
+    });
 
     const modelSizePx = finalConfig.uiConfig?.modelSizePx;
     if (modelSizePx && modelSizePx.width && modelSizePx.height) {

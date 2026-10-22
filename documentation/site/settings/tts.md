@@ -1,3 +1,7 @@
+<script setup lang="ts">
+import AppIcon from "../.vitepress/theme/components/AppIcon.vue"
+</script>
+
 # TTS Settings
 
 Settings → TTS controls spoken replies. The master **Enable Text-to-Speech** switch must be on before any provider controls appear.
@@ -6,47 +10,69 @@ Settings → TTS controls spoken replies. The master **Enable Text-to-Speech** s
 
 Pick based on where you're running and what quality you need:
 
-- **Desktop Local (GPT-SoVITS)**: highest voice quality, clones a voice from a short audio sample. Requires a one-time installation of several GB.
+- **Desktop Local**: choose GPT-SoVITS, which clones a voice from a short audio sample, or Supertonic 3, which offers built-in voices. Each engine requires a one-time installation.
 - **GPT-SoVITS Remote**: same quality as Desktop Local but the synthesis server runs on another machine.
 - **Kokoro**: browser-side local speech. No external server, runs in the page, good quality without installation complexity.
 - **OpenAI / OpenAI-compatible**: cloud synthesis. Fast, reliable, but requires an API key and sends audio to a remote service.
-- **Android Local**: on-device VITS, Android only. Runs without any network.
+- **Android Local**: downloadable on-device VCTK, Kitten Nano, and Supertonic voice packs for offline speech.
 
 ## Common controls
 
-| Control               | Default                                               | Behavior                                                        |
-| --------------------- | ----------------------------------------------------- | --------------------------------------------------------------- |
-| Enable Text-to-Speech | Off                                                   | Master switch. Hides all provider controls when off.            |
-| Provider              | Saved                                                 | Active speech backend.                                          |
-| Test Text             | `Hello, this is a test of the text to speech system.` | Text used by **Test TTS**.                                      |
-| Test Language         | `English`                                             | GPT-SoVITS only. Language for the speech test.                  |
-| Test TTS              | -                                                     | Speaks the test text. Disabled while a test is already running. |
+| Control               | Default                                               | Behavior                                                                                          |
+| --------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Enable Text-to-Speech | Off                                                   | Master switch. Hides all provider controls when off.                                              |
+| Provider              | Saved                                                 | Active speech backend.                                                                            |
+| Accurate Lip Sync     | On                                                    | Uses the newer audio-driven mouth animation when compatible assets and a 3D avatar are available. |
+| Use Legacy Lip Sync   | Off                                                   | Forces the older generic mouth motion instead of accurate lip-sync analysis.                      |
+| Test Text             | `Hello, this is a test of the text to speech system.` | Text used by **Test TTS**.                                                                        |
+| Test Language         | `English`                                             | GPT-SoVITS only. Language for the speech test.                                                    |
+| Test TTS              | -                                                     | Speaks the test text. Disabled while a test is already running.                                   |
+
+Accurate lip sync is enabled by default. If the selected TTS provider cannot supply what the audio-driven analyzer needs, the runtime falls back to the available generic mouth motion. These controls affect the Live Assistant avatar. They do not change speech generation or playback.
 
 ## Android Local
 
-Android Local uses the built-in VITS voice pack. The VCTK pack has 109 speakers with distinct voices. Use Test TTS to audition them quickly.
+Android Local uses downloadable on-device voice packs. After installing a pack, select it as the active model, choose a speaker when the pack offers speaker selection, then use **Test TTS** to hear it.
+
+| Voice pack | Voices and languages | Download size | Installed size |
+| ---------- | -------------------- | ------------- | -------------- |
+| VCTK English | 109 English voices | About 145 MB | About 152 MB |
+| Kitten Nano English | 8 English voices | About 26 MB | About 41 MB |
+| Supertonic 3 Japanese | 10 voices, 31 languages | About 123 MB | About 139 MB |
 
 **To set up Android Local:**
 
-1. If the model isn't installed yet, tap the **download** button next to the VITS model (~145 MB). A progress bar tracks the download.
-2. Once installed, select your **Speaker ID** (0–108). Each number is a different voice.
-3. Adjust **Speed** if the default pace feels too slow or too fast.
-4. Tap **Test TTS** to hear the result.
+1. Download one or more packs from the Android voice pack manager.
+2. Choose the active pack and speaker. The VCTK pack has speaker IDs `0` to `108`.
+3. Adjust **Speed** if needed, then tap **Test TTS**.
 
-To remove the model and free up space, tap the **delete** (🗑) button in the model downloader.
+The packs run locally after download. Use the delete control on a pack to remove it and free storage.
 
-| Control               | Default | Behavior                                                      |
-| --------------------- | ------- | ------------------------------------------------------------- |
-| VITS Model downloader | -       | Download and delete the Android VITS model package (~145 MB). |
-| Voice                 | `VCTK`  | Built-in VCTK multi-speaker voice pack.                       |
-| Speaker ID            | `0`     | 0–108 to pick a voice from the pack.                          |
-| Speed                 | `1.0x`  | 0.5x–2.0x.                                                    |
+| Control                    | Behavior                                           |
+| -------------------------- | -------------------------------------------------- |
+| Android voice pack manager | Download, select, and remove offline voice packs.  |
+| Speaker                    | Select a voice for packs with multiple speakers.   |
+| Speed                      | Adjust playback speed.                             |
 
-## Desktop Local (GPT-SoVITS)
+## Desktop Local
 
-Desktop Local runs GPT-SoVITS locally through Electron. You'll see an installation block first, then the voice library.
+Desktop Local runs through Electron. Select the **TTS Engine** to choose GPT-SoVITS or Supertonic 3. Each engine has a separate install flow and its own controls.
 
-### Installation
+### Supertonic 3
+
+Supertonic uses built-in voices and does not use the GPT-SoVITS reference voice library.
+
+1. Select **Supertonic 3 (Local Voice, fast, built-in voices)**.
+2. Click **Install Supertonic 3** and wait for installation to finish.
+3. Select a **Voice**, **Language**, and **Quality**.
+
+The installer downloads about 400 MB and runs the engine on CPU. Voice choices range from Female (F1–F5) and Male (M1–M5). The language selector includes Auto and English, Japanese, Korean, German, French, Spanish, Chinese, Italian, Portuguese, and Russian. Quality ranges from Fast (5 steps) to Best quality (12 steps).
+
+### GPT-SoVITS
+
+Select **GPT-SoVITS (Clone Voice, reference audio)** to install GPT-SoVITS and manage reference voices as described below.
+
+#### Installation
 
 ::: warning
 GPT-SoVITS is a large install. The automated setup downloads models and Python packages. It takes time and uses a few GB of disk space.
@@ -70,7 +96,7 @@ GPT-SoVITS is a large install. The automated setup downloads models and Python p
 | Installation Log      | Streaming output from the installer.                                                   |
 | Retry Installation    | Appears after a failure.                                                               |
 
-### Reference voice library
+#### Reference voice library
 
 GPT-SoVITS clones tone and accent from a short audio sample you provide. A good reference voice makes a big difference in output quality.
 
@@ -93,8 +119,8 @@ GPT-SoVITS Remote uses the same voice library as Desktop Local, so voices saved 
 
 **To manage voices in your library:**
 
-- **Rename:** Click the pencil (✏️ `edit-2`) icon next to a voice. Type the new name, then click the checkmark (✓ `check`) to save or the X (`x`) to cancel.
-- **Delete:** Click the trash (`trash-2`) icon next to a voice.
+- **Rename:** Click the <AppIcon name="edit-2" /> icon next to a voice. Type the new name, then click the <AppIcon name="check" /> icon to save or the <AppIcon name="x" /> icon to cancel.
+- **Delete:** Click the <AppIcon name="trash-2" /> icon next to a voice.
 - **Set as default:** Toggle the switch on the voice row you want to use. Only one voice can be the default at a time.
 
 | Control           | Behavior                                       |
@@ -106,14 +132,16 @@ GPT-SoVITS Remote uses the same voice library as Desktop Local, so voices saved 
 | Save Voice        | Persists the entry and makes it selectable.    |
 | Voice row         | Rename, delete, or mark as default.            |
 
-### Advanced parameters
+#### Advanced parameters
+
+The GPT-SoVITS settings panel currently displays these controls, but desktop-local synthesis requests do not send their values to the GPT-SoVITS backend. They currently have no effect on desktop-local GPT-SoVITS output. Supertonic 3 uses its own voice, language, speed, and quality settings.
 
 | Control     | Default | Behavior               |
 | ----------- | ------- | ---------------------- |
-| Speed       | `1.0`   | Output playback speed. |
-| Top K       | `15`    | Sampling parameter.    |
-| Top P       | `0.7`   | Nucleus sampling.      |
-| Temperature | `0.7`   | Sampling temperature.  |
+| Speed       | `1.0`   | Displayed control, not currently sent for GPT-SoVITS. |
+| Top K       | `15`    | Displayed control, not currently sent for GPT-SoVITS. |
+| Top P       | `0.7`   | Displayed control, not currently sent for GPT-SoVITS. |
+| Temperature | `0.7`   | Displayed control, not currently sent for GPT-SoVITS. |
 
 ## GPT-SoVITS Remote
 

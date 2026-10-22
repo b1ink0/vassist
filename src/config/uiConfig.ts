@@ -12,6 +12,91 @@ export type DesktopMode = "floating-app" | "app" | "live-wallpaper";
 export type LiveWallpaperInteraction = "non-interactive" | "interactive";
 export type DesktopControlPlacement = "attached" | "detached";
 export type EmoteButtonProgressMode = "none" | "ring" | "both";
+export type BackgroundMode = "images" | "solid" | "gradient";
+
+export interface BackgroundFillSettings {
+  mode: BackgroundMode;
+  solidColor: string;
+  gradientStartColor: string;
+  gradientEndColor: string;
+  gradientAngleDegrees: number;
+}
+
+export const DEFAULT_BACKGROUND_FILL_SETTINGS: BackgroundFillSettings = {
+  mode: "images",
+  solidColor: "#111827",
+  gradientStartColor: "#101827",
+  gradientEndColor: "#243b63",
+  gradientAngleDegrees: 135,
+};
+
+export const getBackgroundFillCSS = (
+  settings: BackgroundFillSettings,
+): string => {
+  if (settings.mode === "solid") return settings.solidColor;
+  const angle = Number.isFinite(settings.gradientAngleDegrees)
+    ? Math.min(360, Math.max(0, settings.gradientAngleDegrees))
+    : DEFAULT_BACKGROUND_FILL_SETTINGS.gradientAngleDegrees;
+  return `linear-gradient(${angle}deg, ${settings.gradientStartColor}, ${settings.gradientEndColor})`;
+};
+
+export interface BackgroundImageEffects {
+  brightnessPercent: number;
+  contrastPercent: number;
+  saturationPercent: number;
+  blurPixels: number;
+  grayscalePercent: number;
+  sepiaPercent: number;
+  hueRotateDegrees: number;
+}
+
+export const DEFAULT_BACKGROUND_IMAGE_EFFECTS: BackgroundImageEffects = {
+  brightnessPercent: 60,
+  contrastPercent: 100,
+  saturationPercent: 100,
+  blurPixels: 0,
+  grayscalePercent: 0,
+  sepiaPercent: 0,
+  hueRotateDegrees: 0,
+};
+
+export const getBackgroundImageFilter = (
+  effects: BackgroundImageEffects,
+): string => {
+  const clamp = (value: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, value));
+  return [
+    `brightness(${clamp(effects.brightnessPercent, 20, 100)}%)`,
+    `contrast(${clamp(effects.contrastPercent, 50, 150)}%)`,
+    `saturate(${clamp(effects.saturationPercent, 0, 200)}%)`,
+    `blur(${clamp(effects.blurPixels, 0, 12)}px)`,
+    `grayscale(${clamp(effects.grayscalePercent, 0, 100)}%)`,
+    `sepia(${clamp(effects.sepiaPercent, 0, 100)}%)`,
+    `hue-rotate(${clamp(effects.hueRotateDegrees, 0, 360)}deg)`,
+  ].join(" ");
+};
+
+export interface DesktopBackgroundConfig
+  extends BackgroundImageEffects, BackgroundFillSettings {
+  enabled: boolean;
+  parallaxEnabled: boolean;
+  slideshowEnabled: boolean;
+  builtInIds: string[];
+  folderPath: string | null;
+  imagePaths: string[];
+  slideshowIntervalSeconds: number;
+  fadeDurationSeconds: number;
+}
+
+export interface AndroidBackgroundConfig
+  extends BackgroundImageEffects, BackgroundFillSettings {
+  enabled: boolean;
+  parallaxEnabled: boolean;
+  slideshowEnabled: boolean;
+  builtInIds: string[];
+  slideshowIntervalSeconds: number;
+  fadeDurationSeconds: number;
+}
 
 export interface PixelSize {
   width: number;
@@ -91,6 +176,8 @@ export const DefaultStickerBorderSettings: StickerBorderSettings = {
 };
 
 export interface UIConfig {
+  desktopBackground: DesktopBackgroundConfig;
+  androidBackground: AndroidBackgroundConfig;
   desktopMode: {
     mode: DesktopMode;
     controlPlacement: DesktopControlPlacement;
@@ -109,6 +196,7 @@ export interface UIConfig {
   };
   enableModelLoading: boolean;
   enablePortraitMode: boolean;
+  enableAvatarShadow: boolean;
   stickerBorder: StickerBorderSettings;
   enablePhysics: boolean;
   physicsEngine: PhysicsEngine;
@@ -414,6 +502,28 @@ export const DefaultCustomQualitySettings: CustomQualitySettings = {
  * Default UI Configuration
  */
 export const DefaultUIConfig: UIConfig = {
+  androidBackground: {
+    ...DEFAULT_BACKGROUND_IMAGE_EFFECTS,
+    ...DEFAULT_BACKGROUND_FILL_SETTINGS,
+    enabled: true,
+    parallaxEnabled: true,
+    slideshowEnabled: false,
+    builtInIds: ["milky-way"],
+    slideshowIntervalSeconds: 30,
+    fadeDurationSeconds: 2,
+  },
+  desktopBackground: {
+    ...DEFAULT_BACKGROUND_IMAGE_EFFECTS,
+    ...DEFAULT_BACKGROUND_FILL_SETTINGS,
+    enabled: true,
+    parallaxEnabled: true,
+    slideshowEnabled: true,
+    builtInIds: ["milky-way"],
+    folderPath: null,
+    imagePaths: [],
+    slideshowIntervalSeconds: 30,
+    fadeDurationSeconds: 2,
+  },
   desktopMode: {
     mode: "app",
     controlPlacement: "attached",
@@ -434,6 +544,8 @@ export const DefaultUIConfig: UIConfig = {
   enableModelLoading: true,
 
   enablePortraitMode: false,
+
+  enableAvatarShadow: true,
 
   stickerBorder: { ...DefaultStickerBorderSettings },
 

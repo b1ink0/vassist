@@ -2,11 +2,15 @@ import type {
   App,
   BrowserWindow,
   BrowserWindow as BrowserWindowInstance,
+  dialog as ElectronDialog,
   IpcMain,
   IpcMainEvent,
   IpcMainInvokeEvent,
   WebContents,
 } from "electron";
+import type * as fsType from "fs";
+import type * as pathType from "path";
+import sharp from "sharp";
 import type {
   DesktopMode,
   DesktopModeRequest,
@@ -18,6 +22,7 @@ import {
   isDesktopControlPlacement,
   isLiveWallpaperInteraction,
 } from "../windows/desktopMode";
+import { isBuiltInBackgroundId } from "../../../src/config/backgroundCatalog";
 
 type WindowState = {
   mainWindow: BrowserWindowInstance | null;
@@ -33,7 +38,10 @@ type WindowState = {
 type UIHandlersDeps = {
   ipcMain: IpcMain;
   BrowserWindow: typeof import("electron").BrowserWindow;
+  dialog: typeof ElectronDialog;
   screen: typeof import("electron").screen;
+  fs: typeof fsType;
+  path: typeof pathType;
   app: App;
   process: NodeJS.Process;
   state: WindowState;
@@ -46,7 +54,10 @@ type UIHandlersDeps = {
 export function registerUIIPCHandlers({
   ipcMain,
   BrowserWindow,
+  dialog,
   screen,
+  fs,
+  path,
   app,
   process,
   state,
@@ -57,6 +68,289 @@ export function registerUIIPCHandlers({
 }: UIHandlersDeps) {
   let assistantRuntimeReadyWindow: BrowserWindowInstance | null = null;
   let pendingAssistantRuntimeEvents: unknown[] = [];
+
+  const backgroundImageTypes: Record<string, string> = {
+    ".gif": "image/gif",
+    ".jpeg": "image/jpeg",
+    ".jpg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+  };
+  const imagePreviewCache = new Map<
+    string,
+    { version: string; dataUrl: string }
+  >();
+  const imagePreviewWaiters: Array<() => void> = [];
+  let activeImagePreviewJobs = 0;
+
+  const acquireImagePreviewSlot = async () => {
+    if (activeImagePreviewJobs >= 2) {
+      await new Promise<void>((resolve) => imagePreviewWaiters.push(resolve));
+      return;
+    }
+    activeImagePreviewJobs += 1;
+  };
+
+  const releaseImagePreviewSlot = () => {
+    const next = imagePreviewWaiters.shift();
+    if (next) {
+      next();
+    } else {
+      activeImagePreviewJobs -= 1;
+    }
+  };
+
+  const getBuiltInBackgroundPath = (
+    backgroundId: string,
+    preview = false,
+  ) => {
+    if (!isBuiltInBackgroundId(backgroundId)) {
+      throw new Error("Unknown built-in background");
+    }
+    const relativePath = preview
+      ? path.join("previews", `${backgroundId}.jpg`)
+      : `${backgroundId}.webp`;
+    if (app.isPackaged) {
+      return path.join(process.resourcesPath, "backgrounds", relativePath);
+    }
+
+    const appPath = path.join(
+      app.getAppPath(),
+      "electron",
+      "assets",
+      "backgrounds",
+      relativePath,
+    );
+    const workingDirectoryPath = path.join(
+      process.cwd(),
+      "electron",
+      "assets",
+      "backgrounds",
+      relativePath,
+    );
+    return fs.existsSync(appPath) ? appPath : workingDirectoryPath;
+  };
+
+  const listBackgroundImages = async (folderPath: string) => {
+    const entries = await fs.promises.readdir(folderPath, {
+      withFileTypes: true,
+    });
+    const images = await Promise.all(
+      entries
+        .filter(
+          (entry) =>
+            entry.isFile() &&
+            Boolean(
+              backgroundImageTypes[path.extname(entry.name).toLowerCase()],
+            ),
+        )
+        .map(async (entry) => {
+          const imagePath = path.join(folderPath, entry.name);
+          try {
+            const stats = await fs.promises.stat(imagePath);
+            return stats.isFile() && stats.size <= 50 * 1024 * 1024
+              ? { path: imagePath, name: entry.name }
+              : null;
+          } catch {
+            return null;
+          }
+        }),
+    );
+    return images
+      .filter(
+        (image): image is { path: string; name: string } => image !== null,
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+  };
+
+  ipcMain.handle(
+    "desktop-background:choose-images",
+    async (_event: IpcMainInvokeEvent, multiple = true) => {
+      try {
+        const result = await dialog.showOpenDialog({
+          properties: multiple
+            ? ["openFile", "multiSelections"]
+            : ["openFile"],
+          title: "Choose Desktop Background Images",
+          filters: [
+            {
+              name: "Images",
+              extensions: ["jpg", "jpeg", "png", "webp", "gif"],
+            },
+          ],
+        });
+        if (result.canceled || result.filePaths.length === 0) {
+          return { success: false, canceled: true };
+        }
+        return {
+          success: true,
+          paths: result.filePaths.filter((imagePath) =>
+            Boolean(
+              backgroundImageTypes[path.extname(imagePath).toLowerCase()],
+            ),
+          ),
+        };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  );
+
+  ipcMain.handle("desktop-background:choose-folder", async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        properties: ["openDirectory"],
+        title: "Choose Desktop Background Folder",
+        buttonLabel: "Use Folder",
+      });
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, canceled: true };
+      }
+      const folderPath = result.filePaths[0];
+      if (!folderPath) return { success: false, canceled: true };
+      return {
+        success: true,
+        folderPath,
+        images: await listBackgroundImages(folderPath),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+
+  ipcMain.handle(
+    "desktop-background:list-folder-images",
+    async (_event: IpcMainInvokeEvent, folderPath: string) => {
+      try {
+        const stats = await fs.promises.stat(folderPath);
+        if (!stats.isDirectory()) {
+          throw new Error("The selected background path is not a folder");
+        }
+        return {
+          success: true,
+          images: await listBackgroundImages(folderPath),
+        };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    "desktop-background:read-image",
+    async (_event: IpcMainInvokeEvent, imagePath: string) => {
+      try {
+        let resolvedPath = imagePath;
+        if (imagePath.startsWith("builtin:")) {
+          const backgroundId = imagePath.slice("builtin:".length);
+          resolvedPath = getBuiltInBackgroundPath(backgroundId);
+        }
+        const mimeType =
+          backgroundImageTypes[path.extname(resolvedPath).toLowerCase()];
+        if (!mimeType) throw new Error("Unsupported background image type");
+        const stats = await fs.promises.stat(resolvedPath);
+        if (!stats.isFile()) throw new Error("Background image is unavailable");
+        if (stats.size > 50 * 1024 * 1024) {
+          throw new Error("Background images must be 50 MB or smaller");
+        }
+        const contents = await fs.promises.readFile(resolvedPath);
+        return {
+          success: true,
+          dataUrl: `data:${mimeType};base64,${contents.toString("base64")}`,
+        };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    "desktop-background:read-image-preview",
+    async (_event: IpcMainInvokeEvent, imagePath: string) => {
+      let acquiredPreviewSlot = false;
+      try {
+        const resolvedPath = path.resolve(imagePath);
+        const mimeType =
+          backgroundImageTypes[path.extname(resolvedPath).toLowerCase()];
+        if (!mimeType) throw new Error("Unsupported background image type");
+        const stats = await fs.promises.stat(resolvedPath);
+        if (!stats.isFile()) throw new Error("Background image is unavailable");
+        if (stats.size > 50 * 1024 * 1024) {
+          throw new Error("Background images must be 50 MB or smaller");
+        }
+
+        const version = `${stats.size}:${stats.mtimeMs}`;
+        const cached = imagePreviewCache.get(resolvedPath);
+        if (cached?.version === version) {
+          imagePreviewCache.delete(resolvedPath);
+          imagePreviewCache.set(resolvedPath, cached);
+          return { success: true, dataUrl: cached.dataUrl };
+        }
+
+        await acquireImagePreviewSlot();
+        acquiredPreviewSlot = true;
+        const contents = await sharp(resolvedPath, {
+          limitInputPixels: 40_000_000,
+        })
+          .rotate()
+          .resize(480, 270, {
+            fit: "cover",
+            position: "centre",
+            withoutEnlargement: true,
+          })
+          .jpeg({ quality: 72 })
+          .toBuffer();
+        const dataUrl = `data:image/jpeg;base64,${contents.toString("base64")}`;
+        imagePreviewCache.delete(resolvedPath);
+        imagePreviewCache.set(resolvedPath, { version, dataUrl });
+        while (imagePreviewCache.size > 64) {
+          const oldestPath = imagePreviewCache.keys().next().value;
+          if (oldestPath === undefined) break;
+          imagePreviewCache.delete(oldestPath);
+        }
+
+        return { success: true, dataUrl };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      } finally {
+        if (acquiredPreviewSlot) releaseImagePreviewSlot();
+      }
+    },
+  );
+
+  ipcMain.handle(
+    "desktop-background:read-built-in-preview",
+    async (_event: IpcMainInvokeEvent, backgroundId: string) => {
+      try {
+        const imagePath = getBuiltInBackgroundPath(backgroundId, true);
+        const contents = await fs.promises.readFile(imagePath);
+        return {
+          success: true,
+          dataUrl: `data:image/jpeg;base64,${contents.toString("base64")}`,
+        };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  );
 
   const openInputWindow = () => {
     state.inputWindowOpen = true;

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import DesktopWindowControls from "./DesktopWindowControls";
 import DesktopWindowInteractivityBridge from "./DesktopWindowInteractivityBridge";
+import DesktopBackground from "./DesktopBackground";
 import {
   isDesktopWallpaperRendererWindow,
   isAppModeWindow,
@@ -26,6 +27,7 @@ export default function DesktopModeSurface({
               : "relative w-full h-screen overflow-hidden"
         }
       >
+        <DesktopBackground />
         {isAppMode && <DesktopWindowControls />}
         {children}
       </div>

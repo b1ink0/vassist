@@ -9,6 +9,14 @@ import Icon from "../icons/Icon";
 import Logger from "../../services/common/LoggerService";
 import { backgroundStorageService } from "../../services/storage/BackgroundStorageService";
 import Button from "../ui/Button";
+import Toggle from "../common/Toggle";
+import Input from "../ui/Input";
+import SettingsRow from "../ui/SettingsRow";
+import BackgroundSelectionControls from "../background/BackgroundSelectionControls";
+import {
+  useConfigUIActions,
+  useUIConfig,
+} from "../../hooks/config/useConfigUI";
 
 interface BackgroundItem {
   id: string;
@@ -38,6 +46,10 @@ const getErrorMessage = (error: unknown): string => {
 const BackgroundSettings = ({
   isLightBackground = false,
 }: BackgroundSettingsProps) => {
+  const uiConfig = useUIConfig();
+  const { updateUIConfig } = useConfigUIActions();
+  const slideshow = uiConfig.androidBackground;
+  const builtInIds = slideshow.builtInIds;
   const [backgrounds, setBackgrounds] = useState<BackgroundItem[]>([]);
   const [uploadState, setUploadState] = useState<UploadState>({
     uploading: false,
@@ -47,14 +59,30 @@ const BackgroundSettings = ({
     null,
   );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const previewUrlsRef = useRef<string[]>([]);
+  const loadRequestRef = useRef(0);
 
   useEffect(() => {
     loadBackgrounds();
+    return () => {
+      loadRequestRef.current += 1;
+      previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    };
   }, []);
 
   const loadBackgrounds = async () => {
+    const request = ++loadRequestRef.current;
     try {
       const list = await backgroundStorageService.getBackgroundsList();
+      const urls = list.flatMap((background) =>
+        background.previewUrl ? [background.previewUrl] : [],
+      );
+      if (request !== loadRequestRef.current) {
+        urls.forEach((url) => URL.revokeObjectURL(url));
+        return;
+      }
+      previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      previewUrlsRef.current = urls;
       setBackgrounds(list);
       const active = list.find((bg) => bg.isActive);
       setActiveBackgroundId(active?.id || null);
@@ -70,7 +98,9 @@ const BackgroundSettings = ({
 
     try {
       await backgroundStorageService.saveBackground(file);
+      updateUIConfig("androidBackground.enabled", true);
       await loadBackgrounds();
+      window.dispatchEvent(new CustomEvent("backgroundChanged"));
       setUploadState({ uploading: false, error: null });
     } catch (error: unknown) {
       setUploadState({ uploading: false, error: getErrorMessage(error) });
@@ -80,6 +110,7 @@ const BackgroundSettings = ({
   const handleSetActive = async (id: string) => {
     try {
       await backgroundStorageService.setActiveBackground(id);
+      updateUIConfig("androidBackground.enabled", true);
       setActiveBackgroundId(id);
       await loadBackgrounds();
       window.dispatchEvent(new CustomEvent("backgroundChanged"));
@@ -92,10 +123,30 @@ const BackgroundSettings = ({
     }
   };
 
+  const handleSetBuiltInActive = async (id: string) => {
+    try {
+      await backgroundStorageService.clearActiveBackground();
+      const nextIds = [id, ...builtInIds.filter((item) => item !== id)];
+      updateUIConfig("androidBackground.builtInIds", nextIds);
+      updateUIConfig("androidBackground.enabled", true);
+      setActiveBackgroundId(null);
+      await loadBackgrounds();
+      window.dispatchEvent(new CustomEvent("backgroundChanged"));
+    } catch (error) {
+      Logger.error(
+        "BackgroundSettings",
+        "Failed to select built-in background:",
+        error,
+      );
+    }
+  };
+
   const handleClear = async () => {
     try {
       await backgroundStorageService.clearActiveBackground();
       setActiveBackgroundId(null);
+      updateUIConfig("androidBackground.enabled", false);
+      updateUIConfig("androidBackground.slideshowEnabled", false);
       await loadBackgrounds();
       window.dispatchEvent(new CustomEvent("backgroundChanged"));
     } catch (error) {
@@ -108,26 +159,60 @@ const BackgroundSettings = ({
       await backgroundStorageService.deleteBackground(id);
       if (activeBackgroundId === id) {
         setActiveBackgroundId(null);
-        window.dispatchEvent(new CustomEvent("backgroundChanged"));
       }
       await loadBackgrounds();
+      window.dispatchEvent(new CustomEvent("backgroundChanged"));
     } catch (error) {
       Logger.error("BackgroundSettings", "Failed to delete background:", error);
     }
   };
 
   return (
-    <div className="space-y-4 border-t border-white/10 pt-4">
-      <h4 className="text-sm font-semibold text-white mb-3">
-        Custom Background
-      </h4>
+    <div className="flex flex-col gap-4 border-t border-white/10 pt-4">
+      <h4 className="text-sm font-semibold text-white">Background</h4>
 
-      <p className="text-xs text-white/50 -mt-2 mb-3">
-        Upload custom background images for your assistant.
+      <p className="text-xs text-white/50">
+        Built-in wallpapers are included with the app. Uploaded images stay on
+        this device.
       </p>
 
+      <BackgroundSelectionControls
+        platform="android"
+        enabled={slideshow.enabled}
+        fill={slideshow}
+        selectedIds={builtInIds}
+        slideshowEnabled={slideshow.slideshowEnabled}
+        showSlideshowToggle={backgrounds.length + builtInIds.length > 0}
+        effects={slideshow}
+        isLightBackground={isLightBackground}
+        onEnabledChange={(enabled) =>
+          updateUIConfig("androidBackground.enabled", enabled)
+        }
+        onFillChange={(fill) =>
+          updateUIConfig("androidBackground", {
+            ...slideshow,
+            ...fill,
+            enabled: true,
+          })
+        }
+        onSelectedIdsChange={(ids) => {
+          updateUIConfig("androidBackground.builtInIds", ids);
+        }}
+        onMakeDefault={handleSetBuiltInActive}
+        onSlideshowChange={(enabled) =>
+          updateUIConfig("androidBackground.slideshowEnabled", enabled)
+        }
+        onEffectsChange={(effects) =>
+          updateUIConfig("androidBackground", { ...slideshow, ...effects })
+        }
+      />
+
+      {slideshow.mode === "images" && (
+        <>
+      <h5 className="text-xs font-semibold text-white/85">Your images</h5>
+
       {/* Upload Button */}
-      <div className="space-y-3">
+      <div className="flex flex-col gap-3">
         <input
           ref={fileInputRef}
           type="file"
@@ -165,8 +250,25 @@ const BackgroundSettings = ({
         )}
       </div>
 
+      {(backgrounds.length > 0 || builtInIds.length > 0) && (
+        <SettingsRow
+          label="Background parallax"
+          description="Gently pan the background image."
+        >
+          <Toggle
+            checked={slideshow.parallaxEnabled}
+            isLightBackground={isLightBackground}
+            onChange={(checked) =>
+              updateUIConfig("androidBackground.parallaxEnabled", checked)
+            }
+          />
+        </SettingsRow>
+      )}
+
       {/* Clear Background Button */}
-      {activeBackgroundId && (
+      {(slideshow.enabled ||
+        activeBackgroundId ||
+        slideshow.slideshowEnabled) && (
         <Button
           variant={isLightBackground ? "dark" : "default"}
           onClick={handleClear}
@@ -177,14 +279,65 @@ const BackgroundSettings = ({
         </Button>
       )}
 
+      {slideshow.slideshowEnabled &&
+        backgrounds.length + builtInIds.length > 0 && (
+        <div className="flex flex-col gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
+          <p className="text-xs font-medium text-white/80">Slideshow timing</p>
+          <div className="flex flex-wrap gap-3">
+              <label className="flex min-w-[120px] flex-1 flex-col gap-1 text-xs text-white/80">
+                <span>Time per image (seconds)</span>
+                <Input
+                  type="number"
+                  min={5}
+                  max={3600}
+                  step={5}
+                  value={slideshow.slideshowIntervalSeconds}
+                  onChange={(event) =>
+                    updateUIConfig(
+                      "androidBackground.slideshowIntervalSeconds",
+                      Math.min(
+                        3600,
+                        Math.max(5, Number(event.target.value) || 30),
+                      ),
+                    )
+                  }
+                  variant={isLightBackground ? "dark" : "default"}
+                  disableDebounce
+                />
+              </label>
+              <label className="flex min-w-[120px] flex-1 flex-col gap-1 text-xs text-white/80">
+                <span>Fade duration (seconds)</span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={15}
+                  step={0.5}
+                  value={slideshow.fadeDurationSeconds}
+                  onChange={(event) =>
+                    updateUIConfig(
+                      "androidBackground.fadeDurationSeconds",
+                      Math.min(
+                        15,
+                        Math.max(0, Number(event.target.value) || 0),
+                      ),
+                    )
+                  }
+                  variant={isLightBackground ? "dark" : "default"}
+                  disableDebounce
+                />
+              </label>
+          </div>
+        </div>
+      )}
+
       {/* Background List */}
       {backgrounds.length > 0 && (
-        <div className="grid grid-cols-3 gap-2 max-h-[200px] overflow-y-auto">
+        <div className="flex max-h-[200px] flex-wrap gap-2 overflow-y-auto">
           {backgrounds.map((bg) => (
             <div
               key={bg.id}
               className={cn(
-                "relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all",
+                "relative group w-[calc(33.333%_-_0.375rem)] overflow-hidden rounded-lg border-2 cursor-pointer transition-all",
                 bg.isActive
                   ? "border-white/50 ring-2 ring-white/20"
                   : "border-transparent hover:border-white/30",
@@ -225,6 +378,8 @@ const BackgroundSettings = ({
             </div>
           ))}
         </div>
+      )}
+        </>
       )}
     </div>
   );

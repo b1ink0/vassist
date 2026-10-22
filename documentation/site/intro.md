@@ -31,7 +31,7 @@ The [live demo](https://vassist-demo.vercel.app) runs in your browser with no in
   </a>
   <a class="doc-card doc-card-link" href="./architecture/packages-and-integration">
     <h3>Use VAssist As A Package</h3>
-    <p>Install <code>@vassist/react</code> or <code>@vassist/embed</code> from npm. Route AI, TTS, and STT through your own backend via the host bridge. Control which features users can access, lock down settings, and customize the UI to fit your project.</p>
+    <p>The <code>@vassist/react</code> and <code>@vassist/embed</code> packages are Bun workspaces and are not published on npm yet. They include the shared browser runtime, host configuration, and provider bridges.</p>
     <p class="doc-card-cta">Integration docs →</p>
   </a>
 </div>

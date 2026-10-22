@@ -20,7 +20,7 @@
 - On-page tools for rewrite, summarize, translate, dictation, writing, and image actions without leaving the page.
 - Live Assistant that stays on screen, speaks, and works with your own MMD assets.
 
-You can mix providers across chat, speech input, and speech output, so you are not locked into one setup.
+Choose local or remote providers for chat, speech input, and speech output. You can mix them to suit your setup.
 
 [View the full documentation ->](https://b1ink0.github.io/vassist/intro)
 
@@ -40,6 +40,8 @@ The main chat view handles streaming replies, page context, attachments, voice m
 
 Keep the assistant visible while you work, swap models or stages on the fly, and reuse the same avatar as an Android live wallpaper.
 
+Use the desktop assistant in an app, as a floating companion, or as a live wallpaper on Windows. Desktop and Android include built-in wallpapers, and you can choose your own images too.
+
 ### AI Toolbar
 
 <div align="center">
@@ -50,16 +52,16 @@ Select text or focus an input to rewrite, summarize, translate, dictate, or run 
 
 ## Choose a Version
 
-| Version           | Best if you want                         | What you get                                                                                                                       |
-| ----------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Desktop app       | Everything in one desktop app            | On-device LLM support, on-device speech input, on-device speech output, camera and screen share, and tray integration              |
-| Android app       | VAssist on a phone or tablet             | On-device LLM support, on-device speech input, on-device speech output, shared app and wallpaper settings, and live wallpaper mode |
-| Browser extension | VAssist inside the sites you already use | Page-aware chat, on-page tools, and Chrome AI support where available                                                              |
-| npm packages      | Embed VAssist in your own web app        | `@vassist/react` for React hosts and `@vassist/embed` for plain JavaScript host bridge for your own AI/TTS/STT backend             |
+| Version                | Best if you want                         | What you get                                                                                                                       |
+| ---------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Desktop app            | Everything in one desktop app            | On-device LLM support, on-device speech input, on-device speech output, camera and screen share, and tray integration              |
+| Android app            | VAssist on a phone or tablet             | On-device LLM support, on-device speech input, on-device speech output, shared app and wallpaper settings, and live wallpaper mode |
+| Browser extension      | VAssist inside the sites you already use | Page-aware chat, on-page tools, and Chrome AI support where available                                                              |
+| Browser embed packages | Embed VAssist in your own web app        | `@vassist/react` for React hosts and `@vassist/embed` for JavaScript hosts. Currently available only inside this Bun workspace     |
 
 ## Embed in Your Own App
 
-VAssist ships as `@vassist/react` and `@vassist/embed` npm packages. Mount the full assistant into any React or JavaScript host, route AI, TTS, and STT requests through your own backend via the host bridge, and control which features, settings, and UI surfaces are available to users.
+The `@vassist/react` and `@vassist/embed` packages are not published on npm yet. Their source is available as Bun workspaces in this repository. They provide the shared browser runtime, configurable UI and provider settings, and host bridges. Electron and Android native services remain specific to those apps.
 
 [Package integration docs →](https://b1ink0.github.io/vassist/architecture/packages-and-integration)
 
@@ -67,9 +69,9 @@ VAssist ships as `@vassist/react` and `@vassist/embed` npm packages. Mount the f
 
 | Capability       | On-device or built-in options                                                                                                                                                   | Remote or hosted options                                 |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| Chat and main AI | Desktop app: GGUF models through `node-llama-cpp` on top of `llama.cpp`. Android app: GGUF models through native `llama.cpp`. Browser and extension: Chrome AI where available. | OpenAI, Ollama, and OpenAI-compatible servers            |
-| Speech output    | Browser, extension, and desktop: `kokoro-js`. Desktop app: GPT-SoVITS. Android app: sherpa-onnx VITS.                                                                           | GPT-SoVITS Remote, OpenAI TTS, and OpenAI-compatible TTS |
-| Speech input     | Desktop app: Faster Whisper. Android app: sherpa-onnx Whisper. Browser and extension: Chrome AI speech input.                                                                   | OpenAI Whisper and OpenAI-compatible STT                 |
+| Chat and main AI | Desktop: GGUF through llama-server (default) or node-llama-cpp. Android: native llama.cpp or LiteRT-LM for supported models. Browser and extension: Chrome AI where available. | OpenAI, Ollama, and OpenAI-compatible servers |
+| Speech output | Desktop: GPT-SoVITS or Supertonic 3. Android: sherpa-onnx voice packs, including VITS, Kitten, and Supertonic 3. Kokoro is also available in the browser, extension, and desktop. | GPT-SoVITS Remote, OpenAI TTS, and OpenAI-compatible TTS |
+| Speech input | Desktop: whisper.cpp (default) or faster-whisper. Android: sherpa-onnx Whisper, SenseVoice, or Dolphin. Browser and extension: Chrome AI speech input where supported. | OpenAI Whisper and OpenAI-compatible STT |
 
 The [AI and Media Stack guide](https://b1ink0.github.io/vassist/architecture/ai-and-media-stack) goes deeper on the engines and file formats behind those options.
 
@@ -99,13 +101,22 @@ If you are not sure where to start, use the [installation guide](https://b1ink0.
 
 ### Build From Source
 
-You do not need every runtime installed to work on this repository. Pick the workflow that matches the part of the repo you are changing.
+Use Bun to install dependencies and run project commands. Additional requirements depend on the version you want to build.
 
 #### Requirements
 
-- Bun (recommended) or Node.js
-- Chrome (for extension runtime)
-- Android Studio + SDK (for Android build or run)
+- Bun 1.3.5
+- Git
+
+#### Platform Requirements
+
+| Target | Additional requirements |
+| --- | --- |
+| Browser extension | Chrome to load and use the extension |
+| Android | Android Studio and the Android SDK |
+| Windows desktop package | Windows, Node.js, Python, Visual Studio C++ build tools with MSVC v143, and a Windows SDK |
+
+Windows desktop packaging builds a native addon for live-wallpaper support. See the [native addon build guide](electron/native/desktop-host/README.md) for details.
 
 #### Setup
 
@@ -127,10 +138,12 @@ bun install
 | Lint                               | `bun run lint`          |
 | App typecheck                      | `bun run typecheck:app` |
 
-### Production Builds
+#### Production Builds
 
 - Extension: `bun run build:extension` or `bun run build:extension:zip`
-- Desktop: `bun run build:desktop:production`
+- Desktop renderer: `bun run build:desktop:production`
+- Windows desktop package: `bun run build:desktop:win`
+- macOS desktop package: `bun run build:desktop:mac`
 - Android: `bun run build:android`
 - Docs: `bun run docs:build`
 
@@ -150,7 +163,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 - node-llama-cpp
 - llama.cpp
 - Express and NanoHTTPD
-- `@vassist/react` and `@vassist/embed` npm packages
+- `@vassist/react` and `@vassist/embed` browser packages (Bun workspace, not yet published)
 
 ## License
 

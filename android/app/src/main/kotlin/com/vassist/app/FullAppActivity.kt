@@ -28,6 +28,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewAssetLoader
 import com.vassist.app.ai.LocalAIBridge
 import com.vassist.app.ai.LocalAIServer
+import com.vassist.app.webview.BackgroundMotionBridge
 import com.vassist.app.webview.RendererWebView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +50,7 @@ class FullAppActivity : ComponentActivity() {
     }
     
     private lateinit var webView: WebView
+    private lateinit var backgroundMotionBridge: BackgroundMotionBridge
     private var lastKeyboardHeight = 0
     
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -137,6 +139,11 @@ class FullAppActivity : ComponentActivity() {
             )
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
         }
+        backgroundMotionBridge = BackgroundMotionBridge(this, webView)
+        webView.addJavascriptInterface(
+            backgroundMotionBridge,
+            BackgroundMotionBridge.JS_INTERFACE_NAME,
+        )
 
         // Create GLSurfaceView for AR
         val glSurfaceView = android.opengl.GLSurfaceView(this).apply {
@@ -598,16 +605,19 @@ class FullAppActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        backgroundMotionBridge.setHostVisible(false)
         arSessionManager?.onHostPause()
         super.onPause()
     }
 
     override fun onResume() {
         super.onResume()
+        backgroundMotionBridge.setHostVisible(true)
         arSessionManager?.onHostResume()
     }
 
     override fun onDestroy() {
+        backgroundMotionBridge.dispose()
         // Cancel any pending file chooser callback
         fileChooserCallback?.onReceiveValue(null)
         fileChooserCallback = null

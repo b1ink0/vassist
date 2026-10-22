@@ -4,6 +4,86 @@
  */
 
 /* Base glass effect - works on any background */
+.vassist-background-parallax-drift {
+  position: absolute;
+  inset: -5%;
+  animation: vassist-background-drift 42s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.vassist-android-background-parallax-stage {
+  position: absolute;
+  inset: -7%;
+  animation: vassist-android-background-drift 42s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.vassist-background-parallax-pointer {
+  position: absolute;
+  inset: 0;
+  transform: translate3d(
+    var(--background-pointer-x, 0%),
+    var(--background-pointer-y, 0%),
+    0
+  );
+  transition: transform 900ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  will-change: transform;
+}
+
+.vassist-background-parallax-sensor-image {
+  transform: translate3d(
+    var(--background-sensor-x, 0%),
+    var(--background-sensor-y, 0%),
+    0
+  );
+  transition: none;
+  will-change: transform;
+}
+
+@keyframes vassist-background-drift {
+  from {
+    transform: scale(1.08) translate3d(-0.65%, 0.45%, 0);
+  }
+  to {
+    transform: scale(1.08) translate3d(0.65%, -0.45%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vassist-background-parallax-drift {
+    animation: none;
+    transform: scale(1.08);
+    will-change: auto;
+  }
+
+  .vassist-android-background-parallax-stage {
+    animation: none;
+    transform: scale(1.06);
+    will-change: auto;
+  }
+
+  .vassist-background-parallax-pointer {
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
+
+  .vassist-background-parallax-sensor-image {
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
+}
+
+@keyframes vassist-android-background-drift {
+  from {
+    transform: scale(1.06) translate3d(-0.3%, 0.25%, 0);
+  }
+  to {
+    transform: scale(1.06) translate3d(0.3%, -0.25%, 0);
+  }
+}
+
 .glass-base {
   background: var(--vassist-surface-base);
   -webkit-backdrop-filter: blur(var(--vassist-backdrop-blur)) saturate(180%)
@@ -510,14 +590,14 @@
 }
 
 @media (prefers-color-scheme: light) {
-  .glass-base,
-  .glass-container {
+  .glass-base:not(.glass-base-dark),
+  .glass-container:not(.glass-container-dark) {
     background: rgba(255, 255, 255, 0.3);
     border-color: rgba(255, 255, 255, 0.5);
   }
 
-  .glass-message,
-  .glass-message-user {
+  .glass-message:not(.glass-message-dark),
+  .glass-message-user:not(.glass-message-user-dark) {
     background: rgba(255, 255, 255, 0.4);
     border-color: rgba(255, 255, 255, 0.6);
   }

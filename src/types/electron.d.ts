@@ -106,6 +106,42 @@ export interface ElectronInputWindow {
   isOpen: () => Promise<boolean>;
 }
 
+export interface ElectronDesktopBackground {
+  chooseImages: (multiple?: boolean) => Promise<{
+    success: boolean;
+    canceled?: boolean;
+    paths?: string[];
+    error?: string;
+  }>;
+  chooseFolder: () => Promise<{
+    success: boolean;
+    canceled?: boolean;
+    folderPath?: string;
+    images?: Array<{ path: string; name: string }>;
+    error?: string;
+  }>;
+  listFolderImages: (folderPath: string) => Promise<{
+    success: boolean;
+    images?: Array<{ path: string; name: string }>;
+    error?: string;
+  }>;
+  readImage: (imagePath: string) => Promise<{
+    success: boolean;
+    dataUrl?: string;
+    error?: string;
+  }>;
+  readImagePreview: (imagePath: string) => Promise<{
+    success: boolean;
+    dataUrl?: string;
+    error?: string;
+  }>;
+  readBuiltInPreview: (backgroundId: string) => Promise<{
+    success: boolean;
+    dataUrl?: string;
+    error?: string;
+  }>;
+}
+
 export interface ElectronShortcuts {
   register: (
     shortcuts: Record<string, string | boolean | null | undefined>,
@@ -134,6 +170,7 @@ export interface ElectronIPC {
 export interface ElectronAPI {
   window: ElectronWindow;
   inputWindow: ElectronInputWindow;
+  desktopBackground?: ElectronDesktopBackground;
   shortcuts: ElectronShortcuts;
   app: ElectronApp;
   ipc: ElectronIPC;

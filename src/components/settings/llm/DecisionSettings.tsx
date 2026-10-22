@@ -5,6 +5,7 @@ import type {
   DecisionRemoteProviderProfile,
 } from "../../../config/aiConfig";
 import { useDesktopApi } from "../../../hooks/useDesktopStore";
+import { useEmbedHost } from "../../../embed/EmbedHostContext";
 import {
   DEFAULT_ENDPOINTS,
   SERVICE_ROUTES,
@@ -61,6 +62,9 @@ const DecisionSettings = ({
   decisionModelsPath = null,
 }: DecisionSettingsProps) => {
   const decision = aiConfig.decision;
+  const { embedConfig } = useEmbedHost();
+  const decisionBridge = embedConfig.transport.bridge?.decision;
+  const hostManagedDecision = decision.provider === "host";
   const desktopApi = useDesktopApi();
   const decisionRuntime = desktopApi?.decisionLlamaServer;
   const { setAIConfigError } = useConfigAIActions();
@@ -78,17 +82,25 @@ const DecisionSettings = ({
     updateAIConfig(`decision.${field}`, value);
   };
 
-  const effectiveEndpoint =
-    decision.endpoint.trim() ||
-    (decision.provider === "desktop-local"
-      ? joinEndpointPath(
-          DEFAULT_ENDPOINTS.desktopLocal,
-          SERVICE_ROUTES.openai.systemOne,
-        )
-      : "");
+  const effectiveEndpoint = hostManagedDecision
+    ? ""
+    : decision.endpoint.trim() ||
+      (decision.provider === "desktop-local"
+        ? joinEndpointPath(
+            DEFAULT_ENDPOINTS.desktopLocal,
+            SERVICE_ROUTES.openai.systemOne,
+          )
+        : "");
 
   const testDecisionApi = async () => {
-    if (!effectiveEndpoint) {
+    if (hostManagedDecision && !decisionBridge) {
+      setAIConfigError(
+        "error:Configure transport.bridge.decision to use the Embed Host provider.",
+      );
+      return;
+    }
+
+    if (!hostManagedDecision && !effectiveEndpoint) {
       setAIConfigError("error:Enter a Decision API URL first.");
       return;
     }
@@ -96,22 +108,35 @@ const DecisionSettings = ({
     setTesting(true);
     setAIConfigError("hourglass:Testing Decision API...");
     try {
-      const response = await new DecisionClient({
-        endpoint: effectiveEndpoint,
-        apiKey: decision.apiKey,
-        timeoutMs:
-          decision.provider === "desktop-local"
-            ? Math.max(decision.timeoutMs, 30_000)
-            : decision.timeoutMs,
-      }).decide({
-        ...TEST_REQUEST,
-        ...(decision.provider === "desktop-local" && decisionModelsPath
-          ? { customModelsPath: decisionModelsPath }
-          : {}),
-        ...(decision.model.trim() ? { model: decision.model.trim() } : {}),
-      });
+      let responseModel: string | undefined;
+      if (hostManagedDecision && decisionBridge) {
+        if (decisionBridge.testConnection) {
+          if (!(await decisionBridge.testConnection())) {
+            throw new Error("The host decision service is unavailable.");
+          }
+        } else {
+          const response = await decisionBridge.decide(TEST_REQUEST);
+          responseModel = response.model;
+        }
+      } else {
+        const response = await new DecisionClient({
+          endpoint: effectiveEndpoint,
+          apiKey: decision.apiKey,
+          timeoutMs:
+            decision.provider === "desktop-local"
+              ? Math.max(decision.timeoutMs, 30_000)
+              : decision.timeoutMs,
+        }).decide({
+          ...TEST_REQUEST,
+          ...(decision.provider === "desktop-local" && decisionModelsPath
+            ? { customModelsPath: decisionModelsPath }
+            : {}),
+          ...(decision.model.trim() ? { model: decision.model.trim() } : {}),
+        });
+        responseModel = response.model;
+      }
       setAIConfigError(
-        `success:Decision service responded${response.model ? ` with ${response.model}` : ""}.`,
+        `success:Decision service responded${responseModel ? ` with ${responseModel}` : ""}.`,
       );
       setTimeout(() => setAIConfigError(""), 3000);
     } catch (error) {
@@ -185,7 +210,10 @@ const DecisionSettings = ({
       </h3>
 
       <Card variant="default">
-        <SettingsRow label="Enable Decision API">
+        <SettingsRow
+          label="Enable Decision API"
+          targetId="llm.decision.enabled"
+        >
           <Toggle
             id="enable-decision-api"
             checked={decision.enabled}
@@ -196,7 +224,11 @@ const DecisionSettings = ({
 
       {decision.enabled && (
         <>
-          <SettingsRow label="Provider" layout="stacked">
+          <SettingsRow
+            label="Provider"
+            targetId="llm.decision.provider"
+            layout="stacked"
+          >
             <Select
               value={decision.provider}
               onChange={(event) =>
@@ -217,166 +249,197 @@ const DecisionSettings = ({
             />
           </SettingsRow>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">
-              Saved Backends
-            </label>
-            <Input
-              type="text"
-              value={profileName}
-              onChange={(event) => setProfileName(event.target.value)}
-              placeholder="Backend name"
-              size="xs"
-              variant={isLightBackground ? "dark" : "default"}
-            />
-            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
-              <Select
-                value={selectedProfileId}
-                onChange={(event) => {
-                  const nextId = event.target.value;
-                  setSelectedProfileId(nextId);
-                  const profile = providerProfiles.find(
-                    (entry) => entry.id === nextId,
-                  );
-                  if (profile) applyProfile(profile);
-                }}
-                options={[
-                  {
-                    value: "",
-                    label:
-                      providerProfiles.length === 0
-                        ? "No saved backends yet"
-                        : "Select a saved backend",
-                  },
-                  ...providerProfiles.map((profile) => ({
-                    value: profile.id,
-                    label: profile.name,
-                  })),
-                ]}
-                variant={isLightBackground ? "dark" : "default"}
-                className="min-h-[32px]"
-              />
-              <Button
-                type="button"
-                size="icon"
-                variant={isLightBackground ? "dark" : "ghost"}
-                onClick={() => {
-                  setSelectedProfileId("");
-                  setProfileName("");
-                }}
-                title="Create a new saved backend"
-                aria-label="Create a new saved backend"
-              >
-                <Icon name="add" size={14} />
-              </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant={isLightBackground ? "dark" : "default"}
-                onClick={saveProfile}
-                title="Save current backend"
-                aria-label="Save current backend"
-              >
-                <Icon name="save" size={14} />
-              </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant="error"
-                onClick={deleteProfile}
-                disabled={!selectedProfile}
-                title="Delete selected backend"
-                aria-label="Delete selected backend"
-              >
-                <Icon name="delete" size={14} />
-              </Button>
-            </div>
-          </div>
+          {hostManagedDecision && (
+            <Card variant="default">
+              <p className="text-sm text-white/75">
+                Decision requests are handled by the embedding host through
+                <code className="mx-1 text-white">
+                  transport.bridge.decision
+                </code>
+                . Credentials and endpoint configuration stay with the host.
+              </p>
+            </Card>
+          )}
 
-          <SettingsRow
-            label="API URL"
-            description="Base URL, /v1, or a full /v1/systemone URL."
-            layout="stacked"
-          >
-            <Input
-              value={decision.endpoint}
-              onChange={(event) =>
-                updateDecision("endpoint", event.target.value)
-              }
-              placeholder={
-                decision.provider === "desktop-local"
-                  ? joinEndpointPath(
-                      DEFAULT_ENDPOINTS.desktopLocal,
-                      SERVICE_ROUTES.openai.systemOne,
-                    )
-                  : "https://example.com/v1/systemone"
-              }
-              type="url"
-              autoComplete="off"
-              disableDebounce
-              variant={isLightBackground ? "dark" : "default"}
-            />
-          </SettingsRow>
-
-          <SettingsRow
-            label="Model"
-            description="Choose a local decision model or enter a remote model id."
-            layout="stacked"
-          >
-            <Input
-              value={decision.model}
-              onChange={(event) => updateDecision("model", event.target.value)}
-              placeholder="Optional model ID"
-              autoComplete="off"
-              disableDebounce
-              variant={isLightBackground ? "dark" : "default"}
-            />
-          </SettingsRow>
-
-          <SettingsRow
-            label="API key"
-            description="Optional Bearer token for a protected endpoint."
-            layout="stacked"
-          >
-            <Input
-              value={decision.apiKey}
-              onChange={(event) => updateDecision("apiKey", event.target.value)}
-              placeholder="Optional"
-              type="password"
-              autoComplete="off"
-              disableDebounce
-              variant={isLightBackground ? "dark" : "default"}
-            />
-          </SettingsRow>
-
-          <SettingsRow
-            label="Request timeout"
-            description="How long a decision request may wait before failing."
-          >
-            <div className="flex items-center gap-2">
+          {!hostManagedDecision && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-white/90">
+                Saved Backends
+              </label>
               <Input
-                value={decision.timeoutMs}
+                type="text"
+                value={profileName}
+                onChange={(event) => setProfileName(event.target.value)}
+                placeholder="Backend name"
+                size="xs"
+                variant={isLightBackground ? "dark" : "default"}
+              />
+              <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+                <Select
+                  value={selectedProfileId}
+                  onChange={(event) => {
+                    const nextId = event.target.value;
+                    setSelectedProfileId(nextId);
+                    const profile = providerProfiles.find(
+                      (entry) => entry.id === nextId,
+                    );
+                    if (profile) applyProfile(profile);
+                  }}
+                  options={[
+                    {
+                      value: "",
+                      label:
+                        providerProfiles.length === 0
+                          ? "No saved backends yet"
+                          : "Select a saved backend",
+                    },
+                    ...providerProfiles.map((profile) => ({
+                      value: profile.id,
+                      label: profile.name,
+                    })),
+                  ]}
+                  variant={isLightBackground ? "dark" : "default"}
+                  className="min-h-[32px]"
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  variant={isLightBackground ? "dark" : "ghost"}
+                  onClick={() => {
+                    setSelectedProfileId("");
+                    setProfileName("");
+                  }}
+                  title="Create a new saved backend"
+                  aria-label="Create a new saved backend"
+                >
+                  <Icon name="add" size={14} />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant={isLightBackground ? "dark" : "default"}
+                  onClick={saveProfile}
+                  title="Save current backend"
+                  aria-label="Save current backend"
+                >
+                  <Icon name="save" size={14} />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="error"
+                  onClick={deleteProfile}
+                  disabled={!selectedProfile}
+                  title="Delete selected backend"
+                  aria-label="Delete selected backend"
+                >
+                  <Icon name="delete" size={14} />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {!hostManagedDecision && (
+            <SettingsRow
+              label="API URL"
+              targetId="llm.decision.endpoint"
+              description="Base URL, /v1, or a full /v1/systemone URL."
+              layout="stacked"
+            >
+              <Input
+                value={decision.endpoint}
                 onChange={(event) =>
-                  updateDecision(
-                    "timeoutMs",
-                    Number(event.target.value) || 1500,
-                  )
+                  updateDecision("endpoint", event.target.value)
                 }
-                type="number"
-                min={250}
-                max={60000}
-                step={250}
-                className="w-28"
+                placeholder={
+                  decision.provider === "desktop-local"
+                    ? joinEndpointPath(
+                        DEFAULT_ENDPOINTS.desktopLocal,
+                        SERVICE_ROUTES.openai.systemOne,
+                      )
+                    : "https://example.com/v1/systemone"
+                }
+                type="url"
+                autoComplete="off"
                 disableDebounce
                 variant={isLightBackground ? "dark" : "default"}
               />
-              <span className="text-xs text-white/50">ms</span>
-            </div>
-          </SettingsRow>
+            </SettingsRow>
+          )}
 
-          {decision.provider === "desktop-local" && (
+          {!hostManagedDecision && (
+            <SettingsRow
+              label="Model"
+              targetId="llm.decision.model"
+              description="Choose a local decision model or enter a remote model id."
+              layout="stacked"
+            >
+              <Input
+                value={decision.model}
+                onChange={(event) =>
+                  updateDecision("model", event.target.value)
+                }
+                placeholder="Optional model ID"
+                autoComplete="off"
+                disableDebounce
+                variant={isLightBackground ? "dark" : "default"}
+              />
+            </SettingsRow>
+          )}
+
+          {!hostManagedDecision && (
+            <SettingsRow
+              label="API key"
+              targetId="llm.decision.apiKey"
+              description="Optional Bearer token for a protected endpoint."
+              layout="stacked"
+            >
+              <Input
+                value={decision.apiKey}
+                onChange={(event) =>
+                  updateDecision("apiKey", event.target.value)
+                }
+                placeholder="Optional"
+                type="password"
+                autoComplete="off"
+                disableDebounce
+                variant={isLightBackground ? "dark" : "default"}
+              />
+            </SettingsRow>
+          )}
+
+          {!hostManagedDecision && (
+            <SettingsRow
+              label="Request timeout"
+              targetId="llm.decision.timeoutMs"
+              description="How long a decision request may wait before failing."
+            >
+              <div className="flex items-center gap-2">
+                <Input
+                  value={decision.timeoutMs}
+                  onChange={(event) =>
+                    updateDecision(
+                      "timeoutMs",
+                      Number(event.target.value) || 1500,
+                    )
+                  }
+                  type="number"
+                  min={250}
+                  max={60000}
+                  step={250}
+                  className="w-28"
+                  disableDebounce
+                  variant={isLightBackground ? "dark" : "default"}
+                />
+                <span className="text-xs text-white/50">ms</span>
+              </div>
+            </SettingsRow>
+          )}
+
+          {!hostManagedDecision && decision.provider === "desktop-local" && (
             <SettingsRow
               label="Context Size"
+              targetId="llm.decision.contextSize"
               description="Maximum tokens per local decision request. Larger contexts use more memory."
               layout="stacked"
             >
@@ -465,7 +528,10 @@ const DecisionSettings = ({
         <div className="flex items-center gap-3 pt-4">
           <Button
             onClick={testDecisionApi}
-            disabled={testing || !effectiveEndpoint}
+            disabled={
+              testing ||
+              (hostManagedDecision ? !decisionBridge : !effectiveEndpoint)
+            }
             variant={isLightBackground ? "dark" : "default"}
           >
             {testing ? "Testing..." : "Test Connection"}

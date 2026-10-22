@@ -6,8 +6,8 @@
     "dist"
   ],
   "scripts": {
-    "build:types": "tsc -p ../../tsconfig.package.embed.types.json && bun ../../tools/write-package-type-entries.ts packages/embed index full chat chat-toolbar toolbar",
-    "build": "vite build --config ../../vite.config.package.embed.ts && bun run build:types"
+    "build:types": "tsc -p tsconfig.types.json && bun ../../tools/write-package-type-entries.ts packages/embed index full chat chat-toolbar toolbar",
+    "build": "vite build && bun run build:types"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.js",

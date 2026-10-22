@@ -12,6 +12,7 @@
   "include": [
     "tools/**/*.ts",
     "vite.config*.ts",
+    "packages/*/vite.config.ts",
     "playwright.config.ts",
     "tests/**/*.ts",
     "src/utils/VAssistDomIds.ts"

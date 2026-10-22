@@ -1,6 +1,6 @@
 # Install VAssist
 
-Desktop, Android, and extension releases are published on [GitHub Releases](https://github.com/b1ink0/vassist/releases). If you are embedding VAssist into your own site or app, use the npm package docs instead of the platform installers.
+Desktop, Android, and extension releases are published on [GitHub Releases](https://github.com/b1ink0/vassist/releases). Browser package support is under development and is not published to npm yet.
 
 ::: tip Not sure yet?
 The [live demo](https://vassist-demo.vercel.app) runs in your browser and shows the full interface with no install required.
@@ -28,13 +28,7 @@ The [live demo](https://vassist-demo.vercel.app) runs in your browser and shows 
 
 ## Use VAssist as a package
 
-If you want to embed VAssist into your own web app instead of installing the desktop app, Android app, or extension, use the browser packages published on npm:
-
-```bash
-npm install @vassist/embed
-# or
-npm install @vassist/react react react-dom
-```
+The `@vassist/embed` and `@vassist/react` packages are currently available only as Bun workspaces inside the VAssist repository. They are **not published on npm**, so npm install commands for these package names will not work yet. We will add installation instructions when a public release is available.
 
 Recommended reading order if you are embedding VAssist:
 
@@ -43,7 +37,7 @@ Recommended reading order if you are embedding VAssist:
 3. [@vassist/react reference](/architecture/react): React components, reactive config props, `customizations`, and host control from React.
 4. [Configuration reference](/architecture/configuration-reference): every supported config field, settings target ID, bridge type, branding option, and hook.
 
-If browser code must not hold vendor credentials, use `providers.mode: "host-managed"` together with `transport.mode: "host-bridge"` so your backend or native host owns AI/TTS/STT requests.
+If browser code must not hold vendor credentials, use `providers.mode: "host-managed"` together with `transport.mode: "host-bridge"` so your backend or native host owns AI, TTS, and STT requests. The Decision API's built-in connection check can also use the host bridge.
 
 ## Requirements
 

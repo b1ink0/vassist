@@ -6,7 +6,7 @@ Settings → 3D is where you manage everything that shapes how the Live Assistan
 | ----------- | ---------------------------------------------------------- |
 | Display     | Avatar on/off, reload, portrait mode, position preset      |
 | Performance | Physics, frame rate cap, render quality                    |
-| Models      | Import and manage PMX avatar models and PMX stages         |
+| Models      | Switch between the **Avatars** and **Stages** sections to import and manage PMX assets |
 | Animations  | Import VMD motions, assign them to animation categories    |
 | Emotes      | Build named reactions from audio, motion, and camera clips |
 

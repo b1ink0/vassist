@@ -1,20 +1,29 @@
 # 3D Settings
 
-Settings → 3D has five sub-tabs: **Display**, **Performance**, **Models**, **Animations**, and **Emotes**. It covers the Live Assistant's entire visual layer: models, stages, motions, emotes, and display settings.
+Settings → 3D has five tabs: **Display**, **Performance**, **Models**, **Animations**, and **Emotes**. The **Models** tab has **Avatars** and **Stages** sections. Together they cover the Live Assistant's visual assets and display settings.
 
 ## Display
 
 **Portrait mode** crops the view to upper-body framing. Use **Clipping Height** to adjust how much of the body is visible. Lower values show more. Higher values crop tighter. You can switch portrait mode on and off without reloading the avatar.
+
+**Avatar Shadow** is on by default. A translucent shadow appears behind the animated avatar in both 2D and 3D camera modes. Its light and receiver follow the camera together, keeping the shadow offset to the left and slightly downward as you rotate the view. Loaded Stages receive ordinary scene shadows instead. Turn this off to hide avatar shadows.
 
 **Character Position** controls where the Live Assistant sits on screen (web and extension builds). Set it to **Last Location** and the position you drag it to is remembered across reloads. Switch it to any preset to snap it back.
 
 | Control            | Default        | Behavior                                                                                          |
 | ------------------ | -------------- | ------------------------------------------------------------------------------------------------- |
 | Enable Avatar      | On             | Turns the Live Assistant on or off. When off, the app falls back to chat-only mode.               |
+| Avatar Shadow      | On             | Show a translucent shadow behind the avatar, or cast shadows onto a loaded Stage.                    |
 | Reload Avatar      | -              | Only when avatar is on. Reloads the scene immediately.                                            |
 | Portrait Mode      | Off            | Only when avatar is on. Switches to tighter upper-body framing.                                   |
 | Clipping Height    | Model preset   | Only when Portrait Mode is on. Lower values show more body. Higher values crop more aggressively. |
 | Character Position | Runtime preset | Only on web/extension runtimes. Preset placements including `Last Location`.                      |
+
+### Sticker border
+
+In **Display**, the **Sticker Border** toggle adds a separate outline around the avatar silhouette without changing the model's MMD material outline. It is off by default. When enabled, tune its color, width (1–16 px), edge quality (1–8 samples), and occlusion settings. A wider border or higher edge quality can add GPU work.
+
+The embed host can set initial values with `ui.stickerBorder`. The same controls remain available in the 3D settings UI unless the host hides or locks that settings area.
 
 ## Performance
 

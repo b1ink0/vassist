@@ -1,33 +1,27 @@
-import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
-import { packageRuntimeAssetsPlugin } from "./tools/vite-plugins/package-runtime-assets-plugin";
-import { vadAssetsPlugin } from "./tools/vite-plugins/vad-assets-plugin";
+import { packageRuntimeAssetsPlugin } from "../../tools/vite-plugins/package-runtime-assets-plugin";
+import { vadAssetsPlugin } from "../../tools/vite-plugins/vad-assets-plugin";
+import { excludeBackgroundAssetsPlugin } from "../../tools/vite-plugins/background-assets-scope-plugin";
+import {
+  createReactPlugin,
+  createViteDefines,
+} from "../../tools/vite/shared-config";
 
-const repoRoot = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 export default defineConfig({
   root: repoRoot,
   plugins: [
-    react({
-      babel: {
-        plugins: [["babel-plugin-react-compiler"]],
-      },
-    }),
+    createReactPlugin(true),
     tailwindcss(),
     vadAssetsPlugin("packages/react/dist"),
     packageRuntimeAssetsPlugin("packages/react/dist"),
+    excludeBackgroundAssetsPlugin("packages/react/dist"),
   ],
-  define: {
-    __EXTENSION_MODE__: JSON.stringify(false),
-    __ANDROID_MODE__: JSON.stringify(false),
-    __DESKTOP_MODE__: JSON.stringify(false),
-    __EMBED_MODE__: JSON.stringify(true),
-    __DEV_MODE__: JSON.stringify(false),
-    __PROD_MODE__: JSON.stringify(true),
-  },
+  define: createViteDefines(true, "embed"),
   assetsInclude: ["**/*.wasm"],
   build: {
     outDir: "packages/react/dist",

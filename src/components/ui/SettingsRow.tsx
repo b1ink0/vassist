@@ -67,6 +67,7 @@ const SettingsRow = ({
         <div className="space-y-2" data-settings-control-group>
           <div
             data-settings-control
+            inert={isReadOnly}
             className={cn(
               "min-w-0",
               isReadOnly && "pointer-events-none opacity-70",
@@ -90,6 +91,7 @@ const SettingsRow = ({
       <div className="flex items-center gap-2" data-settings-control-group>
         <div
           data-settings-control
+          inert={isReadOnly}
           className={cn(isReadOnly && "pointer-events-none opacity-70")}
         >
           {children}

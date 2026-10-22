@@ -110,5 +110,6 @@ export interface AssistantControlActions {
   onCameraReset: () => void;
   onCameraLockToggle: () => void;
   onCameraSaveToggle: () => void;
+  onStickerBorderToggle: () => void;
   onToggleStagePanel: () => void;
 }

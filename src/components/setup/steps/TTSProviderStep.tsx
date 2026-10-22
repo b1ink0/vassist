@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useSetup } from "../../../contexts/SetupContext";
 import TTSServiceProxy from "../../../services/proxies/TTSServiceProxy";
-import { AIServiceProxy } from "../../../services/proxies";
+import { AIServiceProxy, STTServiceProxy } from "../../../services/proxies";
 import ProviderSelection from "../shared/ProviderSelection";
 import KokoroTTSConfig from "../../settings/tts/KokoroTTSConfig";
 import GPTSoVITSConfig from "../../settings/tts/GPTSoVITSConfig";
+import AndroidLocalTTSConfig from "../../settings/tts/AndroidLocalTTSConfig";
+import AndroidLocalSTTConfig from "../../settings/stt/AndroidLocalSTTConfig";
 import DesktopSTTConfig from "../../settings/stt/DesktopSTTConfig";
 import OpenAISTTConfig from "../../settings/stt/OpenAISTTConfig";
 import OpenAICompatibleSTTConfig from "../../settings/stt/OpenAICompatibleSTTConfig";
@@ -21,6 +23,7 @@ import { Icon } from "../../icons";
 import { Button, Card, Input, Select } from "../../ui";
 import { isAndroid, isDesktop } from "../../../utils/PlatformUtils";
 import { DEFAULT_ENDPOINTS } from "../../../config/serviceEndpoints";
+import { useAndroidApi } from "../../../hooks/useAndroidStore";
 
 interface TestResultState {
   success: boolean;
@@ -37,6 +40,7 @@ type TTSProviderId =
 
 interface TTSProviderStepProps {
   isLightBackground?: boolean;
+  section?: "tts" | "stt";
 }
 
 interface KokoroConfigState {
@@ -74,9 +78,19 @@ interface TTSPersistedData {
   };
   "android-local"?: {
     endpoint?: string;
+    model?: string;
+    speakerId?: number;
+    speed?: number;
   };
   "desktop-local"?: {
     endpoint?: string;
+    referenceVoiceId?: string | null;
+    referenceAudio?: string | null;
+    model?: string;
+    engine?: string;
+    supertonicVoice?: string;
+    supertonicLang?: string;
+    supertonicSteps?: number;
     referenceText?: string;
     referenceLanguage?: string;
     speed?: number;
@@ -120,6 +134,12 @@ interface TTSServiceTestConfig {
     model: string;
     voice: string;
   };
+  "android-local"?: {
+    endpoint: string;
+    model: string;
+    speakerId: number;
+    speed: number;
+  };
 }
 
 interface ChromeAiSTTStatus {
@@ -154,12 +174,16 @@ interface STTConfigState {
   "android-local"?: {
     endpoint: string;
     model: string;
+    language?: string;
+    provider?: string;
   };
   "desktop-local"?: {
     endpoint: string;
     model: string;
     language: string;
     threads: number;
+    engine?: "python" | "whispercpp";
+    whisperCppVariant?: string;
   };
 }
 
@@ -189,9 +213,14 @@ const asRecord = (value: unknown): Record<string, unknown> => {
 
 const TTSProviderStep = ({
   isLightBackground = false,
+  section = "tts",
 }: TTSProviderStepProps) => {
   const { setupData, updateSetupData } = useSetup();
-  const initialLoadRef = useRef(true);
+  const androidAPI = useAndroidApi();
+  const [hasLoadedSetupData, setHasLoadedSetupData] = useState(false);
+  const [savedDesktopTTSConfig] = useState(() =>
+    asRecord(asRecord(setupData.tts)["desktop-local"]),
+  );
   const isWebMode = !isAndroid && !isDesktop;
 
   // TTS state
@@ -205,12 +234,26 @@ const TTSProviderStep = ({
   const [androidTTSEndpoint, setAndroidTTSEndpoint] = useState(
     DEFAULT_ENDPOINTS.androidLocal,
   );
+  const [androidTTSPackId, setAndroidTTSPackId] = useState("vits-local");
+  const [androidTTSSpeakerId, setAndroidTTSSpeakerId] = useState(0);
+  const [androidTTSSpeed, setAndroidTTSSpeed] = useState(1);
 
   // Desktop TTS state
   const [desktopTTSEndpoint, setDesktopTTSEndpoint] = useState(
     DEFAULT_ENDPOINTS.desktopLocal,
   );
-  const [desktopReferenceAudio] = useState<string | null>(null);
+  const [desktopTTSEngine, setDesktopTTSEngine] = useState<
+    "gpt-sovits" | "supertonic"
+  >("gpt-sovits");
+  const [desktopSupertonicVoice, setDesktopSupertonicVoice] = useState("F1");
+  const [desktopSupertonicLang, setDesktopSupertonicLang] = useState("en");
+  const [desktopSupertonicSteps, setDesktopSupertonicSteps] = useState(8);
+  const [desktopReferenceAudio, setDesktopReferenceAudio] = useState<
+    string | null
+  >(null);
+  const [desktopReferenceVoiceId, setDesktopReferenceVoiceId] = useState<
+    string | null
+  >(null);
   const [desktopReferenceText, setDesktopReferenceText] = useState("");
   const [desktopReferenceLanguage, setDesktopReferenceLanguage] = useState(
     GPTSoVITSLanguages.ENGLISH,
@@ -259,6 +302,10 @@ const TTSProviderStep = ({
       : STTProviders.CHROME_AI_MULTIMODAL;
   const [selectedSTTProvider, setSelectedSTTProvider] =
     useState<string>("disabled");
+  const [testingSTT, setTestingSTT] = useState(false);
+  const [sttTestResult, setSttTestResult] = useState<TestResultState | null>(
+    null,
+  );
   const [androidSTTEndpoint, setAndroidSTTEndpoint] = useState(
     DEFAULT_ENDPOINTS.androidLocal,
   );
@@ -281,6 +328,19 @@ const TTSProviderStep = ({
     },
     chromeAi: {
       language: "en",
+    },
+    "android-local": {
+      endpoint: DEFAULT_ENDPOINTS.androidLocal,
+      model: "whisper-local",
+      language: "en",
+      provider: "auto",
+    },
+    "desktop-local": {
+      endpoint: DEFAULT_ENDPOINTS.desktopLocal,
+      model: "tiny",
+      language: "auto",
+      threads: 4,
+      engine: "whispercpp",
     },
   });
 
@@ -319,8 +379,30 @@ const TTSProviderStep = ({
         setCustomVoice(ttsData["openai-compatible"].voice);
       if (ttsData["android-local"]?.endpoint)
         setAndroidTTSEndpoint(ttsData["android-local"].endpoint);
+      if (ttsData["android-local"]?.model)
+        setAndroidTTSPackId(ttsData["android-local"].model);
+      if (typeof ttsData["android-local"]?.speakerId === "number")
+        setAndroidTTSSpeakerId(ttsData["android-local"].speakerId);
+      if (typeof ttsData["android-local"]?.speed === "number")
+        setAndroidTTSSpeed(ttsData["android-local"].speed);
       if (ttsData["desktop-local"]?.endpoint)
         setDesktopTTSEndpoint(ttsData["desktop-local"].endpoint);
+      setDesktopReferenceAudio(
+        ttsData["desktop-local"]?.referenceAudio ?? null,
+      );
+      setDesktopReferenceVoiceId(
+        ttsData["desktop-local"]?.referenceVoiceId ?? null,
+      );
+      if (ttsData["desktop-local"]?.engine === "supertonic")
+        setDesktopTTSEngine("supertonic");
+      else if (ttsData["desktop-local"]?.engine === "gpt-sovits")
+        setDesktopTTSEngine("gpt-sovits");
+      if (ttsData["desktop-local"]?.supertonicVoice)
+        setDesktopSupertonicVoice(ttsData["desktop-local"].supertonicVoice);
+      if (ttsData["desktop-local"]?.supertonicLang)
+        setDesktopSupertonicLang(ttsData["desktop-local"].supertonicLang);
+      if (typeof ttsData["desktop-local"]?.supertonicSteps === "number")
+        setDesktopSupertonicSteps(ttsData["desktop-local"].supertonicSteps);
       if (ttsData["desktop-local"]?.referenceText)
         setDesktopReferenceText(ttsData["desktop-local"].referenceText);
       if (ttsData["desktop-local"]?.referenceLanguage)
@@ -349,7 +431,20 @@ const TTSProviderStep = ({
       setSelectedSTTProvider(normalizedSTTProvider);
     }
     if (sttConfigData) {
-      setSTTConfig(sttConfigData);
+      setSTTConfig({
+        ...sttConfigData,
+        "desktop-local": {
+          ...sttConfig["desktop-local"],
+          ...sttConfigData["desktop-local"],
+          endpoint:
+            sttConfigData["desktop-local"]?.endpoint ||
+            DEFAULT_ENDPOINTS.desktopLocal,
+          model: sttConfigData["desktop-local"]?.model || "tiny",
+          language: sttConfigData["desktop-local"]?.language || "auto",
+          threads: sttConfigData["desktop-local"]?.threads || 4,
+          engine: sttConfigData["desktop-local"]?.engine || "whispercpp",
+        },
+      });
       if (sttConfigData["android-local"]?.endpoint)
         setAndroidSTTEndpoint(sttConfigData["android-local"].endpoint);
       if (sttConfigData["desktop-local"]?.endpoint)
@@ -361,15 +456,13 @@ const TTSProviderStep = ({
     }
 
     // Mark initial load complete
-    if (initialLoadRef.current) {
-      initialLoadRef.current = false;
-    }
+    setHasLoadedSetupData(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run on mount
 
   // Save data whenever TTS or STT config changes (but skip initial load)
   useEffect(() => {
-    if (initialLoadRef.current) return;
+    if (!hasLoadedSetupData) return;
 
     Logger.log("TTSProviderStep", "Saving TTS/STT config");
 
@@ -391,13 +484,22 @@ const TTSProviderStep = ({
       },
       "android-local": {
         endpoint: androidTTSEndpoint,
+        model: androidTTSPackId,
+        speakerId: androidTTSSpeakerId,
+        speed: androidTTSSpeed,
         voice: "vits-local",
       },
       "desktop-local": {
+        ...savedDesktopTTSConfig,
         endpoint: desktopTTSEndpoint,
-        model: "gpt-sovits",
+        model: desktopTTSEngine,
+        engine: desktopTTSEngine,
+        supertonicVoice: desktopSupertonicVoice,
+        supertonicLang: desktopSupertonicLang,
+        supertonicSteps: desktopSupertonicSteps,
         pytorchBackend: desktopPytorchBackend,
         referenceAudio: desktopReferenceAudio,
+        referenceVoiceId: desktopReferenceVoiceId,
         referenceText: desktopReferenceText,
         referenceLanguage: desktopReferenceLanguage,
         speed: desktopSpeed,
@@ -421,22 +523,28 @@ const TTSProviderStep = ({
       ...sttConfig,
       "android-local": {
         endpoint: androidSTTEndpoint,
-        model: "whisper-local",
+        model: sttConfig["android-local"]?.model || "whisper-local",
+        language: sttConfig["android-local"]?.language || "en",
+        provider: sttConfig["android-local"]?.provider || "auto",
       },
       "desktop-local": {
+        ...sttConfig["desktop-local"],
         endpoint: desktopSTTEndpoint,
         model: desktopSTTModel,
         language: desktopSTTLanguage,
-        threads: 4,
+        threads: sttConfig["desktop-local"]?.threads || 4,
       },
     };
 
-    updateSetupData({
-      tts: ttsData,
-      stt: sttData,
-      sttConfig: updatedSTTConfig,
-    });
+    updateSetupData(
+      section === "tts"
+        ? { tts: ttsData }
+        : { stt: sttData, sttConfig: updatedSTTConfig },
+    );
   }, [
+    hasLoadedSetupData,
+    section,
+    savedDesktopTTSConfig,
     selectedProvider,
     kokoroConfig,
     openAIKey,
@@ -447,6 +555,9 @@ const TTSProviderStep = ({
     customModel,
     customVoice,
     androidTTSEndpoint,
+    androidTTSPackId,
+    androidTTSSpeakerId,
+    androidTTSSpeed,
     selectedSTTProvider,
     sttConfig,
     androidSTTEndpoint,
@@ -454,7 +565,12 @@ const TTSProviderStep = ({
     desktopSTTModel,
     desktopSTTLanguage,
     desktopTTSEndpoint,
+    desktopTTSEngine,
+    desktopSupertonicVoice,
+    desktopSupertonicLang,
+    desktopSupertonicSteps,
     desktopReferenceAudio,
+    desktopReferenceVoiceId,
     desktopReferenceText,
     desktopReferenceLanguage,
     desktopSpeed,
@@ -475,7 +591,7 @@ const TTSProviderStep = ({
           {
             id: "android-local",
             name: "Android Local",
-            description: "On-device TTS using VITS",
+            description: "On-device speech using downloadable voice packs",
             iconName: "speaker",
             recommended: true,
             pros: [
@@ -484,8 +600,8 @@ const TTSProviderStep = ({
               "No internet needed",
               "Natural voice quality",
             ],
-            cons: ["Single voice option", "Fixed voice style"],
-            requirements: "Ready to use! Pre-installed on device",
+            cons: ["Voice packs require device storage"],
+            requirements: "Download or select a voice pack below",
           },
         ]
       : []),
@@ -495,7 +611,7 @@ const TTSProviderStep = ({
           {
             id: "desktop-local",
             name: "Desktop Local",
-            description: "On-device TTS using GPT-SoVITS",
+            description: "On-device speech using GPT-SoVITS or Supertonic",
             iconName: "speaker",
             recommended: true,
             pros: [
@@ -505,8 +621,8 @@ const TTSProviderStep = ({
               "Voice cloning support",
               "Natural voice quality",
             ],
-            cons: ["Requires voice training", "GPU recommended"],
-            requirements: "Ready to use! Pre-installed on desktop",
+            cons: ["Engine installation and model downloads required"],
+            requirements: "Choose and set up an engine below",
           },
         ]
       : []),
@@ -710,7 +826,7 @@ const TTSProviderStep = ({
             description: "On-device STT using Whisper",
             recommended: true,
             available: true,
-            requirements: "Ready to use! Pre-installed on device",
+            requirements: "Download or select a model below",
           },
         ]
       : []),
@@ -724,7 +840,7 @@ const TTSProviderStep = ({
             description: "On-device STT using Whisper",
             recommended: true,
             available: true,
-            requirements: "Ready to use! Pre-installed on desktop",
+            requirements: "Choose and set up an engine below",
           },
         ]
       : []),
@@ -868,6 +984,83 @@ const TTSProviderStep = ({
     setTestResult(null);
   };
 
+  const updateAndroidSTTConfig = (
+    field: "model" | "language" | "provider",
+    value: string,
+  ) => {
+    setSTTConfig((current) => ({
+      ...current,
+      "android-local": {
+        endpoint: androidSTTEndpoint,
+        model: current["android-local"]?.model || "whisper-local",
+        language: current["android-local"]?.language || "en",
+        provider: current["android-local"]?.provider || "auto",
+        [field]: value,
+      },
+    }));
+    setSttTestResult(null);
+  };
+
+  const testAndroidSTT = async () => {
+    setTestingSTT(true);
+    setSttTestResult(null);
+    try {
+      await STTServiceProxy.configure({
+        ...sttConfig,
+        enabled: true,
+        provider: STTProviders.ANDROID_LOCAL,
+        "android-local": {
+          endpoint: androidSTTEndpoint,
+          model: sttConfig["android-local"]?.model || "whisper-local",
+          language: sttConfig["android-local"]?.language || "en",
+          provider: sttConfig["android-local"]?.provider || "auto",
+        },
+      });
+      const transcription = await STTServiceProxy.testRecording(3);
+      setSttTestResult({
+        success: true,
+        message: transcription
+          ? `Transcription: ${transcription}`
+          : "Recording completed with no transcription.",
+      });
+    } catch (error: unknown) {
+      setSttTestResult({ success: false, message: getErrorMessage(error) });
+    } finally {
+      setTestingSTT(false);
+    }
+  };
+
+  const testDesktopSTT = async () => {
+    setTestingSTT(true);
+    setSttTestResult(null);
+    try {
+      await STTServiceProxy.configure({
+        ...sttConfig,
+        enabled: true,
+        provider: STTProviders.DESKTOP_LOCAL,
+        "desktop-local": {
+          ...sttConfig["desktop-local"],
+          endpoint: desktopSTTEndpoint,
+          model: desktopSTTModel,
+          language: desktopSTTLanguage,
+          threads: sttConfig["desktop-local"]?.threads || 4,
+          engine: sttConfig["desktop-local"]?.engine || "whispercpp",
+        },
+      });
+      const transcription = await STTServiceProxy.testRecording(3);
+      setSttTestResult({
+        success: true,
+        message: transcription
+          ? `Transcription: ${transcription}`
+          : "Recording completed with no transcription.",
+      });
+    } catch (error: unknown) {
+      setSttTestResult({ success: false, message: getErrorMessage(error) });
+    } finally {
+      setTestingSTT(false);
+    }
+  };
+
   const testConnection = async () => {
     setTesting(true);
     setTestResult(null);
@@ -906,6 +1099,13 @@ const TTSProviderStep = ({
           model: customModel,
           voice: customVoice,
         };
+      } else if (selectedProvider === "android-local") {
+        testConfig["android-local"] = {
+          endpoint: androidTTSEndpoint,
+          model: androidTTSPackId,
+          speakerId: androidTTSSpeakerId,
+          speed: androidTTSSpeed,
+        };
       }
 
       // Configure TTS service
@@ -926,12 +1126,14 @@ const TTSProviderStep = ({
 
   return (
     <div className="setup-step space-y-3 sm:space-y-4">
+      {section === "tts" && (
+        <>
       <div className="mb-2 sm:mb-3">
         <h2 className="text-xl sm:text-2xl font-bold mb-1 bg-gradient-to-r from-white/90 to-white/70 bg-clip-text text-transparent">
-          Voice Provider
+          Text-to-Speech
         </h2>
         <p className="text-xs sm:text-sm text-white/90">
-          Select your text-to-speech service
+          Choose how your assistant speaks
         </p>
       </div>
 
@@ -956,9 +1158,9 @@ const TTSProviderStep = ({
             <div className="space-y-2 text-sm text-white/90">
               <p className="font-semibold">Text-to-Speech Disabled</p>
               <p className="text-white/70">
-                The Live Assistant will be silent. You can still use all other
-                features, but AI responses won't be spoken aloud. You can enable
-                TTS later in Settings.
+                    The Live Assistant will be silent. You can still use all
+                    other features, but AI responses won't be spoken aloud. You
+                    can enable TTS later in Settings.
               </p>
             </div>
           </div>
@@ -977,8 +1179,7 @@ const TTSProviderStep = ({
               />
               <p className="text-xs text-white/70">
                 <span className="font-semibold">Android Local TTS</span> -
-                On-device text-to-speech using VITS VCTK neural network with 109
-                different voices!
+                    On-device text-to-speech using downloadable voice packs.
               </p>
             </div>
           </Card>
@@ -988,12 +1189,42 @@ const TTSProviderStep = ({
             <div className="flex items-center gap-2 mb-2">
               <div className="w-2 h-2 rounded-full bg-white/70"></div>
               <span className="text-sm font-semibold text-white/90">
-                Ready to use!
+                    Select and test a voice pack
               </span>
             </div>
             <p className="text-xs text-white/60">
-              Model: VITS VCTK • 109 multi-speaker voices
+                  Selected pack: {androidTTSPackId}
             </p>
+          </Card>
+
+          <AndroidLocalTTSConfig
+            androidAPI={androidAPI}
+            model={androidTTSPackId}
+            onModelChange={setAndroidTTSPackId}
+            speakerId={androidTTSSpeakerId}
+            onSpeakerIdChange={setAndroidTTSSpeakerId}
+            speed={androidTTSSpeed}
+            onSpeedChange={setAndroidTTSSpeed}
+          />
+
+          <Card className="space-y-3">
+            <Button
+              onClick={testConnection}
+              disabled={testing}
+              className="w-full text-xs sm:text-sm font-semibold flex items-center justify-center gap-2"
+            >
+              {testing ? "Testing..." : "Test TTS"}
+            </Button>
+            {testResult && (
+              <StatusMessage
+                message={
+                  testResult.success
+                    ? `success:${testResult.message}`
+                    : `error:${testResult.message}`
+                }
+                isLightBackground={isLightBackground}
+              />
+            )}
           </Card>
 
           {/* Advanced Config */}
@@ -1030,6 +1261,11 @@ const TTSProviderStep = ({
       {selectedProvider === "desktop-local" && (
         <GPTSoVITSConfig
           config={{
+            engine: desktopTTSEngine,
+                referenceVoiceId: desktopReferenceVoiceId,
+            supertonicVoice: desktopSupertonicVoice,
+            supertonicLang: desktopSupertonicLang,
+            supertonicSteps: desktopSupertonicSteps,
             pytorchBackend: desktopPytorchBackend,
             referenceText: desktopReferenceText,
             referenceLanguage: desktopReferenceLanguage,
@@ -1039,6 +1275,27 @@ const TTSProviderStep = ({
             temperature: desktopTemperature,
           }}
           onChange={(field, value) => {
+                if (
+                  field === "referenceVoiceId" &&
+                  (typeof value === "string" || value === null)
+                ) {
+                  setDesktopReferenceVoiceId(value);
+                }
+            if (
+              field === "engine" &&
+              (value === "gpt-sovits" || value === "supertonic")
+            ) {
+              setDesktopTTSEngine(value);
+            }
+            if (field === "supertonicVoice" && typeof value === "string") {
+              setDesktopSupertonicVoice(value);
+            }
+            if (field === "supertonicLang" && typeof value === "string") {
+              setDesktopSupertonicLang(value);
+            }
+            if (field === "supertonicSteps" && typeof value === "number") {
+              setDesktopSupertonicSteps(value);
+            }
             if (field === "pytorchBackend" && typeof value === "string")
               setDesktopPytorchBackend(value);
             if (field === "referenceText" && typeof value === "string")
@@ -1144,7 +1401,11 @@ const TTSProviderStep = ({
               >
                 {testing ? (
                   <>
-                    <Icon name="refresh" size={14} className="animate-spin" />{" "}
+                        <Icon
+                          name="refresh"
+                          size={14}
+                          className="animate-spin"
+                        />{" "}
                     Testing...
                   </>
                 ) : (
@@ -1237,7 +1498,11 @@ const TTSProviderStep = ({
               >
                 {testing ? (
                   <>
-                    <Icon name="refresh" size={14} className="animate-spin" />{" "}
+                        <Icon
+                          name="refresh"
+                          size={14}
+                          className="animate-spin"
+                        />{" "}
                     Testing...
                   </>
                 ) : (
@@ -1261,9 +1526,11 @@ const TTSProviderStep = ({
           </div>
         </Card>
       )}
+        </>
+      )}
 
-      {/* STT Section */}
-      <div className="mt-6 pt-6 border-t border-white/10">
+      {section === "stt" && (
+        <>
         <div className="mb-3">
           <h3 className="text-lg sm:text-xl font-bold mb-1 bg-gradient-to-r from-white/90 to-white/70 bg-clip-text text-transparent">
             Speech-to-Text
@@ -1298,8 +1565,8 @@ const TTSProviderStep = ({
                 <p className="font-semibold">Speech-to-Text Disabled</p>
                 <p className="text-white/70">
                   Voice input will be unavailable. You'll need to type your
-                  messages instead. You can enable STT later in Settings if you
-                  want to use voice input.
+                    messages instead. You can enable STT later in Settings if
+                    you want to use voice input.
                 </p>
               </div>
             </div>
@@ -1329,14 +1596,42 @@ const TTSProviderStep = ({
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-2 h-2 rounded-full bg-white/70"></div>
                 <span className="text-sm font-semibold text-white/90">
-                  Ready to use!
+                    Select and test a model
                 </span>
               </div>
               <p className="text-xs text-white/60">
-                Model: Whisper Tiny • Accurate speech recognition
+                  Selected model:{" "}
+                  {sttConfig["android-local"]?.model || "whisper-local"}
               </p>
             </Card>
 
+            <AndroidLocalSTTConfig
+              androidAPI={androidAPI}
+              model={sttConfig["android-local"]?.model || "whisper-local"}
+              language={sttConfig["android-local"]?.language || "en"}
+              provider={sttConfig["android-local"]?.provider || "auto"}
+              onChange={updateAndroidSTTConfig}
+            />
+
+            <Card className="space-y-3">
+              <Button
+                onClick={testAndroidSTT}
+                disabled={testingSTT}
+                className="w-full text-xs sm:text-sm font-semibold flex items-center justify-center gap-2"
+              >
+                {testingSTT ? "Recording..." : "Test Recording (3s)"}
+              </Button>
+              {sttTestResult && (
+                <StatusMessage
+                  message={
+                    sttTestResult.success
+                      ? `success:${sttTestResult.message}`
+                      : `error:${sttTestResult.message}`
+                  }
+                  isLightBackground={isLightBackground}
+                />
+              )}
+            </Card>
             {/* Advanced Config */}
             <details className="group">
               <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
@@ -1371,22 +1666,55 @@ const TTSProviderStep = ({
         )}
 
         {selectedSTTProvider === STTProviders.DESKTOP_LOCAL && (
-          <DesktopSTTConfig
-            config={{
-              endpoint: desktopSTTEndpoint,
-              model: desktopSTTModel,
-              language: desktopSTTLanguage,
-            }}
-            onChange={(updates) => {
-              if (typeof updates.endpoint === "string")
-                setDesktopSTTEndpoint(updates.endpoint);
-              if (typeof updates.model === "string")
-                setDesktopSTTModel(updates.model);
-              if (typeof updates.language === "string")
-                setDesktopSTTLanguage(updates.language);
-            }}
-            isSetupMode={true}
-          />
+          <div className="space-y-3">
+            <DesktopSTTConfig
+              config={{
+                ...sttConfig["desktop-local"],
+                endpoint: desktopSTTEndpoint,
+                model: desktopSTTModel,
+                language: desktopSTTLanguage,
+              }}
+              onChange={(updates) => {
+                setSTTConfig((current) => ({
+                  ...current,
+                  "desktop-local": {
+                    ...current["desktop-local"],
+                    endpoint: desktopSTTEndpoint,
+                    model: desktopSTTModel,
+                    language: desktopSTTLanguage,
+                    threads: 4,
+                    ...updates,
+                  },
+                }));
+                if (typeof updates.endpoint === "string")
+                  setDesktopSTTEndpoint(updates.endpoint);
+                if (typeof updates.model === "string")
+                  setDesktopSTTModel(updates.model);
+                if (typeof updates.language === "string")
+                  setDesktopSTTLanguage(updates.language);
+              }}
+              isSetupMode={true}
+            />
+            <Card className="space-y-3">
+              <Button
+                onClick={testDesktopSTT}
+                disabled={testingSTT}
+                className="w-full text-xs sm:text-sm font-semibold flex items-center justify-center gap-2"
+              >
+                {testingSTT ? "Recording..." : "Test Recording (3s)"}
+              </Button>
+              {sttTestResult && (
+                <StatusMessage
+                  message={
+                    sttTestResult.success
+                      ? `success:${sttTestResult.message}`
+                      : `error:${sttTestResult.message}`
+                  }
+                  isLightBackground={isLightBackground}
+                />
+              )}
+            </Card>
+          </div>
         )}
 
         {isWebMode &&
@@ -1440,7 +1768,8 @@ const TTSProviderStep = ({
             isLightBackground={false}
           />
         )}
-      </div>
+        </>
+      )}
     </div>
   );
 };

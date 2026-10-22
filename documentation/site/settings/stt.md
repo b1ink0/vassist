@@ -5,7 +5,7 @@ Settings → STT controls speech input and transcription. The master **Enable Sp
 ## Choosing a provider
 
 - **Desktop Local**: runs Whisper on your machine via Electron. No network required, works offline. Requires a one-time setup.
-- **Android Local**: on-device Whisper, Android only. Download the model once and it stays available offline.
+- **Android Local**: on-device Whisper, SenseVoice, or Dolphin models, Android only. Download model packs once and use them offline.
 - **OpenAI / OpenAI-compatible**: cloud transcription. No local setup, but requires an API key and an internet connection.
 - **Chrome AI Multimodal**: in-browser Gemini Nano on supported Chrome builds. No external server or API key.
 
@@ -21,24 +21,35 @@ After picking a provider, use **Test Recording (3s)** in Common controls to veri
 
 ## Android Local
 
-Android Local runs Whisper on-device. No network needed once the model is installed.
+Android Local runs speech recognition on your device. No network connection is required after downloading a model.
 
-**To set up Android Local:**
+**To set it up:**
 
-1. If the model isn't installed, tap the **download** button in the Whisper model downloader (~113 MB). A progress bar tracks the download.
-2. Once installed, select your **Language** from the dropdown, or leave it on `auto` if you switch between languages.
-3. Tap **Test Recording (3s)** to speak a sentence and confirm transcription is working.
+1. Download one or more models from the model cards. The available models include Whisper Tiny and Base in English-only or multilingual versions, SenseVoice for Chinese, English, Japanese, Korean, and Cantonese, and Dolphin Base or Small for 40+ Eastern languages.
+2. Choose the model and language. English-only Whisper models ignore the language setting. SenseVoice supports only its listed languages.
+3. Choose a **Compute Provider**. **Auto** benchmarks the available backends. **CPU** is the most compatible. **NNAPI** and **XNNPACK** require a custom build. **QNN Snapdragon NPU** is experimental and requires a compatible device.
+4. Tap **Test Recording (3s)** to verify transcription.
 
-To remove the model and free up space, tap the **delete** (🗑) button in the model downloader.
+Use the delete control on a model card to remove it and free up storage.
 
-| Control                  | Behavior                                                            |
-| ------------------------ | ------------------------------------------------------------------- |
-| Whisper model downloader | Download or remove the Android Whisper model.                       |
-| Language                 | `English`, `Spanish`, `Japanese`, `Chinese`, `German`, or `French`. |
+| Control          | Behavior                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------ |
+| Model cards      | Download and remove Whisper, SenseVoice, Dolphin, and supported SenseVoice NPU packs.            |
+| Model            | Select Auto, an installed Whisper variant, SenseVoice, or Dolphin.                               |
+| Language         | Select Auto, English, Spanish, Japanese, Chinese, German, or French where the model supports it. |
+| Compute Provider | `Auto`, `CPU`, `NNAPI`, `XNNPACK`, or experimental `QNN` on supported builds and devices.        |
+
+On supported Snapdragon devices, the experimental **SenseVoice NPU** pack runs on the NPU. Install the SenseVoice model first. The NPU option handles clips up to 30 seconds and splits longer audio automatically.
 
 ## Desktop Local
 
-Runs Whisper through Electron on your machine. Requires a one-time setup step.
+Desktop Local runs speech recognition through Electron. In **Settings → STT** or the setup wizard, choose between **faster-whisper** and **[whisper.cpp](https://github.com/ggml-org/whisper.cpp)**. Both engines can be installed side by side. whisper.cpp is selected by default, and the **STT Engine** selector chooses which one handles transcription.
+
+On AMD systems using ROCm, Desktop Local STT runs on the CPU. Faster Whisper's GPU path requires NVIDIA CUDA.
+
+### faster-whisper
+
+The Python engine. It requires a one-time setup step. Select it in **STT Engine** to install and configure it.
 
 **To set up Desktop Local:**
 
@@ -77,6 +88,14 @@ Leave **Language** on `auto` unless you are getting wrong language detection. Se
 | ------------- | ------- | ------------------------------------------------------------------------------------------------- |
 | Whisper Model | `tiny`  | `tiny`, `base`, `tiny.en`, or `base.en`. The `.en` variants are English-only but slightly faster. |
 | Language      | `auto`  | Auto-detect or a fixed language.                                                                  |
+
+### [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+
+Use **STT Engine** in Settings or setup to select whisper.cpp. Choose and install a runtime pack for your system, then download a GGML model. The current packs include Windows CPU, Windows NVIDIA CUDA, Windows Vulkan community builds, and Linux x64 CPU. No macOS runtime pack is listed. Windows Vulkan packs support AMD and Intel GPUs as well as other Vulkan-compatible GPUs.
+
+The available models are `tiny`, `tiny.en`, `base`, and `base.en`. The multilingual tiny and base models are about 75 MB and 142 MB. The `.en` variants are English-only. Select a language in the shared **Language** control, then use **Test Recording (3s)** to check the active engine.
+
+You can install more than one runtime pack. Use **Use** on an installed pack to select it. Downloaded models can be removed from their model cards.
 
 ### Advanced Settings
 

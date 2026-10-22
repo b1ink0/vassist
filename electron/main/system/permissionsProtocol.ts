@@ -295,6 +295,7 @@ export function setupAppProtocolHandler({
       ".wasm": "application/wasm",
       ".onnx": "application/octet-stream",
       ".png": "image/png",
+      ".webp": "image/webp",
       ".jpg": "image/jpeg",
       ".svg": "image/svg+xml",
       ".ico": "image/x-icon",

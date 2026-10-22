@@ -1,6 +1,10 @@
+<script setup lang="ts">
+import AppIcon from "../.vitepress/theme/components/AppIcon.vue"
+</script>
+
 # LLM Settings
 
-Settings → LLM controls which AI model handles chat and toolbar actions. It has three sub-tabs: **Provider**, **Routing**, and **Profiles**.
+Settings → LLM controls which AI model handles chat and toolbar actions. It has four sub-tabs: **Provider**, **Routing**, **Decision**, and **Profiles**.
 
 ## Choosing and switching providers
 
@@ -10,7 +14,7 @@ The **Provider** dropdown filters to providers that work on your current runtime
 2. Pick a provider from the **Provider** dropdown:
    - **OpenAI**: cloud API with API key
    - **Ollama**: self-hosted Ollama server on your machine or LAN
-   - **Desktop Local**: runs a GGUF model directly on your PC via a built-in llama.cpp server
+   - **Desktop Local**: runs a GGUF model locally with llama.cpp
    - **Android Local**: on-device model on Android
    - **Chrome AI**: Gemini Nano, Chromium only
 3. Fill in the required fields for that provider (API key, endpoint, model).
@@ -24,7 +28,7 @@ Saved backends store your full provider configuration under a name so you can sw
 
 1. Fill in all fields for the current provider (API key, endpoint, model, etc.).
 2. Type a name in the **Backend name** field.
-3. Click the **save** (💾) button. The configuration is stored under that name.
+3. Click the <AppIcon name="save" /> button. The configuration is stored under that name.
 
 **To load a saved backend:**
 
@@ -32,15 +36,15 @@ Saved backends store your full provider configuration under a name so you can sw
 
 **To update a saved backend:**
 
-- Load it from the dropdown, make your changes, then click the **save** (💾) button again with the same name.
+- Load it from the dropdown, make your changes, then click the <AppIcon name="save" /> button again with the same name.
 
 **To create a new slot without a preset:**
 
-- Click the **+** (add) button. This clears the fields so you can fill in a fresh configuration, then save it under a new name.
+- Click the <AppIcon name="add" /> button. This clears the fields so you can fill in a fresh configuration, then save it under a new name.
 
 **To delete a saved backend:**
 
-- Select it from the dropdown, then click the **delete** (🗑) button. This removes it from the dropdown but doesn't affect the current active connection.
+- Select it from the dropdown, then click the <AppIcon name="delete" /> button. This removes it from the dropdown but does not affect the current active connection.
 
 ::: tip
 Each provider keeps its own separate list. OpenAI backends don't appear in the Ollama dropdown.
@@ -59,6 +63,18 @@ Routing lets different models handle different types of work. Your main model ha
 5. Leave **Use main LLM** on for a role to keep using your primary model for that type of request.
 
 Routing is available for OpenAI, Ollama, Android Local, and Desktop Local. Other providers show a read-only note.
+
+## Decision API
+
+The **Decision** sub-tab configures and tests a separate System One service. It is off by default and distinct from the main chat model and its vision/router model routing. The current chat-generation flow does not send requests to this service.
+
+| Provider          | Where it works                     | Notes                                                                                                      |
+| ----------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Remote System One | Browser and supported app runtimes | Configure a reachable API URL. An API key is optional.                                                     |
+| Embed Host        | Browser embeds                     | Uses the host's `transport.bridge.decision` connection check. The bridge is not used for chat generation.  |
+| Desktop Local     | Desktop app                        | Uses the separate local decision worker and Electron runtime controls.                                     |
+
+Android does not include the native decision API. Configure a remote endpoint there if needed. Saved backends store endpoint, key, model, and context settings for reuse.
 
 ## System prompt profiles
 
@@ -90,6 +106,19 @@ At the top of the LLM tab on desktop, there's a **Shared Local API Server** card
 | Share On Local Network | Off     | Binds the server to your LAN interface.       |
 | Shared Server Port     | Saved   | Port for the local server. Validated 1–65535. |
 
+The Shared Server Port defaults to `11438`. The **Internal ports** section configures Desktop Local worker ports. Defaults are llama-server `11439`, decision-server `11440`, GPT-SoVITS `9880`, faster-whisper `9881`, Supertonic `9882`, and whisper.cpp `9883`. Each port must be unique and between `1` and `65535`, including the Shared Server Port.
+
+### Desktop Local inference engine
+
+Desktop Local offers two inference engines in its **Inference Engine** selector:
+
+| Engine | What to expect |
+| --- | --- |
+| [`llama-server`](https://github.com/ggml-org/llama.cpp/tree/master/tools/server) | The default and recommended engine. Choose and install a runtime pack in its engine section. |
+| [`node-llama-cpp`](https://github.com/withcatai/node-llama-cpp) | Alternative engine. Choose and install a llama.cpp compute backend in its Runtime Backend section. |
+
+Both engines use the Desktop Local GGUF model library. Select the engine and its runtime backend before testing the connection. Engine-specific sampling and runtime controls appear only when they apply.
+
 ### Common controls (all providers)
 
 | Control         | Behavior                                                                                                                           |
@@ -97,6 +126,18 @@ At the top of the LLM tab on desktop, there's a **Shared Local API Server** card
 | Provider        | Picks the active LLM. Providers that don't work on your runtime won't appear.                                                      |
 | Saved Backends  | Name, save, load, and delete reusable backend profiles. Saving a profile captures all the visible fields for the current provider. |
 | Test Connection | Checks whether the current provider is reachable and working.                                                                      |
+
+### Sampling and runtime parameters
+
+The **Sampling parameters** switch controls whether sampling overrides are sent. When it is off, the model or server uses its own sampling defaults. Output token limits and context size are separate controls. Remote services own their context capacity, while supported local runtimes can expose a context-size setting.
+
+Advanced sampling controls appear when the selected provider supports them. They can include top-p, top-k, min-p, typical-p, repetition controls, presence and frequency penalties, random seed, and stop sequences. Remote providers can choose between `max_tokens` and `max_completion_tokens` for the output limit field.
+
+Desktop Local exposes runtime controls where supported. These include GPU layers, CPU threads, batch size, flash attention, key and value cache precision, and RoPE scaling. Llama Server also exposes a physical batch size. Settings that do not apply to the selected provider or runtime are omitted from requests.
+
+Turn on the <AppIcon name="bulb" /> **Thinking** control beside the chat input, or in **Quick Access → LLM Provider**, to request reasoning from the active provider. The control only affects providers and models that support reasoning. If the model returns reasoning text, it appears in a collapsible **Thought process** panel above the answer. **Auto-expand Thinking** is off by default. Change it in Settings or Quick Access to open that panel while reasoning streams.
+
+Reasoning-capable providers expose **Thinking Effort** with Auto, Low, Medium, High, or Max. Auto uses the provider or model default when supported.
 
 ### OpenAI
 
@@ -121,12 +162,17 @@ At the top of the LLM tab on desktop, there's a **Shared Local API Server** card
 
 | Control             | Default                 | Behavior                                                                          |
 | ------------------- | ----------------------- | --------------------------------------------------------------------------------- |
-| Info banner         | -                       | Describes on-device llama.cpp and in-app GGUF downloads.                          |
+| Info banner         | -                       | Describes the on-device local LLM and model manager.                              |
 | Saved Backends      | -                       | Stores endpoint, model, temperature, and token limits.                            |
 | Endpoint URL        | `http://127.0.0.1:8765` | Points at the in-app Android local server.                                        |
-| Local model manager | -                       | Lists installed GGUF models, lets you set the active one, delete it if supported. |
+| Local model manager | -                       | Lists installed GGUF and LiteRT-LM models, identifies image-capable models, sets the active model, and deletes paired vision encoders with their model. |
+| Compute Unit        | `Auto`                  | Android only. Select `Auto`, `CPU`, `GPU`, or `NPU`. Acceleration depends on device, model quantization, and available backends. |
 | Temperature         | `0.7`                   | 0.0 – 2.0 in 0.1 steps.                                                           |
 | Max Tokens          | `2048`                  | 64 – 2048 in 64-token steps.                                                      |
+
+Android Local accepts chat images when the active model supports vision. Supported Hugging Face and Ollama downloads also fetch a matching vision encoder when one is available. The model manager detects vision support from the model or its paired encoder.
+
+The Android local model manager can also run `.litertlm` models through LiteRT-LM. GGUF models use llama.cpp. The runtime is selected from the model file. On Snapdragon, **Compute Unit** can select CPU, GPU through OpenCL or Vulkan, or the Hexagon NPU. GPU and NPU availability depends on the device. The NPU supports compatible Q4_0 and Q8_0 model quantizations. Unsupported accelerator requests fall back to CPU. The selection applies to the next message and reloads the model automatically.
 
 ### Desktop Local (desktop only)
 
@@ -164,7 +210,7 @@ The local model manager is where you install the GGUF files that Desktop Local a
 
 **To import a model you already have:**
 
-1. Click **Import Model** (upload icon).
+1. Click **Import Model** (<AppIcon name="upload" />).
 2. Browse to a `.gguf` file and confirm. The model copies to the models folder and appears in the list.
 
 **To download from Ollama:**
@@ -188,7 +234,7 @@ The local model manager is where you install the GGUF files that Desktop Local a
 
 **To delete a model:**
 
-- Click the trash (🗑) icon next to it in **Installed Models**.
+- Click the <AppIcon name="trash" /> icon next to it in **Installed Models**.
 
 | Control                    | Behavior                                                                                                            |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------- |

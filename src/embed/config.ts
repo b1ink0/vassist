@@ -2,6 +2,11 @@ import type { AIConfig, STTConfig, TTSConfig } from "../config/aiConfig";
 import { LLM_PARAMETER_KEYS } from "../config/llmParameters";
 import type { LLMParameters } from "../config/llmParameters";
 import type { UIConfig } from "../config/uiConfig";
+import type {
+  DecisionModelInfo,
+  SystemOneRequest,
+  SystemOneResponse,
+} from "../services/ai/DecisionClient";
 import type { StorageAdapterSelection } from "../storage/StorageAdapterRegistry";
 import type { ResourceLoaderSelection } from "../utils/resource-loader/types";
 
@@ -36,6 +41,7 @@ export type VAssistThemeMode = "adaptive" | "light" | "dark";
 export type VAssistThemeSurfaceStyle = "glass" | "flat";
 export type VAssistStorageAdapter = StorageAdapterSelection;
 export type VAssistResourceLoader = ResourceLoaderSelection;
+export type VAssistUIConfig = DeepPartial<UIConfig>;
 export type VAssistPortalContainerId = "overlays" | "popovers" | "canvas";
 export type VAssistPortalContainerTarget =
   | string
@@ -90,6 +96,13 @@ export type VAssistSettingsFieldId =
   | `llm.${"openai" | "ollama" | "desktop-local" | "android-local" | "chromeAi"}.${keyof LLMParameters}`
   | "llm.openai.endpoint"
   | "llm.ollama.apiFormat"
+  | "llm.decision.enabled"
+  | "llm.decision.provider"
+  | "llm.decision.endpoint"
+  | "llm.decision.model"
+  | "llm.decision.apiKey"
+  | "llm.decision.timeoutMs"
+  | "llm.decision.contextSize"
   | "ui.aiToolbar.enabled"
   | "ui.aiToolbar.showOnInputFocus"
   | "ui.aiToolbar.showOnImageHover"
@@ -288,10 +301,22 @@ export interface VAssistProviderBridgeSTT {
   }) => Promise<string | boolean> | string | boolean;
 }
 
+export interface VAssistProviderBridgeDecision {
+  testConnection?: () => Promise<boolean> | boolean;
+  listModels?: (options?: {
+    signal?: AbortSignal | null;
+  }) => Promise<DecisionModelInfo[]> | DecisionModelInfo[];
+  decide: (
+    request: SystemOneRequest,
+    options?: { signal?: AbortSignal | null },
+  ) => Promise<SystemOneResponse> | SystemOneResponse;
+}
+
 export interface VAssistProviderBridge {
   ai?: VAssistProviderBridgeAI;
   tts?: VAssistProviderBridgeTTS;
   stt?: VAssistProviderBridgeSTT;
+  decision?: VAssistProviderBridgeDecision;
 }
 
 export interface VAssistOpenSettingsOptions {
@@ -420,6 +445,7 @@ export interface VAssistEmbedConfig {
     forcePortraitMode?: boolean;
   };
   features?: Partial<Record<VAssistFeatureName, boolean>>;
+  ui?: VAssistUIConfig;
   settings?: {
     hiddenTabs?: VAssistSettingsTabId[];
     readOnlyTabs?: VAssistSettingsTabId[];
@@ -475,6 +501,7 @@ export interface ResolvedVAssistEmbedConfig {
     forcePortraitMode: boolean;
   };
   features: Record<VAssistFeatureName, boolean>;
+  ui: VAssistUIConfig;
   settings: {
     hiddenTabs: VAssistSettingsTabId[];
     readOnlyTabs: VAssistSettingsTabId[];
@@ -661,6 +688,13 @@ export const VASSIST_SETTINGS_FIELDS: readonly VAssistSettingsFieldId[] = [
   ),
   "llm.openai.endpoint",
   "llm.ollama.apiFormat",
+  "llm.decision.enabled",
+  "llm.decision.provider",
+  "llm.decision.endpoint",
+  "llm.decision.model",
+  "llm.decision.apiKey",
+  "llm.decision.timeoutMs",
+  "llm.decision.contextSize",
   "ui.aiToolbar.enabled",
   "ui.aiToolbar.showOnInputFocus",
   "ui.aiToolbar.showOnImageHover",
@@ -1028,6 +1062,7 @@ export function normalizeVAssistEmbedConfig(
       forcePortraitMode: config.shell?.forcePortraitMode ?? false,
     },
     features,
+    ui: cloneConfigValue(config.ui ?? {}),
     settings: {
       hiddenTabs,
       readOnlyTabs,

@@ -1,16 +1,18 @@
 # Package Integration
 
-VAssist ships two browser packages:
+VAssist has two browser packages in its Bun workspace:
 
 - `@vassist/embed` for plain JavaScript hosts and non-React frameworks
 - `@vassist/react` for React hosts
+
+**Neither package is published on npm yet.** They can currently be used only from the VAssist repository workspace. The package names and install examples below describe the intended public API. They are not installable from npm until a release is announced.
 
 If you are embedding VAssist, the normal decision order is:
 
 1. Pick the package and shell entry point.
 2. Give the instance a stable `hostId` if you need multi-instance control.
 3. Decide who owns provider settings in the UI.
-4. Decide who executes AI, TTS, and STT requests.
+4. Decide who executes AI, TTS, and STT requests, and who handles the Decision API connection check.
 5. Pick the control surface you will call from your host.
 
 ## Pick A Package
@@ -41,15 +43,22 @@ Examples:
 - `@vassist/embed/toolbar`
 - `@vassist/react`
 
-## Install
+## Availability and requirements
 
-```bash
-npm install @vassist/embed
-# or
-npm install @vassist/react react react-dom
-```
+The packages are not yet available to external projects through npm. Inside this repository, Bun links them through the root workspace. The React package currently declares React 19 and React DOM 19 as peer dependencies.
 
-`@vassist/react` requires `react` and `react-dom` as peer dependencies.
+The packages build the browser embed target. They include the shared browser UI and runtime, but they do not turn desktop-only Electron services or Android-native services into browser capabilities. Features that depend on those services require a reachable service endpoint or a host bridge implementation.
+
+When deploying package build output directly, keep its emitted `assets/` directory alongside the JavaScript files. Runtime assets, including WebAssembly files, are resolved relative to the generated package module.
+
+### Browser package support
+
+| Capability                          | Browser package behavior                                                                                                                                                                                                                    |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared browser runtime and settings | Browser packages use the shared chat, toolbar, voice, 3D, and settings runtime. Host config can provide provider defaults and optional UI defaults.                                                                                         |
+| Decision settings                   | Remote endpoints support the built-in connection check. The `"host"` provider can delegate that check through `transport.bridge.decision`. Chat generation does not currently call this bridge. Desktop-local management requires Electron. |
+| Desktop integrations                | Desktop app mode, live wallpaper, window controls, and local model management require Electron services.                                                                                                                                    |
+| Android integrations                | Android AR, native speech engines, and device acceleration require Android services.                                                                                                                                                        |
 
 ## Plain JS Quickstart
 
@@ -115,7 +124,7 @@ This means:
 - `transport.mode: "host-bridge"` moves request execution to your host.
 - You often want both in production.
 
-If browser code must not hold vendor credentials, keep the real keys in your backend or native host and use `transport.mode: "host-bridge"`.
+If browser code must not hold vendor credentials, keep the real keys in your backend or native host and use `transport.mode: "host-bridge"`. The Decision settings `"host"` provider can delegate its connection check through `transport.bridge.decision`. This bridge is not part of chat generation.
 
 ## Common Deployment Patterns
 
@@ -226,6 +235,7 @@ Runtime ownership in host-bridge mode is still split:
 - The VAssist runtime still owns chat UI, selection context, toolbar workflows, panel state, and theme application.
 - TTS playback and queueing still happen in the browser runtime after your host returns audio.
 - STT audio capture still happens in the browser runtime before bytes are passed to `stt.transcribeAudio`.
+- The Decision API connection check can be delegated through `transport.bridge.decision`. The browser package does not receive the host's endpoint credentials.
 
 ## Control Surfaces You Will Actually Use
 
@@ -237,6 +247,7 @@ Runtime ownership in host-bridge mode is still split:
 | Control one specific instance          | `VAssistEmbedElementHandle`                                     | Best choice for multi-instance pages                                                             |
 | Control only the default host          | `window.VAssistEmbed`                                           | Convenient, but not a multi-instance API                                                         |
 | Control built-in AI toolbar items      | `aiToolbar` config                                              | Force input-focus/image-hover behavior and hide, whitelist, or reorder built-in toolbar items    |
+| Provide UI defaults                    | `ui` config                                                     | Optional deep partial settings for hosts that supply UI defaults                                 |
 | Lock or hide settings                  | `settings.policy`                                               | Use tab, section, field, or subtab target IDs                                                    |
 | Move popovers or canvas portals        | `mount.portalContainers`                                        | Mainly useful for shadow DOM hosts and custom overlay stacks                                     |
 | Replace built-in labels or icons       | `branding.labelOverrides`, `branding.iconOverrides`             | Non-React host customization path                                                                |
@@ -246,18 +257,18 @@ Runtime ownership in host-bridge mode is still split:
 
 ## Options Most Hosts Touch Early
 
-| Field                                           | Why it matters quickly                                                        |
-| ----------------------------------------------- | ----------------------------------------------------------------------------- |
-| `mount.hostId`                                  | Required for predictable DOM lookup and multi-instance orchestration          |
-| `shell.mode`                                    | Decides whether you are embedding chat, toolbar, or the full assistant        |
-| `aiToolbar`                                     | Controls where the built-in toolbar appears and which built-in items it shows |
-| `settings.policy`                               | Lets you hide or lock settings without forking UI                             |
-| `providers.mode`                                | Tells the runtime who owns provider setup                                     |
-| `transport.bridge`                              | Lets your host own AI, TTS, and STT execution                                 |
-| `theme.fontFamily` / `theme.monoFontFamily`     | Lets the host pick typography, but the host still loads the fonts             |
-| `storage`                                       | Controls persistence isolation or host-owned storage                          |
-| `assets.assetBaseUrl` / `assets.resourceLoader` | Controls where models, stages, motions, and other assets resolve from         |
-| `branding`                                      | Lets the host change app-facing labels and icons                              |
+| Field                                           | Why it matters quickly                                                            |
+| ----------------------------------------------- | --------------------------------------------------------------------------------- |
+| `mount.hostId`                                  | Required for predictable DOM lookup and multi-instance orchestration              |
+| `shell.mode`                                    | Decides whether you are embedding chat, toolbar, or the full assistant            |
+| `aiToolbar`                                     | Controls where the built-in toolbar appears and which built-in items it shows     |
+| `settings.policy`                               | Lets you hide or lock settings without forking UI                                 |
+| `providers.mode`                                | Tells the runtime who owns provider setup                                         |
+| `transport.bridge`                              | Lets your host own AI, TTS, and STT execution plus Decision API connection checks |
+| `theme.fontFamily` / `theme.monoFontFamily`     | Lets the host pick typography, but the host still loads the fonts                 |
+| `storage`                                       | Controls persistence isolation or host-owned storage                              |
+| `assets.assetBaseUrl` / `assets.resourceLoader` | Controls where models, stages, motions, and other assets resolve from             |
+| `branding`                                      | Lets the host change app-facing labels and icons                                  |
 
 ## Recommended Reading Order
 

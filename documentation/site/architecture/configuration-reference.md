@@ -114,6 +114,63 @@ features: {
 }
 ```
 
+## `ui`
+
+Optional host defaults for shared UI settings. This is a deep partial of `UIConfig`, exported as `VAssistUIConfig`. Values merge over saved settings on startup and when the host updates the config. Feature and theme constraints still take precedence. Most integrations can omit `ui` and let users manage their own settings.
+
+Browser embeds ignore UI settings that require Electron or Android services.
+
+| Field               | Default | Behavior                                                                                      |
+| ------------------- | ------- | --------------------------------------------------------------------------------------------- |
+| `enableAvatarShadow` | `true`  | Show a translucent cast shadow behind the avatar, or scene shadows on a loaded Stage. |
+
+### Native background settings
+
+These fields belong to shared `UIConfig` and can be persisted by the native apps. They also type-check inside a host's `ui` override, but require the owning platform's storage or IPC services to render images.
+
+| Field                                        | Default         | Behavior                                                                                                   |
+| -------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------- |
+| `desktopBackground.mode`                     | `images`        | Render images, a solid color, or a gradient.                                                                |
+| `desktopBackground.solidColor`               | `#111827`        | Solid background color in six-digit hexadecimal form.                                                      |
+| `desktopBackground.gradientStartColor`       | `#101827`        | Gradient start color in six-digit hexadecimal form.                                                        |
+| `desktopBackground.gradientEndColor`         | `#243b63`        | Gradient end color in six-digit hexadecimal form.                                                          |
+| `desktopBackground.gradientAngleDegrees`     | `135`           | Gradient angle from 0 to 360 degrees.                                                                      |
+| `desktopBackground.enabled`                  | `true`          | Render selected backgrounds in App and Wallpaper modes. Floating stays transparent.                        |
+| `desktopBackground.builtInIds`               | `['milky-way']`   | Select bundled backgrounds. The first ID is shown first.                                                   |
+| `desktopBackground.parallaxEnabled`          | `true`          | In App and interactive Wallpaper mode, follow mouse movement.                                              |
+| `desktopBackground.slideshowEnabled`         | `true`          | Fade through selected built-in and custom images when more than one is available.                          |
+| `desktopBackground.folderPath`               | `null`          | Original desktop folder path, combined with selected built-in images when present.                         |
+| `desktopBackground.imagePaths`               | `[]`            | Original custom desktop image paths. An empty list means no custom files are selected.                     |
+| `desktopBackground.slideshowIntervalSeconds` | `30`            | Hold each image for 5 to 3600 seconds before beginning the next fade.                                      |
+| `desktopBackground.fadeDurationSeconds`      | `2`             | Fade between images over 0 to 15 seconds.                                                                  |
+| `desktopBackground.brightnessPercent`        | `60`            | Background brightness from 20% to 100%.                                                                    |
+| `desktopBackground.contrastPercent`          | `100`           | Background contrast from 50% to 150%.                                                                       |
+| `desktopBackground.saturationPercent`        | `100`           | Color saturation from 0% to 200%.                                                                           |
+| `desktopBackground.blurPixels`               | `0`             | Blur radius from 0 to 12 pixels.                                                                            |
+| `desktopBackground.grayscalePercent`         | `0`             | Grayscale amount from 0% to 100%.                                                                           |
+| `desktopBackground.sepiaPercent`             | `0`             | Sepia amount from 0% to 100%.                                                                               |
+| `desktopBackground.hueRotateDegrees`         | `0`             | Hue rotation from 0 to 360 degrees.                                                                         |
+| `androidBackground.mode`                     | `images`        | Render images, a solid color, or a gradient.                                                                |
+| `androidBackground.solidColor`               | `#111827`        | Solid background color in six-digit hexadecimal form.                                                      |
+| `androidBackground.gradientStartColor`       | `#101827`        | Gradient start color in six-digit hexadecimal form.                                                        |
+| `androidBackground.gradientEndColor`         | `#243b63`        | Gradient end color in six-digit hexadecimal form.                                                          |
+| `androidBackground.gradientAngleDegrees`     | `135`           | Gradient angle from 0 to 360 degrees.                                                                      |
+| `androidBackground.enabled`                  | `true`          | Show or hide the background in the Android app and live wallpaper.                                        |
+| `androidBackground.builtInIds`               | `['milky-way']`   | Select bundled backgrounds. The first ID is shown first.                                                  |
+| `androidBackground.slideshowEnabled`         | `false`         | Cycle through selected built-in and imported backgrounds in the Android app and live wallpaper.           |
+| `androidBackground.parallaxEnabled`          | `true`          | Follow phone tilt and rotation with a smooth return toward center when the phone settles.                  |
+| `androidBackground.slideshowIntervalSeconds` | `30`            | Hold each image for 5 to 3600 seconds before beginning the next fade.                                      |
+| `androidBackground.fadeDurationSeconds`      | `2`             | Fade between images over 0 to 15 seconds.                                                                  |
+| `androidBackground.brightnessPercent`        | `60`            | Background brightness from 20% to 100%.                                                                    |
+| `androidBackground.contrastPercent`          | `100`           | Background contrast from 50% to 150%.                                                                       |
+| `androidBackground.saturationPercent`        | `100`           | Color saturation from 0% to 200%.                                                                           |
+| `androidBackground.blurPixels`               | `0`             | Blur radius from 0 to 12 pixels.                                                                            |
+| `androidBackground.grayscalePercent`         | `0`             | Grayscale amount from 0% to 100%.                                                                           |
+| `androidBackground.sepiaPercent`             | `0`             | Sepia amount from 0% to 100%.                                                                               |
+| `androidBackground.hueRotateDegrees`         | `0`             | Hue rotation from 0 to 360 degrees.                                                                         |
+
+Bundled wallpaper files ship with each native app. Android custom image blobs and their active state use background asset storage. Desktop built-ins are packaged under Electron resources, while user-selected files remain at their original paths. See [UI Settings](/settings/ui#android-backgrounds) and [Storage and Data](/architecture/storage-and-data) for the platform workflows and backup behavior.
+
 ## `settings`
 
 Controls which settings tabs, subtabs, sections, and fields are visible or editable in the in-app settings UI.
@@ -141,6 +198,7 @@ Controls which settings tabs, subtabs, sections, and fields are visible or edita
 ```ts
 "llm.provider";
 "llm.routing";
+"llm.decision";
 "llm.profiles";
 ```
 
@@ -153,6 +211,7 @@ Controls which settings tabs, subtabs, sections, and fields are visible or edita
 "ui.developer";
 "llm.provider";
 "llm.routing";
+"llm.decision";
 "llm.profiles";
 "tts.provider";
 "tts.remoteProfiles";
@@ -174,12 +233,23 @@ Controls which settings tabs, subtabs, sections, and fields are visible or edita
 "llm.provider.select";
 "llm.openai.apiKey";
 "llm.openai.model";
+"llm.openai.endpoint";
 "llm.ollama.endpoint";
+"llm.ollama.apiFormat";
 "llm.ollama.apiKey";
 "llm.ollama.model";
 "llm.routing.visionModel";
 "llm.routing.routerModel";
+"llm.decision.enabled";
+"llm.decision.provider";
+"llm.decision.endpoint";
+"llm.decision.model";
+"llm.decision.apiKey";
+"llm.decision.timeoutMs";
+"llm.decision.contextSize";
 "tts.enabled";
+"tts.accurateLipSync";
+"tts.legacyLipSync";
 "tts.provider.select";
 "tts.openai.apiKey";
 "tts.openai.model";
@@ -197,14 +267,22 @@ Controls which settings tabs, subtabs, sections, and fields are visible or edita
 "stt.openaiCompatible.model";
 ```
 
+LLM parameter settings use provider-specific targets in the form
+`llm.<provider>.<parameter>`. Providers are `openai`, `ollama`,
+`desktop-local`, `android-local`, and `chromeAi`. Parameter names follow the
+current `LLMParameters` type, including `temperature`, `maxTokens`, `topP`,
+`topK`, `minP`, `repeatPenalty`, `seed`, `contextSize`, `gpuLayers`,
+`batchSize`, `flashAttention`, `cacheTypeK`, and `ropeScaling`.
+
 ### Current runtime behavior
 
-- `hiddenTabs` and `readOnlyTabs` always apply.
+- `hiddenTabs` and `readOnlyTabs` apply to their nested settings rows and subtabs as well as the top-level tab.
 - `policy.hidden` and `policy.readOnly` are the preferred typed APIs. Unknown IDs are ignored during normalization.
 - `hiddenFields` still works as a legacy alias when the strings match the supported target IDs above.
 - `openSettings({ target })` uses the same target vocabulary to resolve the owning tab.
 - The current UI supports direct LLM subtab navigation and enforces hide/read-only behavior on the tagged settings rows backed by the field IDs above.
-- Section IDs are part of the public target vocabulary, but only sections explicitly wired by the current UI surface as the active nested target today.
+- Hiding or making `llm.decision` read-only applies to the complete Decision subtab. Decision fields can also be targeted individually.
+- Section IDs are part of the public target vocabulary. Behavior applies where the current UI explicitly wires that section target.
 
 ```ts
 settings: {
@@ -299,7 +377,7 @@ For third-party integrations, prefer `"full"`, `"deferred"`, or `"hidden"` unles
 
 ## `providers`
 
-Controls how AI, TTS, and STT provider configuration enters the runtime.
+Controls how AI, TTS, and STT provider configuration enters the runtime. The `ai` override includes current features such as decision-model settings and LLM parameter tuning.
 
 | Field                   | Type                                                       | Default                        | Description                                  |
 | ----------------------- | ---------------------------------------------------------- | ------------------------------ | -------------------------------------------- |
@@ -312,7 +390,7 @@ Controls how AI, TTS, and STT provider configuration enters the runtime.
 | Mode                  | Behavior                                                                             |
 | --------------------- | ------------------------------------------------------------------------------------ |
 | `"user-configurable"` | End users own provider setup and editing                                             |
-| `"preconfigured"`     | Host supplies defaults; users can still edit unless policy locks them                |
+| `"preconfigured"`     | Host supplies defaults. Users can still edit unless policy locks them                |
 | `"host-managed"`      | Host owns provider setup and can treat the settings UI as informational or read-only |
 
 Important distinction:
@@ -538,7 +616,7 @@ statusWarning;
 
 ## `transport`
 
-Controls how AI, TTS, and STT requests are executed.
+Controls how AI, TTS, and STT requests are executed. It also defines the host callback used by the Decision API settings connection check.
 
 | Field    | Type                                                            | Default                                | Description                               |
 | -------- | --------------------------------------------------------------- | -------------------------------------- | ----------------------------------------- |
@@ -570,7 +648,7 @@ If you provide `transport.bridge` and omit `transport.mode`, normalization resol
 
 | Method                                      | Required | Notes                                                                                                               |
 | ------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
-| `generateSpeech({ text, generateLipSync })` | Yes      | Return audio as `Blob`, `ArrayBuffer`, `Uint8Array`, or `number[]`; optional `mimeType` and `bvmdUrl` are supported |
+| `generateSpeech({ text, generateLipSync })` | Yes      | Return audio as `Blob`, `ArrayBuffer`, `Uint8Array`, or `number[]`. Optional `mimeType` and `bvmdUrl` are supported |
 | `configure(config)`                         | No       | Called when host-managed config changes                                                                             |
 | `isConfigured()`                            | No       | If omitted, the runtime assumes TTS is configured                                                                   |
 | `getCurrentProvider()`                      | No       | Return a plain string or `null` synchronously in the current runtime                                                |
@@ -588,6 +666,34 @@ The host bridge only generates audio. Playback, queueing, and lip-sync schedulin
 | `testRecording({ duration, deviceId })` | No       | Part of the exported bridge type, but the current built-in STT test flow still records locally and then calls `transcribeAudio` |
 
 The current runtime still records microphone audio in the browser, then passes the bytes to `stt.transcribeAudio`.
+
+### `transport.bridge.decision`
+
+Select the `"host"` Decision API provider to keep endpoint credentials in the
+embedding host. The host bridge must implement `decide()`. The built-in
+connection check calls `testConnection()` when supplied, or sends a small test
+request through `decide()` otherwise. `listModels()` is optional:
+
+```ts
+transport: {
+  mode: "host-bridge",
+  bridge: {
+    decision: {
+      async testConnection() {
+        return checkMyDecisionBackend();
+      },
+      async decide(request) {
+        return sendToMyDecisionBackend(request);
+      },
+    },
+  },
+}
+```
+
+The built-in Decision settings test uses this bridge when the provider is
+`"host"`. Remote and desktop-local providers continue to use their configured
+HTTP endpoints. The current chat-generation flow does not call
+`transport.bridge.decision`. This bridge covers the Decision settings API.
 
 ```ts
 function toBytes(input: VAssistBinaryLike): Uint8Array {

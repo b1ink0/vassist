@@ -17,7 +17,7 @@ const platformCards = [
   {
     title: "Desktop App",
     subtitle: "Electron + local server",
-    body: "node-llama-cpp for local LLM, Faster Whisper for STT, and GPT-SoVITS for TTS all served through a local HTTP server.",
+    body: "llama-server by default for local LLM, with node-llama-cpp as an alternative, plus Faster Whisper for STT and GPT-SoVITS for TTS, all served through a local HTTP server.",
   },
 ];
 
@@ -40,7 +40,7 @@ const capabilityRows = [
   {
     label: "Local Runtime",
     value:
-      "Android: llama.cpp + sherpa-onnx (whisper-tiny.en, vits-vctk). Desktop: node-llama-cpp + Faster Whisper + GPT-SoVITS.",
+      "Android: llama.cpp + sherpa-onnx (whisper-tiny.en, vits-vctk). Desktop: llama-server by default or node-llama-cpp + Faster Whisper + GPT-SoVITS.",
   },
   {
     label: "Config",

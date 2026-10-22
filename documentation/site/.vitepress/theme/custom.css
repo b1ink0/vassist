@@ -3,6 +3,77 @@
 :root {
   --vp-font-family-base: "Space Grotesk", "Segoe UI", sans-serif;
   --vp-font-family-mono: "IBM Plex Mono", "Cascadia Code", monospace;
+  color-scheme: light;
+  --vp-c-brand-1: #171717;
+  --vp-c-brand-2: #333333;
+  --vp-c-brand-3: #555555;
+  --vp-c-brand-soft: rgba(0, 0, 0, 0.08);
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-soft: #f7f7f7;
+  --vp-c-bg-alt: #f1f1f1;
+  --vp-c-text-1: #171717;
+  --vp-c-text-2: #444444;
+  --vp-c-text-3: #707070;
+  --vp-c-divider: rgba(0, 0, 0, 0.12);
+  --vp-c-divider-light: rgba(0, 0, 0, 0.08);
+  --vp-c-gutter: rgba(0, 0, 0, 0.08);
+  --vp-c-default-1: #e5e5e5;
+  --vp-c-default-2: #d9d9d9;
+  --vp-c-default-3: #cccccc;
+  --vp-c-default-soft: rgba(0, 0, 0, 0.05);
+  --vp-c-tip-1: #333333;
+  --vp-c-tip-2: rgba(0, 0, 0, 0.12);
+  --vp-c-tip-soft: rgba(0, 0, 0, 0.04);
+  --vp-c-note-1: #333333;
+  --vp-c-note-2: rgba(0, 0, 0, 0.12);
+  --vp-c-note-soft: rgba(0, 0, 0, 0.04);
+  --vp-c-warning-1: #5c4300;
+  --vp-c-warning-2: rgba(92, 67, 0, 0.18);
+  --vp-c-warning-soft: rgba(92, 67, 0, 0.05);
+  --vp-c-danger-1: #8b1e1e;
+  --vp-c-danger-2: rgba(139, 30, 30, 0.18);
+  --vp-c-danger-soft: rgba(139, 30, 30, 0.05);
+  --vp-code-block-bg: rgba(0, 0, 0, 0.04);
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-bg: #171717;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-hover-bg: #333333;
+  --vp-button-brand-active-text: #ffffff;
+  --vp-button-brand-active-bg: #444444;
+  --vp-button-alt-text: #222222;
+  --vp-button-alt-bg: rgba(0, 0, 0, 0.06);
+  --vp-button-alt-hover-bg: rgba(0, 0, 0, 0.1);
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(
+    115deg,
+    #171717 0%,
+    #777777 52%,
+    #333333 100%
+  );
+  --vassist-nav-bg: rgba(255, 255, 255, 0.86);
+  --vassist-nav-border: rgba(0, 0, 0, 0.1);
+  --vassist-surface: rgba(0, 0, 0, 0.025);
+  --vassist-surface-strong: rgba(255, 255, 255, 0.92);
+  --vassist-border: rgba(0, 0, 0, 0.12);
+  --vassist-shadow: 0 18px 44px rgba(0, 0, 0, 0.08);
+  --vassist-table-header: rgba(0, 0, 0, 0.05);
+  --vassist-table-row: rgba(0, 0, 0, 0.025);
+  --vassist-table-surface: rgba(0, 0, 0, 0.015);
+  --vassist-placeholder-border: rgba(0, 0, 0, 0.18);
+  --vassist-image-border: rgba(0, 0, 0, 0.08);
+  --vassist-image-bg: rgba(0, 0, 0, 0.02);
+  --vassist-hover-border: rgba(0, 0, 0, 0.24);
+  --vassist-hover-bg: rgba(0, 0, 0, 0.05);
+  --vassist-placeholder-bg:
+    linear-gradient(
+      135deg,
+      rgba(0, 0, 0, 0.04),
+      rgba(0, 0, 0, 0.01)
+    ),
+    rgba(255, 255, 255, 0.9);
+}
+
+.dark {
   color-scheme: dark;
   --vp-c-brand-1: #ffffff;
   --vp-c-brand-2: #ececec;
@@ -34,6 +105,12 @@
   --vp-c-danger-2: rgba(255, 255, 255, 0.16);
   --vp-c-danger-soft: rgba(255, 255, 255, 0.05);
   --vp-code-block-bg: rgba(255, 255, 255, 0.03);
+  --vp-home-hero-name-background: linear-gradient(
+    115deg,
+    #ffffff 0%,
+    #8c8c8c 52%,
+    #f2f2f2 100%
+  );
   --vp-button-brand-text: #000000;
   --vp-button-brand-bg: #ffffff;
   --vp-button-brand-hover-text: #000000;
@@ -43,13 +120,6 @@
   --vp-button-alt-text: #ffffff;
   --vp-button-alt-bg: rgba(255, 255, 255, 0.06);
   --vp-button-alt-hover-bg: rgba(255, 255, 255, 0.1);
-  --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: linear-gradient(
-    115deg,
-    #ffffff 0%,
-    #8c8c8c 52%,
-    #f2f2f2 100%
-  );
   --vassist-nav-bg: rgba(0, 0, 0, 0.8);
   --vassist-nav-border: rgba(255, 255, 255, 0.1);
   --vassist-surface: rgba(255, 255, 255, 0.03);
@@ -58,7 +128,12 @@
   --vassist-shadow: 0 18px 44px rgba(0, 0, 0, 0.4);
   --vassist-table-header: rgba(255, 255, 255, 0.06);
   --vassist-table-row: rgba(255, 255, 255, 0.03);
+  --vassist-table-surface: rgba(255, 255, 255, 0.02);
   --vassist-placeholder-border: rgba(255, 255, 255, 0.18);
+  --vassist-image-border: rgba(255, 255, 255, 0.08);
+  --vassist-image-bg: rgba(255, 255, 255, 0.02);
+  --vassist-hover-border: rgba(255, 255, 255, 0.28);
+  --vassist-hover-bg: rgba(255, 255, 255, 0.06);
   --vassist-placeholder-bg:
     linear-gradient(
       135deg,
@@ -141,7 +216,7 @@ body,
   overflow: hidden;
   border-radius: 16px;
   border: 1px solid var(--vassist-border);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--vassist-table-surface);
 }
 
 .vp-doc table th {
@@ -221,8 +296,8 @@ body,
 .doc-card-link:hover,
 .doc-card-link:focus-visible {
   transform: translateY(-2px);
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--vassist-hover-border);
+  background: var(--vassist-hover-bg);
 }
 
 .vp-doc a.doc-card-link,
@@ -256,8 +331,8 @@ body,
   display: block;
   width: 100%;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--vassist-image-border);
+  background: var(--vassist-image-bg);
 }
 
 .doc-figure figcaption {

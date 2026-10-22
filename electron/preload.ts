@@ -71,6 +71,23 @@ contextBridge.exposeInMainWorld("electron", {
     isOpen: () => ipcRenderer.invoke("input-window:is-open"),
   },
 
+  desktopBackground: {
+    chooseImages: (multiple?: boolean) =>
+      ipcRenderer.invoke("desktop-background:choose-images", multiple),
+    chooseFolder: () => ipcRenderer.invoke("desktop-background:choose-folder"),
+    listFolderImages: (folderPath: string) =>
+      ipcRenderer.invoke("desktop-background:list-folder-images", folderPath),
+    readImage: (imagePath: string) =>
+      ipcRenderer.invoke("desktop-background:read-image", imagePath),
+    readImagePreview: (imagePath: string) =>
+      ipcRenderer.invoke("desktop-background:read-image-preview", imagePath),
+    readBuiltInPreview: (backgroundId: string) =>
+      ipcRenderer.invoke(
+        "desktop-background:read-built-in-preview",
+        backgroundId,
+      ),
+  },
+
   // IPC communication for window-to-window state sync
   ipc: {
     send: (channel: string, data: unknown) => ipcRenderer.send(channel, data),

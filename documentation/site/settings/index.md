@@ -5,27 +5,27 @@ A tab-by-tab reference for everything in Settings. Jump to the tab you need.
 <div class="doc-grid">
   <a class="doc-card doc-card-link" href="./ui">
     <h3>UI</h3>
-    <p>Theme, toolbar toggles, chat position, keyboard shortcuts, backup/restore, Android backgrounds, developer tools.</p>
+    <p>Display, Chat, and Tools sub-tabs on every platform, plus desktop Mode when available. Tools includes AI toolbar, backup/restore, and developer settings.</p>
     <p class="doc-card-cta">UI settings →</p>
   </a>
   <a class="doc-card doc-card-link" href="./three-d">
     <h3>3D</h3>
-    <p>Avatar on/off, portrait mode, scene performance, PMX models and stages, VMD motions, and emotes.</p>
+    <p>Display, Performance, Models (Avatars and Stages), Animations, and Emotes, including Sticker Border controls.</p>
     <p class="doc-card-cta">3D settings →</p>
   </a>
   <a class="doc-card doc-card-link" href="./llm">
     <h3>LLM</h3>
-    <p>Main AI provider, saved backends, desktop local runtime, routing, local model downloads.</p>
+    <p>AI providers, saved backends, local model downloads, routing, desktop runtime, Android compute and LiteRT-LM.</p>
     <p class="doc-card-cta">LLM settings →</p>
   </a>
   <a class="doc-card doc-card-link" href="./tts">
     <h3>TTS</h3>
-    <p>Spoken replies: global toggle, provider, voice library, Kokoro and GPT-SoVITS setup.</p>
+    <p>Spoken replies: global toggle, provider, Android voice packs, Kokoro, GPT-SoVITS, and Supertonic 3.</p>
     <p class="doc-card-cta">TTS settings →</p>
   </a>
   <a class="doc-card doc-card-link" href="./stt">
     <h3>STT</h3>
-    <p>Microphone input: global toggle, provider, Whisper setup, Chrome AI speech.</p>
+    <p>Microphone input: global toggle, provider, Android Whisper, SenseVoice, Dolphin and compute options.</p>
     <p class="doc-card-cta">STT settings →</p>
   </a>
   <a class="doc-card doc-card-link" href="./ai-features">
@@ -43,13 +43,15 @@ A tab-by-tab reference for everything in Settings. Jump to the tab you need.
 - **Master toggles**: TTS and STT hide most of their controls until the master enable switch is on.
 - **Saved backends**: LLM, TTS, and STT all support named backend profiles so you can switch between providers without re-entering credentials.
 
-## Full tab summary
+## Settings navigation
 
-| Tab | What's there                                                                                                                       |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| UI  | Docs link, setup reset, theme, toolbar settings, chat placement, shortcuts, backup/export/import, Android backgrounds, debug panel |
-| 3D  | Avatar, portrait mode, physics, render quality, PMX model/stage library, VMD motion library, emote library                         |
-| LLM | Provider selector, saved backends, desktop local runtime and backend install, routing, local GGUF model manager, system prompts    |
-| TTS | Global speech toggle, provider, GPT-SoVITS voice library, Kokoro setup, OpenAI TTS, speech test                                    |
-| STT | Global transcription toggle, provider, desktop Whisper setup, Chrome AI speech, microphone picker, recording test                  |
-| AI+ | Translator, language detector, summarizer, rewriter, content writer: per-feature toggles and test actions                          |
+| Settings tab | Sub-tabs and navigation |
+| --- | --- |
+| UI | **Display**, **Chat**, and **Tools** sub-tabs are available on every platform. Desktop also shows **Mode** when the desktop mode API is available. Tools contains AI Toolbar, Backup & Restore, and Developer settings, with individual controls varying by platform. |
+| 3D | **Display**, **Performance**, **Models** (with **Avatars** and **Stages** sections), **Animations**, and **Emotes** sub-tabs. Sticker Border is in Display. |
+| LLM | **Provider**, **Routing**, **Decision**, and **Profiles** sub-tabs. |
+| TTS | No sub-tabs. Provider and speech controls are in one scrollable panel. Desktop Local offers GPT-SoVITS or Supertonic 3. |
+| STT | No sub-tabs. Provider and transcription controls are in one scrollable panel. |
+| AI+ | No sub-tabs. Translator, Language Detector, Summarizer, Text Rewriter, and Content Writer are sections in one panel. |
+
+Use the cards above to open each detailed reference. The detailed pages follow the controls within each section rather than repeating this overview.

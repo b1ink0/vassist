@@ -6,16 +6,19 @@ A map of the AI backends, speech engines, and Live Assistant asset formats VAssi
 
 | Option        | Where it appears                     | What it uses                                                                                                                | What you manage                                                           |
 | ------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Desktop Local | Desktop                              | [node-llama-cpp](https://github.com/withcatai/node-llama-cpp) on top of [llama.cpp](https://github.com/ggerganov/llama.cpp) | GGUF models, backend choice, context and token limits, local model folder |
-| Android Local | Android                              | Native [llama.cpp](https://github.com/ggerganov/llama.cpp) inside the Android project                                       | GGUF models stored in the app, local endpoint, on-device limits           |
+| Desktop Local | Desktop                              | [`llama-server`](https://github.com/ggml-org/llama.cpp/tree/master/tools/server) or [node-llama-cpp](https://github.com/withcatai/node-llama-cpp), both on top of [llama.cpp](https://github.com/ggml-org/llama.cpp) | GGUF models, inference engine and runtime backend, context and token limits, local model folder |
+| Android Local | Android                              | Native [llama.cpp](https://github.com/ggml-org/llama.cpp) for GGUF and LiteRT-LM for `.litertlm` models                   | GGUF or LiteRT-LM models stored in the app, compute unit, on-device limits |
 | Chrome AI     | Browser and extension when supported | Browser-side Gemini Nano and related Chrome AI APIs                                                                         | Browser flags, model download, output language, Chrome availability       |
 | Ollama        | All platforms                        | [Ollama](https://ollama.com/) server                                                                                        | Endpoint URL and model name                                               |
 | OpenAI        | All platforms                        | [OpenAI](https://platform.openai.com/docs/) hosted models                                                                   | API key and model choice                                                  |
 
+The optional [Decision API](/settings/llm#decision-api) is configured separately from chat generation. It can use a remote endpoint, an embed host bridge, or the desktop-local decision worker. It is off by default. Android can use a remote endpoint but does not include the native decision service.
+
 ### GGUF and mmproj notes
 
 - GGUF is the local model format used by the llama.cpp-based desktop and Android paths.
-- Some multimodal local models also need a matching mmproj file for image support.
+- Android also runs `.litertlm` models through LiteRT-LM.
+- Some multimodal GGUF models also need a matching `mmproj` file for image support.
 - That is why the local model controls in VAssist talk about model libraries, imports, downloads, and vision support instead of just asking for one model name.
 
 ## Speech output
@@ -23,8 +26,8 @@ A map of the AI backends, speech engines, and Live Assistant asset formats VAssi
 | Option                | Where it appears            | What it uses                                                                                                                                                                    | What you manage                                                     |
 | --------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | Kokoro                | Browser, extension, desktop | [`kokoro-js`](https://www.npmjs.com/package/kokoro-js) — Kokoro-82M ONNX model, runs in a shared audio worker via `onnxruntime-web` so inference does not block the main thread | Voice, speed, backend, cache, model initialization                  |
-| Android Local TTS     | Android                     | sherpa-onnx VITS with a built-in VCTK multi-speaker pack                                                                                                                        | Speaker ID, speed, Android-local model package                      |
-| Desktop Local TTS     | Desktop                     | [GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS) hosted through the desktop runtime                                                                                         | Reference voices, install state, language, speed, sampling settings |
+| Android Local TTS     | Android                     | sherpa-onnx voice packs: VCTK, Kitten Nano, and Supertonic                                                                                                                        | Installed pack, speaker, speed                                      |
+| Desktop Local TTS     | Desktop                     | GPT-SoVITS or Supertonic 3 hosted through the desktop runtime                                                                                                                   | Engine, install state, reference or built-in voice, language, speed, quality, sampling settings |
 | GPT-SoVITS Remote     | All platforms               | Remote GPT-SoVITS server                                                                                                                                                        | Server URL, saved voices, language, speed, sampling settings        |
 | OpenAI TTS            | All platforms               | OpenAI speech models                                                                                                                                                            | API key, model, voice                                               |
 | OpenAI-compatible TTS | All platforms               | OpenAI-style speech server                                                                                                                                                      | Endpoint, optional key, model, voice                                |
@@ -33,8 +36,8 @@ A map of the AI backends, speech engines, and Live Assistant asset formats VAssi
 
 | Option                | Where it appears                     | What it uses                                       | What you manage                                  |
 | --------------------- | ------------------------------------ | -------------------------------------------------- | ------------------------------------------------ |
-| Android Local STT     | Android                              | sherpa-onnx Whisper on device                      | Language and Android-local model package         |
-| Desktop Local STT     | Desktop                              | Faster Whisper service through the desktop runtime | Whisper model, language, threads, local endpoint |
+| Android Local STT     | Android                              | On-device Whisper, SenseVoice, or Dolphin through sherpa-onnx | Language, model, compute provider, optional Snapdragon QNN pack |
+| Desktop Local STT     | Desktop                              | faster-whisper or [whisper.cpp](https://github.com/ggml-org/whisper.cpp) through the desktop runtime | Engine, runtime pack, Whisper model, language, threads, local endpoint |
 | Chrome AI STT         | Browser and extension when supported | Browser-side Chrome AI speech recognition          | Output language, model download, required flags  |
 | OpenAI Whisper        | All platforms                        | OpenAI remote transcription                        | API key and remote model                         |
 | OpenAI-compatible STT | All platforms                        | OpenAI-style remote transcription server           | Endpoint, optional key, model, language          |

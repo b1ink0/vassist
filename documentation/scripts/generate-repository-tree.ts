@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -65,7 +66,11 @@ const FILE_TYPE_DEFINITIONS: FileTypeDefinition[] = [
   { label: "HTML", extensions: [".html"], isCode: true },
   { label: "Kotlin", extensions: [".kt"], isCode: true },
   { label: "Java", extensions: [".java"], isCode: true },
-  { label: "C and C++", extensions: [".c", ".cc", ".cpp", ".h", ".hpp"], isCode: true },
+  {
+    label: "C and C++",
+    extensions: [".c", ".cc", ".cpp", ".h", ".hpp"],
+    isCode: true,
+  },
   { label: "XML", extensions: [".xml"], isCode: false },
   { label: "Gradle", extensions: [".gradle"], isCode: false },
   { label: "Properties", extensions: [".properties"], isCode: false },
@@ -115,7 +120,8 @@ const BINARY_EXTENSIONS = new Set([
   ".pyc",
 ]);
 
-const normalizePath = (value: string): string => value.split(path.sep).join("/");
+const normalizePath = (value: string): string =>
+  value.split(path.sep).join("/");
 
 const getLineCount = (content: string): number => {
   if (content.length === 0) {
@@ -126,7 +132,9 @@ const getLineCount = (content: string): number => {
   return content.endsWith("\n") ? newlineCount : newlineCount + 1;
 };
 
-const getFileTypeDefinition = (relativePath: string): FileTypeDefinition | null => {
+const getFileTypeDefinition = (
+  relativePath: string,
+): FileTypeDefinition | null => {
   const normalizedPath = normalizePath(relativePath);
   const baseName = path.posix.basename(normalizedPath).toLowerCase();
 
@@ -195,11 +203,15 @@ const getRepositoryFileList = (): string[] => {
     .split(/\r?\n/u)
     .map((line) => line.trim())
     .filter(Boolean)
+    .filter((line) => existsSync(path.join(repositoryRoot, line)))
     .filter((line) => !isGeneratedDocsArtifact(line))
     .sort((left, right) => left.localeCompare(right));
 };
 
-const insertFilePath = (root: DirectoryNode, relativeFilePath: string): void => {
+const insertFilePath = (
+  root: DirectoryNode,
+  relativeFilePath: string,
+): void => {
   const parts = normalizePath(relativeFilePath).split("/");
   let current = root;
 
@@ -234,10 +246,12 @@ const countTree = (node: DirectoryNode): TreeCounts => {
 };
 
 const renderTree = (node: DirectoryNode, prefix = ""): string[] => {
-  const directoryNames = Array.from(node.directories.keys()).sort((left, right) =>
+  const directoryNames = Array.from(node.directories.keys()).sort(
+    (left, right) => left.localeCompare(right),
+  );
+  const fileNames = [...node.files].sort((left, right) =>
     left.localeCompare(right),
   );
-  const fileNames = [...node.files].sort((left, right) => left.localeCompare(right));
   const items: TreeEntry[] = [
     ...directoryNames.map((name) => ({ type: "directory" as const, name })),
     ...fileNames.map((name) => ({ type: "file" as const, name })),

@@ -1270,6 +1270,11 @@ const AssistantControlDock = ({
     onCameraReset: handleCameraReset,
     onCameraLockToggle: handleCameraLockToggle,
     onCameraSaveToggle: handleCameraSaveToggle,
+    onStickerBorderToggle: () =>
+      updateUIConfig(
+        "stickerBorder.enabled",
+        !uiConfig.stickerBorder?.enabled,
+      ),
     onToggleStagePanel: () => {
       setIsZoomExpanded(false);
       if (isEmotePanelOpen) setIsEmotePanelOpen(false);
@@ -1323,6 +1328,7 @@ const AssistantControlDock = ({
         cameraSaveEnabled={
           sceneRef.current?.metadata?.isCameraSaveEnabled?.() ?? false
         }
+        stickerBorderEnabled={uiConfig.stickerBorder?.enabled === true}
         actions={assistantControlActions}
         onSeek={handleEmoteSeek}
       />
@@ -1333,7 +1339,6 @@ const AssistantControlDock = ({
         isAndroid={isAndroid}
         isLightBackground={isLightBackground}
         isChatOpen={isChatOpen}
-        isNormalDesktop={isDesktopAttachedModeWindow}
         modelDisabled={modelDisabled}
         isVisible={isVisible}
         isAppearing={isAppearing}
