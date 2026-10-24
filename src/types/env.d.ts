@@ -1,8 +1,15 @@
+import type { VAssistEmbedApi, VAssistEmbedConfig } from "../embed/config";
+
 /**
  * @fileoverview Global environment variable type declarations
  */
 
 declare global {
+  interface Window {
+    VAssistEmbed?: VAssistEmbedApi;
+    VAssistEmbedConfig?: VAssistEmbedConfig;
+  }
+
   /**
    * True when building for Chrome Extension, false otherwise
    * @constant
@@ -26,6 +33,18 @@ declare global {
    * @constant
    */
   const __ANDROID_MODE__: boolean;
+
+  /**
+   * True when building for generic embedded usage, false otherwise
+   * @constant
+   */
+  const __EMBED_MODE__: boolean;
+
+  /**
+   * True when building in production mode, false for development
+   * @constant
+   */
+  const __PROD_MODE__: boolean;
 }
 
 export {};

@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "moduleResolution": "Bundler",
+    "module": "ESNext",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node", "vite/client"]
+  },
+  "include": ["electron", "src/types", "src/env.d.ts"],
+  "exclude": [
+    "dist",
+    "dist-desktop",
+    "build",
+    "node_modules",
+    "electron/server/gpt-sovits/**"
+  ]
+}

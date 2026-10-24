@@ -3,26 +3,20 @@
   "name": "VAssist",
   "version": "0.2.1",
   "description": "AI-powered Chrome extension with 3D character, chat, voice, and animation capabilities",
-  
-  "permissions": [
-    "storage",
-    "tabs",
-    "scripting",
-    "offscreen",
-    "activeTab"
-  ],
-  
+
+  "permissions": ["storage", "tabs", "scripting", "offscreen", "activeTab"],
+
   "host_permissions": [
     "https://api.openai.com/*",
     "http://localhost:*/*",
     "http://127.0.0.1:*/*"
   ],
-  
+
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
-  
+
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
@@ -30,20 +24,14 @@
       "run_at": "document_idle"
     }
   ],
-  
+
   "web_accessible_resources": [
     {
-      "resources": [
-        "assets/*",
-        "res/*",
-        "*.js",
-        "*.css",
-        "offscreen.html"
-      ],
+      "resources": ["assets/*", "res/*", "*.js", "*.css", "offscreen.html"],
       "matches": ["<all_urls>"]
     }
   ],
-  
+
   "action": {
     "default_icon": {
       "16": "icons/icon-16.png",
@@ -55,7 +43,7 @@
     },
     "default_title": "Toggle VAssist"
   },
-  
+
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -64,7 +52,7 @@
     "256": "icons/icon-256.png",
     "512": "icons/icon-512.png"
   },
-  
+
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   }

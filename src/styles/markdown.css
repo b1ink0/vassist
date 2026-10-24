@@ -1,0 +1,184 @@
+.vassist-markdown {
+  --sd-background: color-mix(
+    in srgb,
+    var(--vassist-surface-base) 88%,
+    transparent
+  );
+  --sd-foreground: currentColor;
+  --sd-card: color-mix(
+    in srgb,
+    var(--vassist-surface-elevated) 84%,
+    transparent
+  );
+  --sd-card-foreground: currentColor;
+  --sd-muted: color-mix(
+    in srgb,
+    var(--vassist-surface-highlight) 72%,
+    var(--vassist-surface-base) 28%
+  );
+  --sd-muted-foreground: var(--vassist-text-muted);
+  --sd-border: var(--vassist-border-color);
+  --sd-input: var(--vassist-border-color);
+  --sd-primary: var(--vassist-accent-color);
+  --sd-primary-foreground: var(--vassist-accent-text-color);
+  --sd-sidebar: color-mix(
+    in srgb,
+    var(--vassist-surface-elevated) 78%,
+    var(--vassist-surface-base) 22%
+  );
+  color: inherit;
+  font-family: inherit;
+  min-width: 0;
+}
+
+.glass-message-dark .vassist-markdown,
+.glass-message-user-dark .vassist-markdown {
+  --sd-background: color-mix(
+    in srgb,
+    var(--vassist-dark-glass-base) 82%,
+    transparent
+  );
+  --sd-card: color-mix(
+    in srgb,
+    var(--vassist-dark-glass-elevated) 84%,
+    transparent
+  );
+  --sd-muted: color-mix(
+    in srgb,
+    var(--vassist-dark-glass-highlight) 78%,
+    var(--vassist-dark-glass-base) 22%
+  );
+  --sd-muted-foreground: var(--vassist-inverse-text-muted);
+  --sd-border: var(--vassist-dark-glass-border);
+  --sd-input: var(--vassist-dark-glass-border);
+  --sd-sidebar: color-mix(
+    in srgb,
+    var(--vassist-dark-glass-elevated) 82%,
+    var(--vassist-dark-glass-base) 18%
+  );
+}
+
+.vassist-markdown > * {
+  min-width: 0;
+}
+
+.vassist-markdown p {
+  margin: 0;
+  color: inherit;
+}
+
+.vassist-markdown p + p {
+  margin-top: 0.75rem;
+}
+
+.vassist-markdown [data-streamdown="heading-1"],
+.vassist-markdown [data-streamdown="heading-2"],
+.vassist-markdown [data-streamdown="heading-3"],
+.vassist-markdown [data-streamdown="heading-4"],
+.vassist-markdown [data-streamdown="heading-5"],
+.vassist-markdown [data-streamdown="heading-6"] {
+  color: inherit;
+  letter-spacing: -0.02em;
+}
+
+.vassist-markdown [data-streamdown="heading-1"] {
+  margin-top: 0.25rem;
+}
+
+.vassist-markdown [data-streamdown="heading-2"],
+.vassist-markdown [data-streamdown="heading-3"] {
+  margin-top: 1rem;
+}
+
+.vassist-markdown [data-streamdown="ordered-list"],
+.vassist-markdown [data-streamdown="unordered-list"] {
+  margin: 0.75rem 0;
+}
+
+.vassist-markdown [data-streamdown="list-item"] {
+  color: inherit;
+}
+
+.vassist-markdown [data-streamdown="link"] {
+  color: color-mix(in srgb, var(--sd-primary) 82%, currentColor 18%);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+.vassist-markdown [data-streamdown="link"]:hover {
+  color: color-mix(in srgb, var(--sd-primary) 90%, currentColor 10%);
+}
+
+.vassist-markdown [data-streamdown="inline-code"] {
+  border: 1px solid color-mix(in srgb, var(--sd-border) 88%, white 12%);
+  background: color-mix(in srgb, var(--sd-muted) 80%, transparent 20%);
+  color: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.vassist-markdown [data-streamdown="code-block"],
+.vassist-markdown [data-streamdown="table-wrapper"],
+.vassist-markdown [data-streamdown="mermaid-block"] {
+  border-color: var(--sd-border);
+  background: color-mix(in srgb, var(--sd-card) 86%, transparent 14%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 10px 24px rgba(0, 0, 0, 0.18);
+  -webkit-backdrop-filter: blur(calc(var(--vassist-backdrop-blur) - 2px));
+  backdrop-filter: blur(calc(var(--vassist-backdrop-blur) - 2px));
+}
+
+.vassist-markdown [data-streamdown="code-block-body"],
+.vassist-markdown [data-streamdown="table"],
+.vassist-markdown [data-streamdown="mermaid"] {
+  background: transparent;
+}
+
+.vassist-markdown [data-streamdown="code-block-header"],
+.vassist-markdown [data-streamdown="table-header-cell"],
+.vassist-markdown [data-streamdown="table-header"] {
+  color: var(--sd-muted-foreground);
+}
+
+.vassist-markdown [data-streamdown="code-block-actions"],
+.vassist-markdown [data-streamdown="mermaid-block-actions"] {
+  border-color: var(--sd-border);
+  background: color-mix(in srgb, var(--sd-background) 82%, transparent 18%);
+}
+
+.vassist-markdown [data-streamdown="code-block-copy-button"],
+.vassist-markdown [data-streamdown="code-block-download-button"],
+.vassist-markdown [data-streamdown="table-wrapper"] button,
+.vassist-markdown [data-streamdown="mermaid-block"] button {
+  color: var(--sd-muted-foreground);
+}
+
+.vassist-markdown [data-streamdown="code-block-copy-button"]:hover,
+.vassist-markdown [data-streamdown="code-block-download-button"]:hover,
+.vassist-markdown [data-streamdown="table-wrapper"] button:hover,
+.vassist-markdown [data-streamdown="mermaid-block"] button:hover {
+  color: var(--sd-foreground);
+}
+
+.vassist-markdown [data-streamdown="table-cell"] {
+  color: inherit;
+}
+
+.vassist-markdown [data-streamdown="blockquote"] {
+  margin: 1rem 0;
+  border-left-color: color-mix(in srgb, var(--sd-border) 82%, white 18%);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--sd-muted) 72%, transparent 28%);
+  padding: 0.85rem 1rem;
+  color: var(--sd-muted-foreground);
+  font-style: normal;
+}
+
+.vassist-markdown [data-streamdown="horizontal-rule"] {
+  border-color: color-mix(in srgb, var(--sd-border) 80%, transparent 20%);
+}
+
+.vassist-markdown [data-streamdown="image"] {
+  border: 1px solid var(--sd-border);
+  box-shadow: var(--vassist-surface-shadow);
+}

@@ -4,7 +4,7 @@
  * Includes Tailwind CSS and app-specific styles
  */
 
-@import '../../src/index.css';
+@import "../../src/index.css";
 
 /* Shadow DOM specific resets */
 :host {
@@ -23,8 +23,9 @@
 #react-root {
   width: 100%;
   height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu",
+    "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

@@ -39,12 +39,14 @@ class RendererWebView(
 
     private var firstLoad = true
     private var isPaused = false
+    private lateinit var backgroundMotionBridge: BackgroundMotionBridge
     var filePathCallback: ValueCallback<Array<Uri>>? = null
     
     /**
      * Pause the wallpaper rendering (called when wallpaper is not visible)
      */
     fun pauseWallpaper() {
+        backgroundMotionBridge.setHostVisible(false)
         if (!isPaused) {
             isPaused = true
             Log.d(TAG, "Pausing wallpaper")
@@ -57,12 +59,17 @@ class RendererWebView(
      * Resume the wallpaper rendering (called when wallpaper becomes visible)
      */
     fun resumeWallpaper() {
+        backgroundMotionBridge.setHostVisible(true)
         if (isPaused) {
             isPaused = false
             Log.d(TAG, "Resuming wallpaper")
             onResume()
             evaluateJavascript("window.dispatchEvent(new CustomEvent('wallpaperVisibility', { detail: { visible: true } }));", null)
         }
+    }
+
+    fun disposeBackgroundMotion() {
+        backgroundMotionBridge.dispose()
     }
     
     /**
@@ -245,6 +252,12 @@ class RendererWebView(
     }
 
     init {
+        backgroundMotionBridge = BackgroundMotionBridge(context, this)
+        addJavascriptInterface(
+            backgroundMotionBridge,
+            BackgroundMotionBridge.JS_INTERFACE_NAME,
+        )
+
         // Enable debugging for development
         setWebContentsDebuggingEnabled(true)
         

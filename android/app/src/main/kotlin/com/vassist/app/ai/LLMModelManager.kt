@@ -1,14 +1,22 @@
 package com.vassist.app.ai
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import com.google.gson.Gson
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.net.HttpURLConnection
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.net.URLDecoder
+import java.net.URLEncoder
 import java.net.URL
 
 /**
@@ -40,6 +48,18 @@ class LLMModelManager(private val context: Context) {
         private const val TAG = "LLMModelManager"
         private const val MODELS_DIR = "models/llm"
     }
+
+    private val gson = Gson()
+
+    data class CatalogItem(
+        val id: String,
+        val label: String,
+        val value: String,
+        val description: String? = null,
+        val secondaryLabel: String? = null,
+        val downloads: Long? = null,
+        val likes: Long? = null
+    )
     
     /**
      * Progress callback for downloads
@@ -68,22 +88,436 @@ class LLMModelManager(private val context: Context) {
         val modelsDir = getModelsDirectory()
         
         val models = modelsDir.listFiles { file -> 
-            file.extension.equals("gguf", ignoreCase = true) &&
+            (file.extension.equals("gguf", ignoreCase = true) ||
+             file.extension.equals("litertlm", ignoreCase = true)) &&
             !file.name.startsWith("mmproj-", ignoreCase = true)
         }?.map { file ->
-            // Check if corresponding mmproj file exists
+            // Check if corresponding mmproj file exists (for traditional LLaVA models)
             val mmprojFile = File(modelsDir, "mmproj-${file.name}")
+            
+            // Check if the model is a known single-file vision model by parsing GGUF metadata natively!
+            val isNativeVisionModel = isVisionModelGguf(file)
             
             mapOf(
                 "name" to file.name,
                 "size" to file.length(),
                 "modified" to file.lastModified(),
-                "hasImageSupport" to mmprojFile.exists()
+                "hasImageSupport" to (mmprojFile.exists() || isNativeVisionModel)
             )
         } ?: emptyList()
         
         Log.i(TAG, "Found ${models.size} models in ${modelsDir.absolutePath}")
         return models
+    }
+
+    /**
+     * Parses the GGUF metadata header locally to definitively check if the model supports vision natively.
+     */
+    private fun isVisionModelGguf(file: File): Boolean {
+        if (!file.exists() || file.length() < 24) return false
+
+        try {
+            RandomAccessFile(file, "r").use { raf ->
+                val headerBytes = ByteArray(24)
+                raf.readFully(headerBytes)
+                val buffer = ByteBuffer.wrap(headerBytes).order(ByteOrder.LITTLE_ENDIAN)
+
+                val magic = buffer.getInt()
+                if (magic != 0x46554747) { // "GGUF" in ASCII
+                    return false
+                }
+
+                val version = buffer.getInt()
+                val tensorCount = buffer.getLong()
+                val kvCount = buffer.getLong()
+
+                // Safe limit to avoid reading the whole file if something is wrong
+                val maxKvsToRead = minOf(kvCount, 100L)
+
+                for (i in 0 until maxKvsToRead) {
+                    val keyLenBytes = ByteArray(8)
+                    raf.readFully(keyLenBytes)
+                    val keyLen = ByteBuffer.wrap(keyLenBytes).order(ByteOrder.LITTLE_ENDIAN).getLong()
+
+                    if (keyLen < 0 || keyLen > 1024) break // Sanity check
+
+                    val keyBytes = ByteArray(keyLen.toInt())
+                    raf.readFully(keyBytes)
+                    val key = String(keyBytes, Charsets.UTF_8)
+
+                    val valueTypeBytes = ByteArray(4)
+                    raf.readFully(valueTypeBytes)
+                    val valueType = ByteBuffer.wrap(valueTypeBytes).order(ByteOrder.LITTLE_ENDIAN).getInt()
+
+                    if (key == "general.architecture" && valueType == 8) { // 8 is STRING
+                        val strLenBytes = ByteArray(8)
+                        raf.readFully(strLenBytes)
+                        val strLen = ByteBuffer.wrap(strLenBytes).order(ByteOrder.LITTLE_ENDIAN).getLong()
+
+                        if (strLen in 1..256) {
+                            val strBytes = ByteArray(strLen.toInt())
+                            raf.readFully(strBytes)
+                            val arch = String(strBytes, Charsets.UTF_8).lowercase()
+                            
+                            Log.d(TAG, "Parsed GGUF architecture for ${file.name}: $arch")
+                            
+                            // Known multimodal architectures supported by llama.cpp
+                            return arch in listOf("mllama", "qwen2vl", "qwen35", "llava", "clip", "minicpmv")
+                        }
+                    }
+
+                    // Skip value data based on type to reach the next KV pair
+                    skipGgufValue(raf, valueType)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing GGUF header for ${file.name}", e)
+        }
+        return false
+    }
+
+    private fun skipGgufValue(raf: RandomAccessFile, type: Int) {
+        when (type) {
+            0, 1, 7 -> raf.skipBytes(1) // UINT8, INT8, BOOL
+            2, 3 -> raf.skipBytes(2) // UINT16, INT16
+            4, 5, 6 -> raf.skipBytes(4) // UINT32, INT32, FLOAT32
+            10, 11, 12 -> raf.skipBytes(8) // UINT64, INT64, FLOAT64
+            8 -> { // STRING
+                val lenBytes = ByteArray(8)
+                raf.readFully(lenBytes)
+                val len = ByteBuffer.wrap(lenBytes).order(ByteOrder.LITTLE_ENDIAN).getLong()
+                raf.skipBytes(len.toInt())
+            }
+            9 -> { // ARRAY
+                val typeBytes = ByteArray(4)
+                raf.readFully(typeBytes)
+                val itemType = ByteBuffer.wrap(typeBytes).order(ByteOrder.LITTLE_ENDIAN).getInt()
+                
+                val lenBytes = ByteArray(8)
+                raf.readFully(lenBytes)
+                val len = ByteBuffer.wrap(lenBytes).order(ByteOrder.LITTLE_ENDIAN).getLong()
+                
+                for (i in 0 until len) {
+                    skipGgufValue(raf, itemType)
+                }
+            }
+        }
+    }
+
+    private fun paginateItems(items: List<CatalogItem>, page: Int, pageSize: Int): Map<String, Any?> {
+        val normalizedPage = page.coerceAtLeast(1)
+        val normalizedPageSize = pageSize.coerceIn(1, 50)
+        val startIndex = (normalizedPage - 1) * normalizedPageSize
+        val endIndex = (startIndex + normalizedPageSize).coerceAtMost(items.size)
+        val pageItems = if (startIndex >= items.size) emptyList() else items.subList(startIndex, endIndex)
+        val nextCursor = if (endIndex < items.size) (normalizedPage + 1).toString() else null
+
+        return mapOf(
+            "success" to true,
+            "items" to pageItems,
+            "total" to items.size,
+            "nextCursor" to nextCursor
+        )
+    }
+
+    private fun createConnection(url: String, accept: String = "application/json"): HttpURLConnection {
+        return (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            setRequestProperty("User-Agent", "VAssist/1.0")
+            setRequestProperty("Accept", accept)
+            connectTimeout = 30000
+            readTimeout = 30000
+        }
+    }
+
+    private fun parseNextCursor(linkHeader: String?): String? {
+        if (linkHeader.isNullOrBlank()) {
+            return null
+        }
+        val nextMatch = Regex("<([^>]+)>;\\s*rel=\"next\"", RegexOption.IGNORE_CASE).find(linkHeader)
+            ?: return null
+        val nextUrl = nextMatch.groupValues.getOrNull(1).orEmpty()
+        if (nextUrl.isBlank()) {
+            return null
+        }
+
+        return try {
+            Regex("[?&]cursor=([^&>]+)").find(nextUrl)?.groupValues?.getOrNull(1)?.let {
+                URLDecoder.decode(it, Charsets.UTF_8.name())
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun encodeRepoId(repoId: String): String {
+        return repoId.split("/").joinToString("/") { segment ->
+            URLEncoder.encode(segment, Charsets.UTF_8.name()).replace("+", "%20")
+        }
+    }
+
+    private fun encodePathSegments(filePath: String): String {
+        return filePath.split("/").joinToString("/") { segment ->
+            URLEncoder.encode(segment, Charsets.UTF_8.name()).replace("+", "%20")
+        }
+    }
+
+    suspend fun searchOllamaModels(query: String, page: Int, pageSize: Int): Map<String, Any?> = withContext(Dispatchers.IO) {
+        try {
+            val connection = createConnection("https://ollama.com/library", "text/html")
+            val html = connection.inputStream.bufferedReader().use { it.readText() }
+            connection.disconnect()
+
+            val normalizedQuery = query.trim().lowercase()
+            val seen = linkedSetOf<String>()
+            val regex = Regex("/library/([a-z0-9._-]+)", RegexOption.IGNORE_CASE)
+            regex.findAll(html).forEach { match ->
+                val slug = match.groupValues.getOrNull(1)?.trim()?.lowercase().orEmpty()
+                if (slug.isNotBlank()) {
+                    seen.add(slug)
+                }
+            }
+
+            val items = seen
+                .filter { normalizedQuery.isBlank() || it.contains(normalizedQuery) }
+                .sorted()
+                .map { slug ->
+                    CatalogItem(
+                        id = slug,
+                        label = slug,
+                        value = slug,
+                        secondaryLabel = "Ollama library"
+                    )
+                }
+
+            paginateItems(items, page, pageSize)
+        } catch (e: Exception) {
+            Log.e(TAG, "searchOllamaModels failed", e)
+            mapOf("success" to false, "items" to emptyList<CatalogItem>(), "error" to e.message)
+        }
+    }
+
+    suspend fun listOllamaModelTags(modelId: String, query: String, page: Int, pageSize: Int): Map<String, Any?> = withContext(Dispatchers.IO) {
+        try {
+            val normalizedModelId = modelId.trim().lowercase()
+            if (normalizedModelId.isBlank()) {
+                return@withContext mapOf("success" to true, "items" to emptyList<CatalogItem>(), "total" to 0, "nextCursor" to null)
+            }
+
+            val connection = createConnection("https://ollama.com/library/${URLEncoder.encode(normalizedModelId, Charsets.UTF_8.name()).replace("+", "%20")}", "text/html")
+            val html = connection.inputStream.bufferedReader().use { it.readText() }
+            connection.disconnect()
+
+            val normalizedQuery = query.trim().lowercase()
+            val seen = linkedSetOf<String>()
+            val tagRegex = Regex("${Regex.escape(normalizedModelId)}:([a-z0-9._-]+)", RegexOption.IGNORE_CASE)
+            tagRegex.findAll(html).forEach { match ->
+                val tag = match.groupValues.getOrNull(1)?.trim()?.lowercase().orEmpty()
+                if (tag.isNotBlank()) {
+                    val value = "$normalizedModelId:$tag"
+                    if (normalizedQuery.isBlank() || value.contains(normalizedQuery) || tag.contains(normalizedQuery)) {
+                        seen.add(value)
+                    }
+                }
+            }
+
+            val values = if (seen.isEmpty()) listOf("$normalizedModelId:latest") else seen.toList()
+            val items = values.map { value ->
+                CatalogItem(
+                    id = value,
+                    label = value,
+                    value = value,
+                    secondaryLabel = if (value.endsWith(":latest")) "Default tag" else "Variant"
+                )
+            }
+
+            paginateItems(items, page, pageSize)
+        } catch (e: Exception) {
+            Log.e(TAG, "listOllamaModelTags failed", e)
+            mapOf("success" to false, "items" to emptyList<CatalogItem>(), "error" to e.message)
+        }
+    }
+
+    suspend fun searchHuggingFaceModels(query: String, cursor: String?, pageSize: Int): Map<String, Any?> = withContext(Dispatchers.IO) {
+        try {
+            // Search both GGUF- and LiteRT-LM-tagged repos and merge results.
+            // The opaque pagination cursor encodes both underlying cursors.
+            data class PageResult(val items: List<Pair<String, JsonObject?>>, val next: String?, val total: Int?)
+
+            fun fetch(filter: String, cursorPart: String?): PageResult {
+                val uriBuilder = Uri.parse("https://huggingface.co/api/models").buildUpon()
+                    .appendQueryParameter("filter", filter)
+                    .appendQueryParameter("limit", pageSize.coerceIn(1, 50).toString())
+                    .appendQueryParameter("sort", "trendingScore")
+                if (query.trim().isNotBlank()) {
+                    uriBuilder.appendQueryParameter("search", query.trim())
+                }
+                if (!cursorPart.isNullOrBlank()) {
+                    uriBuilder.appendQueryParameter("cursor", cursorPart)
+                }
+                val connection = createConnection(uriBuilder.build().toString())
+                val body = connection.inputStream.bufferedReader().use { it.readText() }
+                val linkHeader = connection.getHeaderField("Link")
+                val totalHeader = connection.getHeaderField("X-Total-Count")
+                connection.disconnect()
+
+                val payload = gson.fromJson(body, JsonArray::class.java)
+                val items = payload.mapNotNull { element ->
+                    val obj = element as? JsonObject ?: return@mapNotNull null
+                    val repoId = obj.get("id")?.asString ?: return@mapNotNull null
+                    repoId to obj
+                }
+                return PageResult(items, parseNextCursor(linkHeader), totalHeader?.toIntOrNull())
+            }
+
+            // Decode merged cursor: Base64 of "ggufCursor|litertCursor" (either side may be empty)
+            var ggufCursor: String? = null
+            var litertCursor: String? = null
+            if (!cursor.isNullOrBlank()) {
+                try {
+                    val decoded = String(java.util.Base64.getUrlDecoder().decode(cursor), Charsets.UTF_8)
+                    ggufCursor = decoded.substringBefore("|").ifBlank { null }
+                    litertCursor = decoded.substringAfter("|").ifBlank { null }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to decode merged HF cursor", e)
+                }
+            }
+
+            val halfLimit = (pageSize.coerceIn(1, 50) + 1) / 2
+
+            fun fetchWithLimit(filter: String, cursorPart: String?): PageResult {
+                val savedLimit = pageSize
+                // temporarily respect half limit per source so merged page ~= pageSize
+                val result = if (halfLimit < pageSize) {
+                    try {
+                        val uriBuilder = Uri.parse("https://huggingface.co/api/models").buildUpon()
+                            .appendQueryParameter("filter", filter)
+                            .appendQueryParameter("limit", halfLimit.toString())
+                            .appendQueryParameter("sort", "trendingScore")
+                        if (query.trim().isNotBlank()) uriBuilder.appendQueryParameter("search", query.trim())
+                        if (!cursorPart.isNullOrBlank()) uriBuilder.appendQueryParameter("cursor", cursorPart)
+                        val connection = createConnection(uriBuilder.build().toString())
+                        val body = connection.inputStream.bufferedReader().use { it.readText() }
+                        val linkHeader = connection.getHeaderField("Link")
+                        val totalHeader = connection.getHeaderField("X-Total-Count")
+                        connection.disconnect()
+                        val payload = gson.fromJson(body, JsonArray::class.java)
+                        PageResult(payload.mapNotNull { element ->
+                            val obj = element as? JsonObject ?: return@mapNotNull null
+                            val repoId = obj.get("id")?.asString ?: return@mapNotNull null
+                            repoId to obj
+                        }, parseNextCursor(linkHeader), totalHeader?.toIntOrNull())
+                    } catch (e: Exception) {
+                        Log.e(TAG, "HF sub-search failed for filter=$filter", e)
+                        PageResult(emptyList(), null, null)
+                    }
+                } else fetch(filter, cursorPart)
+                return result
+            }
+
+            val ggufPage = fetchWithLimit("gguf", ggufCursor)
+            val litertPage = fetchWithLimit("litert-lm", litertCursor)
+
+            // Merge, dedupe by repo id (prefer first occurrence), derive label from tags
+            data class MergedItem(val item: CatalogItem)
+
+            val seen = LinkedHashMap<String, CatalogItem>()
+            fun register(repoId: String, obj: JsonObject?, defaultTag: String) {
+                if (seen.containsKey(repoId)) {
+                    // Enrich existing label if the other tag also matches this repo
+                    return
+                }
+                val downloads = obj?.get("downloads")?.takeIf { !it.isJsonNull }?.asLong
+                val likes = obj?.get("likes")?.takeIf { !it.isJsonNull }?.asLong
+                val pipelineTag = obj?.get("pipeline_tag")?.takeIf { !it.isJsonNull }?.asString
+                val tags = obj?.getAsJsonArray("tags")
+                val hasGguf = tags?.any { it.isJsonPrimitive && it.asString == "gguf" } == true || defaultTag == "GGUF"
+                val hasLitert = tags?.any { it.isJsonPrimitive && (it.asString == "litertlm" || it.asString == "litert-lm") } == true || defaultTag == "LiteRT-LM"
+                val formatLabel = when {
+                    hasGguf && hasLitert -> "GGUF + LiteRT-LM"
+                    hasLitert -> "LiteRT-LM"
+                    else -> "GGUF"
+                }
+                val descriptionParts = listOfNotNull(
+                    downloads?.let { "${String.format("%,d", it)} downloads" },
+                    likes?.let { "${String.format("%,d", it)} likes" },
+                    pipelineTag,
+                    formatLabel
+                )
+                seen[repoId] = CatalogItem(
+                    id = repoId,
+                    label = repoId,
+                    value = repoId,
+                    description = descriptionParts.joinToString(" • ").ifBlank { null },
+                    secondaryLabel = formatLabel,
+                    downloads = downloads,
+                    likes = likes
+                )
+            }
+
+            ggufPage.items.forEach { (id, obj) -> register(id, obj, "GGUF") }
+            litertPage.items.forEach { (id, obj) -> register(id, obj, "LiteRT-LM") }
+
+            val items = seen.values.toList()
+
+            // Re-encode both cursors for the next page
+            val nextCursor = if (ggufPage.next != null || litertPage.next != null) {
+                java.util.Base64.getUrlEncoder().encodeToString(
+                    "${ggufPage.next.orEmpty()}|${litertPage.next.orEmpty()}".toByteArray(Charsets.UTF_8)
+                )
+            } else null
+
+            mapOf(
+                "success" to true,
+                "items" to items,
+                "nextCursor" to nextCursor,
+                "total" to (ggufPage.total ?: 0) + (litertPage.total ?: 0)
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "searchHuggingFaceModels failed", e)
+            mapOf("success" to false, "items" to emptyList<CatalogItem>(), "error" to e.message)
+        }
+    }
+
+    suspend fun listHuggingFaceFiles(repoId: String, query: String, page: Int, pageSize: Int): Map<String, Any?> = withContext(Dispatchers.IO) {
+        try {
+            val normalizedRepoId = repoId.trim()
+            if (normalizedRepoId.isBlank()) {
+                return@withContext mapOf("success" to true, "items" to emptyList<CatalogItem>(), "total" to 0, "nextCursor" to null)
+            }
+
+            val connection = createConnection("https://huggingface.co/api/models/${encodeRepoId(normalizedRepoId)}")
+            val body = connection.inputStream.bufferedReader().use { it.readText() }
+            connection.disconnect()
+
+            val payload = gson.fromJson(body, JsonObject::class.java)
+            val revision = payload.get("sha")?.takeIf { !it.isJsonNull }?.asString ?: "main"
+            val siblings = payload.getAsJsonArray("siblings") ?: JsonArray()
+            val normalizedQuery = query.trim().lowercase()
+
+            val items = siblings.mapNotNull { element ->
+                val obj = element as? JsonObject ?: return@mapNotNull null
+                val filePath = obj.get("rfilename")?.takeIf { !it.isJsonNull }?.asString ?: return@mapNotNull null
+                val lowerFilePath = filePath.lowercase()
+                val isModelFile = lowerFilePath.endsWith(".gguf") || lowerFilePath.endsWith(".litertlm")
+                if (!isModelFile || lowerFilePath.contains("mmproj") || (normalizedQuery.isNotBlank() && !lowerFilePath.contains(normalizedQuery))) {
+                    return@mapNotNull null
+                }
+
+                CatalogItem(
+                    id = filePath,
+                    label = filePath.substringAfterLast('/'),
+                    value = "https://huggingface.co/$normalizedRepoId/resolve/$revision/${encodePathSegments(filePath)}?download=true",
+                    description = normalizedRepoId,
+                    secondaryLabel = filePath
+                )
+            }.sortedBy { it.secondaryLabel ?: it.label }
+
+            paginateItems(items, page, pageSize)
+        } catch (e: Exception) {
+            Log.e(TAG, "listHuggingFaceFiles failed", e)
+            mapOf("success" to false, "items" to emptyList<CatalogItem>(), "error" to e.message)
+        }
     }
     
     /**
@@ -96,17 +530,18 @@ class LLMModelManager(private val context: Context) {
     suspend fun downloadFromUrl(
         url: String, 
         progressListener: DownloadProgressListener? = null
-    ): Map<String, Any> = withContext(Dispatchers.IO) {
+    ): Map<String, Any?> = withContext(Dispatchers.IO) {
         try {
             Log.i(TAG, "Downloading model from URL: $url")
             
             // Extract filename from URL
             var filename = url.substringAfterLast("/").substringBefore("?")
             
-            if (!filename.endsWith(".gguf", ignoreCase = true)) {
+            if (!filename.endsWith(".gguf", ignoreCase = true) &&
+                !filename.endsWith(".litertlm", ignoreCase = true)) {
                 return@withContext mapOf(
                     "success" to false,
-                    "error" to "Invalid file: must be a .gguf model file"
+                    "error" to "Invalid file: must be a .gguf or .litertlm model file"
                 )
             }
             
@@ -350,7 +785,7 @@ class LLMModelManager(private val context: Context) {
     suspend fun pullFromOllama(
         modelName: String,
         progressListener: DownloadProgressListener? = null
-    ): Map<String, Any> = withContext(Dispatchers.IO) {
+    ): Map<String, Any?> = withContext(Dispatchers.IO) {
         try {
             Log.i(TAG, "Pulling model from Ollama registry: $modelName")
             
@@ -672,7 +1107,7 @@ class LLMModelManager(private val context: Context) {
      * @param fileName Original file name (should be .gguf)
      * @return Map with success status, path, and error (if any)
      */
-    fun importFromUri(sourceUri: android.net.Uri, fileName: String): Map<String, Any> {
+    fun importFromUri(sourceUri: android.net.Uri, fileName: String): Map<String, Any?> {
         return try {
             // Validate filename
             if (!fileName.endsWith(".gguf", ignoreCase = true)) {
@@ -732,7 +1167,7 @@ class LLMModelManager(private val context: Context) {
      * @param filename Model filename to delete
      * @return Map with success status and error (if any)
      */
-    fun deleteModel(filename: String): Map<String, Any> {
+    fun deleteModel(filename: String): Map<String, Any?> {
         return try {
             val modelsDir = getModelsDirectory()
             val file = File(modelsDir, filename)

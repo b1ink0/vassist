@@ -1,18 +1,103 @@
 /**
- * @fileoverview Type definitions for Electron API exposed via preload script 
+ * @fileoverview Type definitions for Electron API exposed via preload script
  */
+
+import type { AndroidAPI } from "./android";
 
 export interface ElectronWindow {
   minimize: () => Promise<void>;
   maximize: () => Promise<void>;
   close: () => Promise<void>;
   toggleAlwaysOnTop: () => Promise<boolean>;
-  setIgnoreMouseEvents: (ignore: boolean, options?: { forward?: boolean }) => Promise<void>;
+  setIgnoreMouseEvents: (
+    ignore: boolean,
+    options?: { forward?: boolean },
+  ) => Promise<void>;
   frontendReady: () => Promise<void>;
   setPosition: (x: number, y: number) => Promise<void>;
+  setBounds: (
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ) => Promise<void>;
   getPosition: () => Promise<{ x: number; y: number }>;
+  getCursorScreenPoint?: () => Promise<{ x: number; y: number }>;
   setSize: (width: number, height: number) => Promise<void>;
   getSize: () => Promise<{ width: number; height: number }>;
+  getDesktopMode: () => Promise<{
+    mode: "floating-app" | "app" | "live-wallpaper";
+    liveWallpaperInteraction: "non-interactive" | "interactive";
+    controlPlacement: "attached" | "detached";
+  }>;
+  setDesktopMode: (
+    request:
+      | "floating-app"
+      | "app"
+      | "live-wallpaper"
+      | {
+          mode: "floating-app" | "app" | "live-wallpaper";
+          liveWallpaperInteraction?: "non-interactive" | "interactive";
+          controlPlacement?: "attached" | "detached";
+        },
+  ) => Promise<void>;
+  updateWindowSizeForZoom?: (width: number, height: number) => Promise<void>;
+  setNativeDevToolsEnabled?: (enabled: boolean) => Promise<boolean>;
+  getNativeDevToolsEnabled?: () => Promise<boolean>;
+}
+
+export interface ElectronServerAPI {
+  start: (
+    config?: Record<string, unknown>,
+  ) => Promise<{ success?: boolean; error?: string } | unknown>;
+  stop: () => Promise<void>;
+  getStatus?: () => Promise<unknown>;
+}
+
+export interface ElectronLLMAPI {
+  getBackendStatus?: (
+    backend: string,
+  ) => Promise<{ success?: boolean; selectedInstalled?: boolean } | unknown>;
+  searchOllamaModels?: (
+    query: string,
+    page?: number,
+    pageSize?: number,
+  ) => Promise<unknown>;
+  listOllamaModelTags?: (
+    modelId: string,
+    query?: string,
+    page?: number,
+    pageSize?: number,
+  ) => Promise<unknown>;
+  searchHuggingFaceModels?: (
+    query: string,
+    cursor?: string,
+    pageSize?: number,
+  ) => Promise<unknown>;
+  listHuggingFaceFiles?: (
+    repoId: string,
+    query?: string,
+    page?: number,
+    pageSize?: number,
+  ) => Promise<unknown>;
+  [method: string]: ((...args: unknown[]) => Promise<unknown>) | undefined;
+}
+
+export interface ElectronSetupAPI {
+  [method: string]: ((...args: unknown[]) => unknown) | undefined;
+}
+
+export interface ElectronLlamaServerAPI {
+  getStatus?: () => Promise<unknown>;
+  getLatestBuild?: () => Promise<string>;
+  install?: (
+    backend: string,
+    channel?: "pinned" | "latest",
+  ) => Promise<unknown>;
+  deleteBackend?: (backend: string) => Promise<unknown>;
+  onInstallLog?: (callback: (log: unknown) => void) => () => void;
+  onInstallProgress?: (callback: (progress: unknown) => void) => () => void;
+  onInstallComplete?: (callback: (result: unknown) => void) => () => void;
 }
 
 export interface ElectronInputWindow {
@@ -21,8 +106,46 @@ export interface ElectronInputWindow {
   isOpen: () => Promise<boolean>;
 }
 
+export interface ElectronDesktopBackground {
+  chooseImages: (multiple?: boolean) => Promise<{
+    success: boolean;
+    canceled?: boolean;
+    paths?: string[];
+    error?: string;
+  }>;
+  chooseFolder: () => Promise<{
+    success: boolean;
+    canceled?: boolean;
+    folderPath?: string;
+    images?: Array<{ path: string; name: string }>;
+    error?: string;
+  }>;
+  listFolderImages: (folderPath: string) => Promise<{
+    success: boolean;
+    images?: Array<{ path: string; name: string }>;
+    error?: string;
+  }>;
+  readImage: (imagePath: string) => Promise<{
+    success: boolean;
+    dataUrl?: string;
+    error?: string;
+  }>;
+  readImagePreview: (imagePath: string) => Promise<{
+    success: boolean;
+    dataUrl?: string;
+    error?: string;
+  }>;
+  readBuiltInPreview: (backgroundId: string) => Promise<{
+    success: boolean;
+    dataUrl?: string;
+    error?: string;
+  }>;
+}
+
 export interface ElectronShortcuts {
-  register: (shortcuts: any) => Promise<void>;
+  register: (
+    shortcuts: Record<string, string | boolean | null | undefined>,
+  ) => Promise<void>;
   onOpenChat: (callback: () => void) => () => void;
   onToggleModel: (callback: () => void) => () => void;
 }
@@ -37,13 +160,17 @@ export interface ElectronApp {
 }
 
 export interface ElectronIPC {
-  send: (channel: string, data?: any) => void;
-  on: (channel: string, callback: (...args: any[]) => void) => () => void;
+  send: (channel: string, data?: unknown) => void;
+  on: <TArgs extends unknown[]>(
+    channel: string,
+    callback: (...args: TArgs) => void,
+  ) => () => void;
 }
 
 export interface ElectronAPI {
   window: ElectronWindow;
   inputWindow: ElectronInputWindow;
+  desktopBackground?: ElectronDesktopBackground;
   shortcuts: ElectronShortcuts;
   app: ElectronApp;
   ipc: ElectronIPC;
@@ -51,11 +178,20 @@ export interface ElectronAPI {
     isDesktop: boolean;
     isDev: boolean;
   };
+  server?: ElectronServerAPI;
+  llm?: ElectronLLMAPI;
+  whisperSetup?: ElectronSetupAPI;
+  llamaServer?: ElectronLlamaServerAPI;
+  decisionLlamaServer?: ElectronLlamaServerAPI;
+  whisperCpp?: Record<string, ((...args: unknown[]) => unknown) | undefined>;
+  supertonicSetup?: ElectronSetupAPI;
+  gptSovitsSetup?: ElectronSetupAPI;
 }
 
 declare global {
   interface Window {
     electron?: ElectronAPI;
+    AndroidAI?: AndroidAPI;
   }
 }
 

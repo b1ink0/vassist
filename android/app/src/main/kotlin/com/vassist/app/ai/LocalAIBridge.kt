@@ -37,6 +37,7 @@ class LocalAIBridge(
     private val gson = Gson()
     private val modelManager = LLMModelManager(context)
     private val sttTtsManager = STTTTSModelManager(context)
+    private val ttsModelManager = TtsModelManager(context)
 
     /**
      * Get the base URL of the local AI server
@@ -149,6 +150,40 @@ class LocalAIBridge(
         return url
     }
 
+    // ============================================================================
+    // LLM Compute Unit (Snapdragon GPU/NPU)
+    // ============================================================================
+
+    /**
+     * Set the on-device LLM compute unit ("auto" | "cpu" | "gpu" | "npu").
+     * Releases the currently loaded model so the next chat request re-loads
+     * it on the requested device (silently falls back to CPU when the
+     * accelerator is unavailable).
+     */
+    @JavascriptInterface
+    fun setLLMComputeUnit(unit: String) {
+        val normalized = unit.trim().lowercase().ifBlank { "auto" }
+        Log.i(TAG, "setLLMComputeUnit($normalized)")
+        server.setLLMComputeUnit(normalized)
+    }
+
+    /** Currently requested compute unit for the on-device LLM. */
+    @JavascriptInterface
+    fun getLLMComputeUnit(): String = server.getLLMComputeUnit()
+
+    /**
+     * Registered ggml backends/devices, e.g.
+     * "cpu|CPU,opencl|Adreno750...,hexagon|Hexagon"
+     */
+    @JavascriptInterface
+    fun getLLMBackendInfo(): String {
+        return try {
+            android.llama.cpp.LlamaAndroid.instance().backendsInfo()
+        } catch (e: Exception) {
+            "unavailable"
+        }
+    }
+
     /**
      * Get all endpoint URLs as JSON
      * @return JSON object with all endpoint URLs
@@ -187,6 +222,116 @@ class LocalAIBridge(
                 "success" to false,
                 "error" to e.message
             ))
+        }
+    }
+
+    @JavascriptInterface
+    fun searchOllamaModels(query: String, page: Int, pageSize: Int): String {
+        return try {
+            gson.toJson(runBlocking { modelManager.searchOllamaModels(query, page, pageSize) })
+        } catch (e: Exception) {
+            Log.e(TAG, "searchOllamaModels failed", e)
+            gson.toJson(mapOf("success" to false, "items" to emptyList<Any>(), "error" to e.message))
+        }
+    }
+
+    @JavascriptInterface
+    fun listOllamaModelTags(modelId: String, query: String, page: Int, pageSize: Int): String {
+        return try {
+            gson.toJson(runBlocking { modelManager.listOllamaModelTags(modelId, query, page, pageSize) })
+        } catch (e: Exception) {
+            Log.e(TAG, "listOllamaModelTags failed", e)
+            gson.toJson(mapOf("success" to false, "items" to emptyList<Any>(), "error" to e.message))
+        }
+    }
+
+    @JavascriptInterface
+    fun searchHuggingFaceModels(query: String, cursor: String, pageSize: Int): String {
+        return try {
+            gson.toJson(runBlocking { modelManager.searchHuggingFaceModels(query, cursor, pageSize) })
+        } catch (e: Exception) {
+            Log.e(TAG, "searchHuggingFaceModels failed", e)
+            gson.toJson(mapOf("success" to false, "items" to emptyList<Any>(), "error" to e.message))
+        }
+    }
+
+    @JavascriptInterface
+    fun listHuggingFaceFiles(repoId: String, query: String, page: Int, pageSize: Int): String {
+        return try {
+            gson.toJson(runBlocking { modelManager.listHuggingFaceFiles(repoId, query, page, pageSize) })
+        } catch (e: Exception) {
+            Log.e(TAG, "listHuggingFaceFiles failed", e)
+            gson.toJson(mapOf("success" to false, "items" to emptyList<Any>(), "error" to e.message))
+        }
+    }
+
+    @JavascriptInterface
+    fun searchOllamaModelsAsync(query: String, page: Int, pageSize: Int, callbackId: String) {
+        GlobalScope.launch(Dispatchers.IO) {
+            val resultJson = try {
+                gson.toJson(modelManager.searchOllamaModels(query, page, pageSize))
+            } catch (e: Exception) {
+                Log.e(TAG, "searchOllamaModelsAsync failed", e)
+                gson.toJson(mapOf("success" to false, "items" to emptyList<Any>(), "error" to e.message))
+            }
+            invokeCallback(callbackId, resultJson)
+        }
+    }
+
+    @JavascriptInterface
+    fun listOllamaModelTagsAsync(modelId: String, query: String, page: Int, pageSize: Int, callbackId: String) {
+        GlobalScope.launch(Dispatchers.IO) {
+            val resultJson = try {
+                gson.toJson(modelManager.listOllamaModelTags(modelId, query, page, pageSize))
+            } catch (e: Exception) {
+                Log.e(TAG, "listOllamaModelTagsAsync failed", e)
+                gson.toJson(mapOf("success" to false, "items" to emptyList<Any>(), "error" to e.message))
+            }
+            invokeCallback(callbackId, resultJson)
+        }
+    }
+
+    @JavascriptInterface
+    fun searchHuggingFaceModelsAsync(query: String, cursor: String, pageSize: Int, callbackId: String) {
+        GlobalScope.launch(Dispatchers.IO) {
+            val resultJson = try {
+                gson.toJson(modelManager.searchHuggingFaceModels(query, cursor, pageSize))
+            } catch (e: Exception) {
+                Log.e(TAG, "searchHuggingFaceModelsAsync failed", e)
+                gson.toJson(mapOf("success" to false, "items" to emptyList<Any>(), "error" to e.message))
+            }
+            invokeCallback(callbackId, resultJson)
+        }
+    }
+
+    @JavascriptInterface
+    fun listHuggingFaceFilesAsync(repoId: String, query: String, page: Int, pageSize: Int, callbackId: String) {
+        GlobalScope.launch(Dispatchers.IO) {
+            val resultJson = try {
+                gson.toJson(modelManager.listHuggingFaceFiles(repoId, query, page, pageSize))
+            } catch (e: Exception) {
+                Log.e(TAG, "listHuggingFaceFilesAsync failed", e)
+                gson.toJson(mapOf("success" to false, "items" to emptyList<Any>(), "error" to e.message))
+            }
+            invokeCallback(callbackId, resultJson)
+        }
+    }
+
+    private fun invokeCallback(callbackId: String, resultJson: String) {
+        GlobalScope.launch(Dispatchers.Main) {
+            try {
+                // Properly escape JSON for string interpolation in JS
+                val escapedJson = resultJson
+                    .replace("\\", "\\\\")
+                    .replace("'", "\\'")
+                    .replace("\"", "\\\"")
+                    .replace("\n", "\\n")
+                    .replace("\r", "\\r")
+                val js = "if(window.AndroidAICallbacks && window.AndroidAICallbacks['${callbackId}']) { window.AndroidAICallbacks['${callbackId}']('${escapedJson}'); }"
+                webView.evaluateJavascript(js, null)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to invoke JS callback $callbackId", e)
+            }
         }
     }
 
@@ -286,7 +431,7 @@ class LocalAIBridge(
      * Emit download complete event to JavaScript
      * Calls window.AndroidAI._onDownloadComplete(result)
      */
-    private fun emitDownloadComplete(result: Map<String, Any>) {
+    private fun emitDownloadComplete(result: Map<String, Any?>) {
         val jsCode = """
             if (window.AndroidAI && window.AndroidAI._onDownloadComplete) {
                 window.AndroidAI._onDownloadComplete(${gson.toJson(result)});
@@ -367,14 +512,14 @@ class LocalAIBridge(
      * @param fileName Original file name
      * @return Result map
      */
-    fun handleModelImport(sourceUri: android.net.Uri, fileName: String): Map<String, Any> {
+    fun handleModelImport(sourceUri: android.net.Uri, fileName: String): Map<String, Any?> {
         return modelManager.importFromUri(sourceUri, fileName)
     }
 
     /**
      * Emit import completion event to JavaScript
      */
-    fun emitImportComplete(result: Map<String, Any>) {
+    fun emitImportComplete(result: Map<String, Any?>) {
         val json = gson.toJson(result)
         val jsCode = """
             if (window.AndroidAI && window.AndroidAI._onImportComplete) {
@@ -414,7 +559,14 @@ class LocalAIBridge(
     @JavascriptInterface
     fun getSTTTTSStatus(): String {
         return try {
-            val status = sttTtsManager.getModelStatus()
+            // Fold TTS language-pack info into the existing "vits" key
+            // additively - never rename or remove STT keys (web consumers).
+            val status = sttTtsManager.getModelStatus().toMutableMap()
+            val vitsStatus = (status["vits"] as? Map<String, Any>)?.toMutableMap()
+            if (vitsStatus != null) {
+                vitsStatus["packs"] = ttsModelManager.getPacksStatus()
+                status["vits"] = vitsStatus
+            }
             gson.toJson(mapOf(
                 "success" to true,
                 "status" to status
@@ -430,20 +582,30 @@ class LocalAIBridge(
 
     /**
      * Download Whisper STT model (async with progress)
+     * Defaults to tiny.en for backward compatibility
      * @return JSON string: {"success": true, "downloading": true}
      */
     @JavascriptInterface
-    fun downloadWhisperModel(): String {
+    fun downloadWhisperModel(): String = downloadWhisperVariant(STTTTSModelManager.DEFAULT_WHISPER_VARIANT_ID)
+
+    /**
+     * Download a specific Whisper STT variant (async with progress)
+     * @param variantId One of: tiny.en, tiny, base.en, base ("tiny"/"base" are multilingual)
+     * @return JSON string: {"success": true, "downloading": true}
+     */
+    @JavascriptInterface
+    fun downloadWhisperVariant(variantId: String): String {
+        val id = variantId.ifBlank { STTTTSModelManager.DEFAULT_WHISPER_VARIANT_ID }
         GlobalScope.launch(Dispatchers.IO) {
             try {
-                val result = sttTtsManager.downloadWhisperModel(
+                val result = sttTtsManager.downloadWhisperModel(id,
                     object : STTTTSModelManager.DownloadProgressListener {
                         override fun onProgress(percent: Int, status: String) {
                             emitSTTTTSProgress("whisper", percent, status)
                         }
                     }
                 )
-                
+
                 val success = result["success"] as? Boolean ?: false
                 if (success) {
                     emitSTTTTSComplete("whisper", result)
@@ -451,11 +613,11 @@ class LocalAIBridge(
                     emitSTTTTSError("whisper", result["error"] as? String ?: "Download failed")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "downloadWhisperModel failed", e)
+                Log.e(TAG, "downloadWhisperVariant($id) failed", e)
                 emitSTTTTSError("whisper", e.message ?: "Download failed")
             }
         }
-        
+
         return gson.toJson(mapOf(
             "success" to true,
             "downloading" to true
@@ -497,18 +659,254 @@ class LocalAIBridge(
     }
 
     /**
-     * Delete Whisper model files
+     * Download a TTS language pack (async with progress).
+     * The progress-event type string is the pack id itself
+     * ("tts-en-kitten", "tts-ja-supertonic") - unique across all engines.
+     * @param packId One of TtsModelManager.TTS_PACKS.keys (non-legacy)
+     * @return JSON string: {"success": true, "downloading": true}
+     */
+    @JavascriptInterface
+    fun downloadTtsPack(packId: String): String {
+        val id = packId.trim()
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                val result = ttsModelManager.downloadPack(id,
+                    object : TtsModelManager.DownloadProgressListener {
+                        override fun onProgress(percent: Int, status: String) {
+                            emitSTTTTSProgress(id, percent, status)
+                        }
+                    }
+                )
+
+                val success = result["success"] as? Boolean ?: false
+                if (success) {
+                    emitSTTTTSComplete(id, result)
+                } else {
+                    emitSTTTTSError(id, result["error"] as? String ?: "Download failed")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "downloadTtsPack($id) failed", e)
+                emitSTTTTSError(id, e.message ?: "Download failed")
+            }
+        }
+
+        return gson.toJson(mapOf(
+            "success" to true,
+            "downloading" to true
+        ))
+    }
+
+    /**
+     * Delete a TTS language pack's files
+     * @param packId One of TtsModelManager.TTS_PACKS.keys (non-legacy)
      * @return JSON string: {"success": true/false}
      */
     @JavascriptInterface
-    fun deleteWhisperModel(): String {
+    fun deleteTtsPack(packId: String): String {
         return try {
-            val success = sttTtsManager.deleteWhisperModel()
+            val success = ttsModelManager.deletePack(packId.trim())
             gson.toJson(mapOf(
                 "success" to success
             ))
         } catch (e: Exception) {
-            Log.e(TAG, "deleteWhisperModel failed", e)
+            Log.e(TAG, "deleteTtsPack($packId) failed", e)
+            gson.toJson(mapOf(
+                "success" to false,
+                "error" to e.message
+            ))
+        }
+    }
+
+    /**
+     * Delete Whisper model files
+     * Deletes the default (tiny.en) variant for backward compatibility
+     * @return JSON string: {"success": true/false}
+     */
+    @JavascriptInterface
+    fun deleteWhisperModel(): String = deleteWhisperVariant(STTTTSModelManager.DEFAULT_WHISPER_VARIANT_ID)
+
+    /**
+     * Delete a specific Whisper variant's files
+     * @param variantId One of: tiny.en, tiny, base.en, base
+     * @return JSON string: {"success": true/false}
+     */
+    @JavascriptInterface
+    fun deleteWhisperVariant(variantId: String): String {
+        return try {
+            val success = sttTtsManager.deleteWhisperModel(variantId)
+            gson.toJson(mapOf(
+                "success" to success
+            ))
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteWhisperVariant($variantId) failed", e)
+            gson.toJson(mapOf(
+                "success" to false,
+                "error" to e.message
+            ))
+        }
+    }
+
+    /**
+     * Download SenseVoice multilingual model (async with progress)
+     * Supports zh/en/ja/ko/yue; best pick for Chinese/Japanese.
+     * @return JSON string: {"success": true, "downloading": true}
+     */
+    @JavascriptInterface
+    fun downloadSenseVoiceModel(): String {
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                val result = sttTtsManager.downloadSenseVoiceModel(
+                    object : STTTTSModelManager.DownloadProgressListener {
+                        override fun onProgress(percent: Int, status: String) {
+                            emitSTTTTSProgress("sensevoice", percent, status)
+                        }
+                    }
+                )
+
+                val success = result["success"] as? Boolean ?: false
+                if (success) {
+                    emitSTTTTSComplete("sensevoice", result)
+                } else {
+                    emitSTTTTSError("sensevoice", result["error"] as? String ?: "Download failed")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "downloadSenseVoiceModel failed", e)
+                emitSTTTTSError("sensevoice", e.message ?: "Download failed")
+            }
+        }
+
+        return gson.toJson(mapOf(
+            "success" to true,
+            "downloading" to true
+        ))
+    }
+
+    /**
+     * Delete the SenseVoice model files
+     * @return JSON string: {"success": true/false}
+     */
+    @JavascriptInterface
+    fun deleteSenseVoiceModel(): String {
+        return try {
+            val success = sttTtsManager.deleteSenseVoiceModel()
+            gson.toJson(mapOf(
+                "success" to success
+            ))
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteSenseVoiceModel failed", e)
+            gson.toJson(mapOf(
+                "success" to false,
+                "error" to e.message
+            ))
+        }
+    }
+
+    /**
+     * Download a Dolphin CTC multilingual model (async with progress)
+     * @param variantId "dolphin-base" (~99 MB) or "dolphin-small" (~239 MB)
+     * @return JSON string: {"success": true, "downloading": true}
+     */
+    @JavascriptInterface
+    fun downloadDolphinModel(variantId: String): String {
+        val id = variantId.ifBlank { STTTTSModelManager.DOLPHIN_BASE_ID }
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                val result = sttTtsManager.downloadDolphinModel(id,
+                    object : STTTTSModelManager.DownloadProgressListener {
+                        override fun onProgress(percent: Int, status: String) {
+                            emitSTTTTSProgress("dolphin", percent, status)
+                        }
+                    }
+                )
+
+                val success = result["success"] as? Boolean ?: false
+                if (success) {
+                    emitSTTTTSComplete("dolphin", result)
+                } else {
+                    emitSTTTTSError("dolphin", result["error"] as? String ?: "Download failed")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "downloadDolphinModel($id) failed", e)
+                emitSTTTTSError("dolphin", e.message ?: "Download failed")
+            }
+        }
+
+        return gson.toJson(mapOf(
+            "success" to true,
+            "downloading" to true
+        ))
+    }
+
+    /**
+     * Delete a Dolphin variant's files
+     * @param variantId "dolphin-base" or "dolphin-small"
+     * @return JSON string: {"success": true/false}
+     */
+    @JavascriptInterface
+    fun deleteDolphinModel(variantId: String): String {
+        return try {
+            val success = sttTtsManager.deleteDolphinModel(variantId)
+            gson.toJson(mapOf(
+                "success" to success
+            ))
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteDolphinModel($variantId) failed", e)
+            gson.toJson(mapOf(
+                "success" to false,
+                "error" to e.message
+            ))
+        }
+    }
+
+    /**
+     * Download the SenseVoice QNN (Qualcomm NPU) context binary for this SoC
+     * (async with progress). Requires a supported Snapdragon and the QNN
+     * runtime libs bundled in the APK.
+     * @return JSON string: {"success": true, "downloading": true}
+     */
+    @JavascriptInterface
+    fun downloadSenseVoiceQnnModel(): String {
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                val result = sttTtsManager.downloadSenseVoiceQnnModel(
+                    object : STTTTSModelManager.DownloadProgressListener {
+                        override fun onProgress(percent: Int, status: String) {
+                            emitSTTTTSProgress("sensevoice-qnn", percent, status)
+                        }
+                    }
+                )
+
+                val success = result["success"] as? Boolean ?: false
+                if (success) {
+                    emitSTTTTSComplete("sensevoice-qnn", result)
+                } else {
+                    emitSTTTTSError("sensevoice-qnn", result["error"] as? String ?: "Download failed")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "downloadSenseVoiceQnnModel failed", e)
+                emitSTTTTSError("sensevoice-qnn", e.message ?: "Download failed")
+            }
+        }
+
+        return gson.toJson(mapOf(
+            "success" to true,
+            "downloading" to true
+        ))
+    }
+
+    /**
+     * Delete the SenseVoice QNN context binary
+     * @return JSON string: {"success": true/false}
+     */
+    @JavascriptInterface
+    fun deleteSenseVoiceQnnModel(): String {
+        return try {
+            val success = sttTtsManager.deleteSenseVoiceQnnModel()
+            gson.toJson(mapOf(
+                "success" to success
+            ))
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteSenseVoiceQnnModel failed", e)
             gson.toJson(mapOf(
                 "success" to false,
                 "error" to e.message
