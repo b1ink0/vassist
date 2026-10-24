@@ -4,8 +4,7 @@ export const ASSISTANT_CONTROL_SIZE = 48;
 export const ASSISTANT_CONTROL_EDGE_PADDING = 10;
 export const ASSISTANT_CONTROL_PRESET_PADDING = 20;
 export const ASSISTANT_CONTROL_PANEL_GAP = 8;
-export const ASSISTANT_CONTROL_TOTAL_OFFSET = 224;
-export const ASSISTANT_CONTROL_PANEL_WIDTH = 125;
+export const ASSISTANT_CONTROL_PANEL_WIDTH = 135;
 export const ASSISTANT_CONTROL_PANEL_MAX_HEIGHT = 300;
 export const ASSISTANT_CONTROL_CAMERA_PANEL_HEIGHT = 86;
 export const ASSISTANT_CONTROL_ROW_HEIGHT = 43;
@@ -77,10 +76,13 @@ export interface PanelLayoutInput {
   buttonPosition: ButtonPosition;
   emoteHeight: number;
   avatarHeight: number;
+  stageHeight?: number;
+  stageControlsHeight?: number;
   isAndroid: boolean;
   isDesktop: boolean;
   isNormalDesktop?: boolean;
   showUtilityButtons: boolean;
+  showStageButton?: boolean;
   /** Keep desktop panels on the outside/left of the control dock when chat is open. */
   forcePanelToLeft?: boolean;
 }
@@ -89,12 +91,32 @@ export const getAssistantControlLayout = ({
   viewport,
   buttonPosition,
   emoteHeight,
-  avatarHeight,
+  avatarHeight: requestedAvatarHeight,
+  stageHeight: requestedStageHeight = 300,
+  stageControlsHeight = 160,
   isAndroid,
   isNormalDesktop = false,
   showUtilityButtons,
+  showStageButton = false,
   forcePanelToLeft = false,
 }: PanelLayoutInput): AssistantControlLayout => {
+  const avatarHeight = Math.min(
+    requestedAvatarHeight,
+    Math.max(
+      43,
+      viewport.height -
+        ASSISTANT_CONTROL_CAMERA_PANEL_HEIGHT -
+        ASSISTANT_CONTROL_PANEL_GAP -
+        20,
+    ),
+  );
+  const stageHeight = Math.min(
+    requestedStageHeight,
+    Math.max(
+      43,
+      viewport.height - stageControlsHeight - ASSISTANT_CONTROL_PANEL_GAP - 20,
+    ),
+  );
   const normalControlPosition = {
     x: 16,
     y: viewport.height / 2 - ASSISTANT_CONTROL_SIZE / 2,
@@ -117,48 +139,52 @@ export const getAssistantControlLayout = ({
         ? false
         : availableRight >= availableLeft;
   const isLeftSide = forcePanelToLeft ? false : calculatedIsLeftSide;
+  const utilityCount = 4 + Number(isAndroid) + Number(showStageButton);
+  const step = ASSISTANT_CONTROL_SIZE + ASSISTANT_CONTROL_PANEL_GAP;
+  const totalOffset = showUtilityButtons ? utilityCount * step : 0;
+  const dockScale = Math.min(
+    1,
+    Math.max(0.1, (viewport.height - 40) / (totalOffset + 48)),
+  );
+  const rowStep = step * dockScale;
 
   if (isAndroid) {
     const buttonX = 20;
-    const buttonY = viewport.height - 20 - ASSISTANT_CONTROL_SIZE;
-    const utilityButtonCount = 4;
-    const stackTop =
-      buttonY -
-      (showUtilityButtons
-        ? (utilityButtonCount + 1) *
-          (ASSISTANT_CONTROL_SIZE + ASSISTANT_CONTROL_PANEL_GAP)
-        : 0);
+    const stackTop = viewport.height - 20 - (totalOffset + 48) * dockScale;
     const panelLeft = (width: number) =>
       clampPanelCoordinate(
-        buttonX + ASSISTANT_CONTROL_SIZE + ASSISTANT_CONTROL_PANEL_GAP,
+        buttonX +
+          ASSISTANT_CONTROL_SIZE * dockScale +
+          ASSISTANT_CONTROL_PANEL_GAP,
         width,
         viewport.width,
       );
     const panelTop = (anchorTop: number, height: number) =>
       clampPanelCoordinate(
-        anchorTop + ASSISTANT_CONTROL_SIZE / 2 - height / 2,
+        anchorTop + (ASSISTANT_CONTROL_SIZE * dockScale) / 2 - height / 2,
         height,
         viewport.height,
       );
-    const emoteAnchorTop =
-      stackTop + ASSISTANT_CONTROL_SIZE + ASSISTANT_CONTROL_PANEL_GAP;
-    const avatarAnchorTop =
-      emoteAnchorTop + ASSISTANT_CONTROL_SIZE + ASSISTANT_CONTROL_PANEL_GAP;
-    const avatarTop = panelTop(avatarAnchorTop, avatarHeight);
-    const cameraTopBelow =
-      avatarTop + avatarHeight + ASSISTANT_CONTROL_PANEL_GAP;
-    const cameraTop =
-      cameraTopBelow <=
-      viewport.height -
-        ASSISTANT_CONTROL_CAMERA_PANEL_HEIGHT -
-        ASSISTANT_CONTROL_EDGE_PADDING
-        ? cameraTopBelow
-        : Math.max(
-            ASSISTANT_CONTROL_EDGE_PADDING,
-            avatarTop -
-              ASSISTANT_CONTROL_CAMERA_PANEL_HEIGHT -
-              ASSISTANT_CONTROL_PANEL_GAP,
-          );
+    const emoteAnchorTop = stackTop + rowStep;
+    const avatarAnchorTop = emoteAnchorTop + rowStep;
+    const avatarTop = clampPanelCoordinate(
+      avatarAnchorTop +
+        (ASSISTANT_CONTROL_SIZE * dockScale) / 2 -
+        avatarHeight / 2,
+      avatarHeight +
+        ASSISTANT_CONTROL_PANEL_GAP +
+        ASSISTANT_CONTROL_CAMERA_PANEL_HEIGHT,
+      viewport.height,
+    );
+    const cameraTop = avatarTop + avatarHeight + ASSISTANT_CONTROL_PANEL_GAP;
+    const stageTop = clampPanelCoordinate(
+      avatarAnchorTop +
+        rowStep +
+        (ASSISTANT_CONTROL_SIZE * dockScale) / 2 -
+        stageHeight / 2,
+      stageHeight + ASSISTANT_CONTROL_PANEL_GAP + stageControlsHeight,
+      viewport.height,
+    );
 
     return {
       emote: {
@@ -173,25 +199,46 @@ export const getAssistantControlLayout = ({
         left: panelLeft(ASSISTANT_CONTROL_PANEL_WIDTH),
         top: cameraTop,
       },
+      stage: {
+        left: panelLeft(ASSISTANT_CONTROL_PANEL_WIDTH),
+        top: stageTop,
+      },
+      stageControls: {
+        left: panelLeft(ASSISTANT_CONTROL_PANEL_WIDTH),
+        top: stageTop + stageHeight + ASSISTANT_CONTROL_PANEL_GAP,
+      },
+      stageMaxHeight: stageHeight,
       button: { left: "20px", bottom: "20px" },
       isLeftSide: true,
+      dockScale,
+      avatarMaxHeight: avatarHeight,
     };
   }
 
   const stackTop = isNormalDesktop
-    ? normalControlPosition.y
-    : effectiveButtonPosition.y -
-      (showUtilityButtons ? ASSISTANT_CONTROL_TOTAL_OFFSET : 0);
-  const emoteAnchorTop =
-    stackTop + ASSISTANT_CONTROL_SIZE + ASSISTANT_CONTROL_PANEL_GAP;
-  const avatarAnchorTop =
-    emoteAnchorTop + ASSISTANT_CONTROL_SIZE + ASSISTANT_CONTROL_PANEL_GAP;
+    ? clamp(
+        normalControlPosition.y,
+        10,
+        Math.max(10, viewport.height - (totalOffset + 48) * dockScale - 10),
+      )
+    : clamp(
+        effectiveButtonPosition.y - totalOffset * dockScale,
+        10,
+        Math.max(10, viewport.height - (totalOffset + 48) * dockScale - 10),
+      );
+  const emoteAnchorTop = stackTop + rowStep;
+  const avatarAnchorTop = emoteAnchorTop + rowStep;
 
   const panelLeft = (width: number) =>
     clampPanelCoordinate(
-      isLeftSide
+      (
+        width > ASSISTANT_CONTROL_PANEL_WIDTH && !forcePanelToLeft
+          ? availableRight >= width + ASSISTANT_CONTROL_PANEL_GAP ||
+            availableRight >= availableLeft
+          : isLeftSide
+      )
         ? effectiveButtonPosition.x +
-            ASSISTANT_CONTROL_SIZE +
+            ASSISTANT_CONTROL_SIZE * dockScale +
             ASSISTANT_CONTROL_PANEL_GAP
         : effectiveButtonPosition.x - width - ASSISTANT_CONTROL_PANEL_GAP,
       width,
@@ -200,26 +247,30 @@ export const getAssistantControlLayout = ({
 
   const panelTop = (anchorTop: number, height: number) =>
     clampPanelCoordinate(
-      anchorTop + ASSISTANT_CONTROL_SIZE / 2 - height / 2,
+      anchorTop + (ASSISTANT_CONTROL_SIZE * dockScale) / 2 - height / 2,
       height,
       viewport.height,
     );
 
   const emoteTop = panelTop(emoteAnchorTop, emoteHeight);
-  const avatarTop = panelTop(avatarAnchorTop, avatarHeight);
-  const cameraTopBelow = avatarTop + avatarHeight + ASSISTANT_CONTROL_PANEL_GAP;
-  const cameraTop =
-    cameraTopBelow <=
-    viewport.height -
-      ASSISTANT_CONTROL_CAMERA_PANEL_HEIGHT -
-      ASSISTANT_CONTROL_EDGE_PADDING
-      ? cameraTopBelow
-      : Math.max(
-          ASSISTANT_CONTROL_EDGE_PADDING,
-          avatarTop -
-            ASSISTANT_CONTROL_CAMERA_PANEL_HEIGHT -
-            ASSISTANT_CONTROL_PANEL_GAP,
-        );
+  const avatarTop = clampPanelCoordinate(
+    avatarAnchorTop +
+      (ASSISTANT_CONTROL_SIZE * dockScale) / 2 -
+      avatarHeight / 2,
+    avatarHeight +
+      ASSISTANT_CONTROL_PANEL_GAP +
+      ASSISTANT_CONTROL_CAMERA_PANEL_HEIGHT,
+    viewport.height,
+  );
+  const cameraTop = avatarTop + avatarHeight + ASSISTANT_CONTROL_PANEL_GAP;
+  const stageTop = clampPanelCoordinate(
+    avatarAnchorTop +
+      rowStep +
+      (ASSISTANT_CONTROL_SIZE * dockScale) / 2 -
+      stageHeight / 2,
+    stageHeight + ASSISTANT_CONTROL_PANEL_GAP + stageControlsHeight,
+    viewport.height,
+  );
 
   return {
     emote: {
@@ -234,12 +285,21 @@ export const getAssistantControlLayout = ({
       left: panelLeft(ASSISTANT_CONTROL_PANEL_WIDTH),
       top: cameraTop,
     },
+    stage: {
+      left: panelLeft(ASSISTANT_CONTROL_PANEL_WIDTH),
+      top: stageTop,
+    },
+    stageControls: {
+      left: panelLeft(ASSISTANT_CONTROL_PANEL_WIDTH),
+      top: stageTop + stageHeight + ASSISTANT_CONTROL_PANEL_GAP,
+    },
+    stageMaxHeight: stageHeight,
     button: {
       left: isNormalDesktop ? "16px" : `${buttonPosition.x}px`,
-      top: isNormalDesktop
-        ? `calc(50% - ${ASSISTANT_CONTROL_SIZE / 2}px)`
-        : `${buttonPosition.y - (showUtilityButtons ? ASSISTANT_CONTROL_TOTAL_OFFSET : 0)}px`,
+      top: `${stackTop}px`,
     },
     isLeftSide,
+    dockScale,
+    avatarMaxHeight: avatarHeight,
   };
 };

@@ -974,6 +974,8 @@ const VirtualAssistant = forwardRef<AssistantHandle, VirtualAssistantProps>(
       desktopAPI: desktopAPI ?? null,
     };
 
+    if (isPreview) sceneBuildConfig.stageUrl = null;
+
     if (sceneUiConfig) {
       sceneBuildConfig.uiConfig = sceneUiConfig;
     }

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useUIConfig } from "../../hooks/config/useConfigUI";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
+import { useStageSurface } from "../../hooks/app/useStageSurface";
+import { getStageSurfaceActive } from "../../babylon/stages/stageSurfaceState";
 import { BUILT_IN_BACKGROUNDS } from "../../config/backgroundCatalog";
 import {
   getBackgroundFillCSS,
@@ -17,6 +19,7 @@ type BackgroundImage = { path: string; name: string };
 export default function DesktopBackground() {
   const uiConfig = useUIConfig();
   const desktopAPI = useDesktopApi();
+  const stageActive = useStageSurface();
   const background = uiConfig.desktopBackground;
   const isBackgroundMode = isAppModeWindow || isDesktopWallpaperRendererWindow;
   const [currentImage, setCurrentImage] = useState<string | null>(null);
@@ -27,22 +30,26 @@ export default function DesktopBackground() {
 
   useEffect(() => {
     const element = backgroundRef.current;
-    if (
-      !element ||
-      background.mode !== "images" ||
-      !background.parallaxEnabled ||
-      !canFollowPointer
-    )
-      return;
+    if (!background.parallaxEnabled || !canFollowPointer) return;
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (reducedMotion.matches) return;
+    if (!stageActive && (background.mode !== "images" || !element)) return;
 
     let frameId = 0;
     let pointerX = 0;
     let pointerY = 0;
     const updatePosition = () => {
       frameId = 0;
+      if (getStageSurfaceActive()) {
+        window.dispatchEvent(
+          new CustomEvent("vassist:stage-parallax", {
+            detail: { x: pointerX, y: pointerY },
+          }),
+        );
+        return;
+      }
+      if (!element) return;
       element.style.setProperty("--background-pointer-x", `${pointerX}%`);
       element.style.setProperty("--background-pointer-y", `${pointerY}%`);
     };
@@ -57,21 +64,37 @@ export default function DesktopBackground() {
       pointerY = 0;
       if (!frameId) frameId = window.requestAnimationFrame(updatePosition);
     };
+    const handleMotionPreferenceChange = () => {
+      if (reducedMotion.matches) resetPosition();
+    };
 
     window.addEventListener("pointermove", handlePointerMove, {
       passive: true,
     });
     window.addEventListener("pointerleave", resetPosition);
     window.addEventListener("blur", resetPosition);
+    reducedMotion.addEventListener("change", handleMotionPreferenceChange);
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerleave", resetPosition);
       window.removeEventListener("blur", resetPosition);
+      reducedMotion.removeEventListener("change", handleMotionPreferenceChange);
       if (frameId) window.cancelAnimationFrame(frameId);
-      element.style.removeProperty("--background-pointer-x");
-      element.style.removeProperty("--background-pointer-y");
+      element?.style.removeProperty("--background-pointer-x");
+      element?.style.removeProperty("--background-pointer-y");
+      if (stageActive) {
+        window.dispatchEvent(
+          new CustomEvent("vassist:stage-parallax", { detail: { x: 0, y: 0 } }),
+        );
+      }
     };
-  }, [background.mode, background.parallaxEnabled, canFollowPointer]);
+  }, [
+    background.enabled,
+    background.mode,
+    background.parallaxEnabled,
+    canFollowPointer,
+    stageActive,
+  ]);
 
   useEffect(() => {
     const api = desktopAPI?.desktopBackground;
@@ -166,6 +189,10 @@ export default function DesktopBackground() {
 
       const scheduleNext = () => {
         slideshowTimer = setTimeout(async () => {
+          if (getStageSurfaceActive()) {
+            scheduleNext();
+            return;
+          }
           let nextIndex = activeIndex;
           let dataUrl: string | null = null;
           for (let attempt = 0; attempt < images.length - 1; attempt += 1) {
@@ -175,6 +202,10 @@ export default function DesktopBackground() {
             if (dataUrl) break;
           }
 
+          if (getStageSurfaceActive()) {
+            scheduleNext();
+            return;
+          }
           if (!dataUrl) {
             scheduleNext();
             return;
@@ -249,14 +280,14 @@ export default function DesktopBackground() {
     >
       <div
         className={
-          background.parallaxEnabled
+          background.parallaxEnabled && !stageActive
             ? "vassist-background-parallax-drift"
             : "absolute inset-0"
         }
       >
         <div
           className={
-            background.parallaxEnabled
+            background.parallaxEnabled && !stageActive
               ? "vassist-background-parallax-pointer"
               : "absolute inset-0"
           }

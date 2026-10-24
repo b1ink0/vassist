@@ -8,15 +8,15 @@ If you're on Android and plan to use the live wallpaper, do setup in the main ap
 
 ## Overview
 
-| Step             | What you configure                                                 |
-| ---------------- | ------------------------------------------------------------------ |
-| Welcome          | Intro and docs link. Chrome builds show Chrome AI guidance here.   |
-| Live Assistant   | Avatar on/off, display mode, position (browser/extension installs) |
+| Step             | What you configure                                                                     |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| Welcome          | Intro and docs link. Chrome builds show Chrome AI guidance here.                       |
+| Live Assistant   | Avatar on/off, display mode, position (browser/extension installs)                     |
 | Background       | Android and desktop only. Enable a bundled wallpaper and choose which ones to include. |
-| AI Configuration | Your main AI provider                                              |
-| Text-to-Speech   | Choose and configure spoken replies                                |
-| Speech-to-Text   | Choose and configure microphone input                              |
-| AI+ Features     | Optional tools: translate, summarize, rewrite, write               |
+| AI Configuration | Your main AI provider                                                                  |
+| Text-to-Speech   | Choose and configure spoken replies                                                    |
+| Speech-to-Text   | Choose and configure microphone input                                                  |
+| AI+ Features     | Optional tools: translate, summarize, rewrite, write                                   |
 
 ## 1. Welcome
 
@@ -33,7 +33,7 @@ You can change all of this later in Settings → 3D.
 
 ## 3. Background
 
-Blue Milky Way is selected and enabled by default. Choose other bundled wallpapers to include them in the fade slideshow, or turn the background off. You can change this later in **Settings > UI > Display**. Desktop floating mode stays clear.
+Blue Milky Way is selected and enabled by default. Choose other bundled wallpapers to include them in the fade slideshow, or turn the background off. If the avatar is on, you can turn on **Stages** and choose a stage; a fresh setup starts without a built-in stage selected. Stage options include lighting and local time, season and seasonal effects, environment animation, brightness, parallax, avatar shadows, and avatar alignment where supported. Turning stages off returns to your saved background. See the [built-in background previews](/settings/ui#built-in-backgrounds) and [stage previews](/settings/three-d#built-in-stage-previews). You can change these later in Settings. Desktop floating mode stays clear. In Android AR, the camera view temporarily hides both the selected background and stage; they return when you exit AR.
 
 The setup step shares the background controls from Settings. Adjust brightness directly or open **More image effects** to choose a preset and tune contrast, saturation, blur, grayscale, sepia, or hue.
 

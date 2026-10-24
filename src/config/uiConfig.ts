@@ -5,6 +5,7 @@
  */
 
 import { isAndroid, isDesktop } from "../utils/PlatformUtils";
+import { DefaultStageSettings, type StageSettings } from "./stageConfig";
 
 export type BackgroundThemeMode = "adaptive" | "light" | "dark";
 
@@ -197,6 +198,7 @@ export interface UIConfig {
   enableModelLoading: boolean;
   enablePortraitMode: boolean;
   enableAvatarShadow: boolean;
+  stage: StageSettings;
   stickerBorder: StickerBorderSettings;
   enablePhysics: boolean;
   physicsEngine: PhysicsEngine;
@@ -546,6 +548,7 @@ export const DefaultUIConfig: UIConfig = {
   enablePortraitMode: false,
 
   enableAvatarShadow: true,
+  stage: { ...DefaultStageSettings, options: {}, calibration: {} },
 
   stickerBorder: { ...DefaultStickerBorderSettings },
 

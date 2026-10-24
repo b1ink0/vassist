@@ -5,49 +5,49 @@ VAssist repository tree and file metrics.
 ## Totals
 
 - Directories: 202
-- Files: 714
-- Text files counted for metrics: 604
-- Total text lines: 231714
-- Code files counted for metrics: 461
-- Total code lines: 160042
+- Files: 746
+- Text files counted for metrics: 602
+- Total text lines: 186988
+- Code files counted for metrics: 470
+- Total code lines: 162410
 
 ## Line Counts by File Type
 
-| File Type | Extensions | Files | Lines |
-| --- | --- | ---: | ---: |
-| Batch Script | .bat | 1 | 94 |
-| C and C++ | .c, .cc, .cpp, .h, .hpp | 7 | 2003 |
-| CSS | .css, .scss, .less | 7 | 2935 |
-| HTML | .html | 5 | 191 |
-| Java | .java | 4 | 215 |
-| JavaScript | .js, .mjs, .cjs | 1 | 32 |
-| Kotlin | .kt | 21 | 11382 |
-| Shell Script | (no extension) | 5 | 654 |
-| TSX | .tsx | 129 | 57341 |
-| TypeScript | .ts, .mts, .cts | 281 | 85195 |
-| Gradle | .gradle | 7 | 579 |
-| JSON | .json | 19 | 627 |
-| Markdown | .md | 40 | 6675 |
-| Other Text | mixed | 40 | 58832 |
-| Plain Text | (no extension) | 19 | 4158 |
-| Properties | .properties | 2 | 29 |
-| SVG | .svg | 4 | 342 |
-| XML | .xml | 12 | 430 |
+| File Type    | Extensions              | Files | Lines |
+| ------------ | ----------------------- | ----: | ----: |
+| Batch Script | .bat                    |     1 |    94 |
+| C and C++    | .c, .cc, .cpp, .h, .hpp |     7 |  2003 |
+| CSS          | .css, .scss, .less      |     7 |  2935 |
+| HTML         | .html                   |     5 |   191 |
+| Java         | .java                   |     4 |   215 |
+| JavaScript   | .js, .mjs, .cjs         |     1 |    32 |
+| Kotlin       | .kt                     |    21 | 11382 |
+| Shell Script | (no extension)          |     5 |   654 |
+| TSX          | .tsx                    |   130 | 58230 |
+| TypeScript   | .ts, .mts, .cts         |   289 | 86674 |
+| Gradle       | .gradle                 |     7 |   579 |
+| JSON         | .json                   |    19 |   638 |
+| Markdown     | .md                     |    37 |  6793 |
+| Other Text   | mixed                   |    40 | 11716 |
+| Plain Text   | (no extension)          |    11 |  4051 |
+| Properties   | .properties             |     2 |    29 |
+| SVG          | .svg                    |     4 |   342 |
+| XML          | .xml                    |    12 |   430 |
 
 ## Top-Level Summary
 
 - .husky/: 1 directories, 1 files
 - android/: 64 directories, 93 files
 - android-src/: 1 directories, 3 files
-- documentation/: 14 directories, 52 files
+- documentation/: 16 directories, 67 files
 - electron/: 19 directories, 72 files
 - embed/: 1 directories, 1 files
 - extension/: 6 directories, 19 files
 - packages/: 5 directories, 16 files
-- public/: 12 directories, 55 files
-- src/: 67 directories, 309 files
+- public/: 14 directories, 74 files
+- src/: 62 directories, 304 files
 - tests/: 9 directories, 57 files
-- tools/: 3 directories, 10 files
+- tools/: 4 directories, 13 files
 - .gitignore: file
 - .prettierignore: file
 - .prettierrc.json: file
@@ -286,6 +286,23 @@ vassist/
 │   │   │   └── extension.md
 │   │   ├── public/
 │   │   │   ├── assets/
+│   │   │   │   ├── backgrounds/
+│   │   │   │   │   ├── aurora-homes.webp
+│   │   │   │   │   ├── city-night.webp
+│   │   │   │   │   ├── fog-cabin.webp
+│   │   │   │   │   ├── milky-way.webp
+│   │   │   │   │   ├── night-fence.webp
+│   │   │   │   │   └── soft-lights.webp
+│   │   │   │   ├── stages/
+│   │   │   │   │   ├── aster-observatory.webp
+│   │   │   │   │   ├── dusk.webp
+│   │   │   │   │   ├── ink.webp
+│   │   │   │   │   ├── moss-house.webp
+│   │   │   │   │   ├── paper.webp
+│   │   │   │   │   ├── pebble.webp
+│   │   │   │   │   ├── rainlight-library.webp
+│   │   │   │   │   ├── slate.webp
+│   │   │   │   │   └── stillwater.webp
 │   │   │   │   ├── chat.png
 │   │   │   │   ├── companion.png
 │   │   │   │   ├── dictation.png
@@ -478,6 +495,16 @@ vassist/
 │   │       │   ├── think2.bvmd
 │   │       │   ├── ywan1.bvmd
 │   │       │   └── ywan2.bvmd
+│   │       ├── stage-previews/
+│   │       │   ├── aster-observatory.webp
+│   │       │   ├── dusk.webp
+│   │       │   ├── ink.webp
+│   │       │   ├── moss-house.webp
+│   │       │   ├── paper.webp
+│   │       │   ├── pebble.webp
+│   │       │   ├── rainlight-library.webp
+│   │       │   ├── slate.webp
+│   │       │   └── stillwater.webp
 │   │       └── stages/
 │   │           ├── aster-observatory/
 │   │           │   ├── Textures/
@@ -489,6 +516,17 @@ vassist/
 │   │           │   ├── wall-detail.glb
 │   │           │   └── wall-switch.glb
 │   │           ├── moss-house/
+│   │           │   ├── textures/
+│   │           │   │   ├── 16d63eca024e0becb87a.png
+│   │           │   │   ├── 320fb6ff04fc2b16eba1.png
+│   │           │   │   ├── 3a12f29c038bd3416cba.png
+│   │           │   │   ├── 3fd2ec47dced90d588db.png
+│   │           │   │   ├── 46bf2bf37972bc71cc7c.png
+│   │           │   │   ├── 4b7542d5b737738cedd2.png
+│   │           │   │   ├── 4e73a5398eff2ec82247.png
+│   │           │   │   ├── 6c682c971bfc06c7d9a2.png
+│   │           │   │   ├── a34d9166e77e2410ee31.png
+│   │           │   │   └── a3c85a4e26fa0709d06e.png
 │   │           │   ├── Bush_Common_Flowers.glb
 │   │           │   ├── chairModernCushion.glb
 │   │           │   ├── CommonTree_1.glb
@@ -551,29 +589,16 @@ vassist/
 │   │   │   │   ├── MossHouse.ts
 │   │   │   │   ├── QuietStages.ts
 │   │   │   │   └── RainlightLibrary.ts
-│   │   │   ├── licenses/
-│   │   │   │   ├── aster-observatory/
-│   │   │   │   │   ├── ASSETS.md
-│   │   │   │   │   ├── Kenney-CC0.txt
-│   │   │   │   │   └── LICENSE-original.txt
-│   │   │   │   ├── moss-house/
-│   │   │   │   │   ├── ASSETS.md
-│   │   │   │   │   ├── Kenney-CC0.txt
-│   │   │   │   │   ├── LICENSE-original.txt
-│   │   │   │   │   └── Quaternius-CC0.txt
-│   │   │   │   ├── quiet/
-│   │   │   │   │   └── LICENSE-original.txt
-│   │   │   │   └── rainlight-library/
-│   │   │   │       ├── ASSETS.md
-│   │   │   │       ├── Kenney-CC0.txt
-│   │   │   │       └── LICENSE-original.txt
 │   │   │   ├── assetMap.json
 │   │   │   ├── StageAssets.ts
 │   │   │   ├── stageAvailability.ts
 │   │   │   ├── StageGeometry.ts
 │   │   │   ├── StageManager.ts
+│   │   │   ├── StageParallax.ts
 │   │   │   ├── StagePlacement.ts
 │   │   │   ├── StageRegistry.ts
+│   │   │   ├── StageSeasonalEffects.ts
+│   │   │   ├── stageSurfaceState.ts
 │   │   │   ├── StageTextures.ts
 │   │   │   └── types.ts
 │   │   └── types.ts
@@ -595,10 +620,12 @@ vassist/
 │   │   │   ├── assistant-controls/
 │   │   │   │   ├── components/
 │   │   │   │   │   ├── AssistantControlPanels.tsx
-│   │   │   │   │   └── AssistantControlStack.tsx
+│   │   │   │   │   ├── AssistantControlStack.tsx
+│   │   │   │   │   └── StageControlPanel.tsx
 │   │   │   │   ├── hooks/
 │   │   │   │   │   ├── useAssistantControlDrag.ts
 │   │   │   │   │   └── useAssistantControlTheme.ts
+│   │   │   │   ├── panelStyles.ts
 │   │   │   │   ├── positioning.ts
 │   │   │   │   └── types.ts
 │   │   │   ├── AssistantControlDock.tsx
@@ -754,6 +781,7 @@ vassist/
 │   │   │   ├── useDrag.ts
 │   │   │   ├── usePlayback.ts
 │   │   │   ├── useScene.ts
+│   │   │   ├── useStageSurface.ts
 │   │   │   └── useTooling.ts
 │   │   ├── bootstrap/
 │   │   │   ├── useInitializeAppStore.ts
@@ -957,6 +985,8 @@ vassist/
 │   ├── extensionTestHost.ts
 │   └── llm-parameters-check.ts
 ├── tools/
+│   ├── stage-previews/
+│   │   └── browser.ts
 │   ├── vite/
 │   │   └── shared-config.ts
 │   ├── vite-plugins/
@@ -968,6 +998,8 @@ vassist/
 │   │   ├── stage-assets-scope-plugin.ts
 │   │   └── vad-assets-plugin.ts
 │   ├── create-node-llama-runtime-core.ts
+│   ├── render-stage-previews.ts
+│   ├── sync-doc-preview-assets.ts
 │   └── write-package-type-entries.ts
 ├── .gitignore
 ├── .prettierignore

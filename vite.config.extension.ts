@@ -1,3 +1,4 @@
+import { excludeStageAssetsPlugin } from "./tools/vite-plugins/stage-assets-scope-plugin";
 /**
  * Vite Configuration for Chrome Extension Build
  * Creates separate bundles for background, content, and offscreen scripts
@@ -36,6 +37,7 @@ export default defineConfig(({ mode }) => {
       copyAssetsPlugin(shouldZip), // Copy assets and manifest to dist-extension
       vadAssetsPlugin(outDir),
       excludeBackgroundAssetsPlugin(outDir),
+      excludeStageAssetsPlugin(outDir),
     ],
 
     define: createViteDefines(isProduction, "extension"),

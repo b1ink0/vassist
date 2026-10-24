@@ -120,54 +120,70 @@ Optional host defaults for shared UI settings. This is a deep partial of `UIConf
 
 Browser embeds ignore UI settings that require Electron or Android services.
 
-| Field               | Default | Behavior                                                                                      |
-| ------------------- | ------- | --------------------------------------------------------------------------------------------- |
-| `enableAvatarShadow` | `true`  | Show a translucent cast shadow behind the avatar, or scene shadows on a loaded Stage. |
+| Field                | Default                                             | Behavior                                                                                                                                                                     |
+| -------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stage`              | `{ selection: null, options: {}, calibration: {} }` | Native App and Wallpaper stage selection, per-environment options, and per-avatar alignment. Stages are omitted during Android AR. See [Stages](../settings/three-d#stages). |
+| `enableAvatarShadow` | `true`                                              | With no stage, show the avatar silhouette behind the character; with a stage, enable its real 3D cast shadow.                                                                |
+
+`stage.selection` is `null` until the user chooses an environment, or one of `{ kind: "none" }`, `{ kind: "builtin", id }`, or `{ kind: "custom", id }`. `stage.options` is keyed by stage ID and stores partial lighting, season, animation, and brightness settings. `stage.calibration` is keyed by avatar ID and stores `heightMeters` (default `1.65`) and `floorOffset` (default `0`). The UI and runtime apply only options supported by the selected stage.
+
+| `stage.options[stageId]` field | Default  | Behavior                                                                    |
+| ------------------------------ | -------- | --------------------------------------------------------------------------- |
+| `mood`                         | `""`     | Named lighting preset when the selected stage supports moods.               |
+| `hour`                         | `15.5`   | Manual local-stage time, from 0 to 24 in quarter-hour steps.                |
+| `localTime`                    | `true`   | Follow the device's local clock when time lighting is selected.             |
+| `lightingMode`                 | Inferred | `"time"` or `"mood"`; mood mode is only offered by stages with named moods. |
+| `season`                       | `"auto"` | Local-calendar season, or `spring`, `summer`, `autumn`, or `winter`.        |
+| `seasonalEffects`              | `true`   | Enable seasonal particles where the environment supports them.              |
+| `brightness`                   | `1`      | Stage brightness multiplier, clamped to 0.35–1.5.                           |
+| `animate`                      | `true`   | Enable stage-provided animation such as water, stars, rain, or fire.        |
+
+`stage.calibration[avatarId]` has `heightMeters` and `floorOffset` fields. These adjust stage/avatar alignment without changing the avatar's physics rig. The selected built-in or custom stage and its options are shared across supported native app and wallpaper modes; Android AR suppresses stage rendering while active.
 
 ### Native background settings
 
 These fields belong to shared `UIConfig` and can be persisted by the native apps. They also type-check inside a host's `ui` override, but require the owning platform's storage or IPC services to render images.
 
-| Field                                        | Default         | Behavior                                                                                                   |
-| -------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------- |
-| `desktopBackground.mode`                     | `images`        | Render images, a solid color, or a gradient.                                                                |
-| `desktopBackground.solidColor`               | `#111827`        | Solid background color in six-digit hexadecimal form.                                                      |
-| `desktopBackground.gradientStartColor`       | `#101827`        | Gradient start color in six-digit hexadecimal form.                                                        |
-| `desktopBackground.gradientEndColor`         | `#243b63`        | Gradient end color in six-digit hexadecimal form.                                                          |
-| `desktopBackground.gradientAngleDegrees`     | `135`           | Gradient angle from 0 to 360 degrees.                                                                      |
-| `desktopBackground.enabled`                  | `true`          | Render selected backgrounds in App and Wallpaper modes. Floating stays transparent.                        |
-| `desktopBackground.builtInIds`               | `['milky-way']`   | Select bundled backgrounds. The first ID is shown first.                                                   |
-| `desktopBackground.parallaxEnabled`          | `true`          | In App and interactive Wallpaper mode, follow mouse movement.                                              |
-| `desktopBackground.slideshowEnabled`         | `true`          | Fade through selected built-in and custom images when more than one is available.                          |
-| `desktopBackground.folderPath`               | `null`          | Original desktop folder path, combined with selected built-in images when present.                         |
-| `desktopBackground.imagePaths`               | `[]`            | Original custom desktop image paths. An empty list means no custom files are selected.                     |
-| `desktopBackground.slideshowIntervalSeconds` | `30`            | Hold each image for 5 to 3600 seconds before beginning the next fade.                                      |
-| `desktopBackground.fadeDurationSeconds`      | `2`             | Fade between images over 0 to 15 seconds.                                                                  |
-| `desktopBackground.brightnessPercent`        | `60`            | Background brightness from 20% to 100%.                                                                    |
-| `desktopBackground.contrastPercent`          | `100`           | Background contrast from 50% to 150%.                                                                       |
-| `desktopBackground.saturationPercent`        | `100`           | Color saturation from 0% to 200%.                                                                           |
-| `desktopBackground.blurPixels`               | `0`             | Blur radius from 0 to 12 pixels.                                                                            |
-| `desktopBackground.grayscalePercent`         | `0`             | Grayscale amount from 0% to 100%.                                                                           |
-| `desktopBackground.sepiaPercent`             | `0`             | Sepia amount from 0% to 100%.                                                                               |
-| `desktopBackground.hueRotateDegrees`         | `0`             | Hue rotation from 0 to 360 degrees.                                                                         |
-| `androidBackground.mode`                     | `images`        | Render images, a solid color, or a gradient.                                                                |
-| `androidBackground.solidColor`               | `#111827`        | Solid background color in six-digit hexadecimal form.                                                      |
-| `androidBackground.gradientStartColor`       | `#101827`        | Gradient start color in six-digit hexadecimal form.                                                        |
-| `androidBackground.gradientEndColor`         | `#243b63`        | Gradient end color in six-digit hexadecimal form.                                                          |
-| `androidBackground.gradientAngleDegrees`     | `135`           | Gradient angle from 0 to 360 degrees.                                                                      |
-| `androidBackground.enabled`                  | `true`          | Show or hide the background in the Android app and live wallpaper.                                        |
-| `androidBackground.builtInIds`               | `['milky-way']`   | Select bundled backgrounds. The first ID is shown first.                                                  |
-| `androidBackground.slideshowEnabled`         | `false`         | Cycle through selected built-in and imported backgrounds in the Android app and live wallpaper.           |
-| `androidBackground.parallaxEnabled`          | `true`          | Follow phone tilt and rotation with a smooth return toward center when the phone settles.                  |
-| `androidBackground.slideshowIntervalSeconds` | `30`            | Hold each image for 5 to 3600 seconds before beginning the next fade.                                      |
-| `androidBackground.fadeDurationSeconds`      | `2`             | Fade between images over 0 to 15 seconds.                                                                  |
-| `androidBackground.brightnessPercent`        | `60`            | Background brightness from 20% to 100%.                                                                    |
-| `androidBackground.contrastPercent`          | `100`           | Background contrast from 50% to 150%.                                                                       |
-| `androidBackground.saturationPercent`        | `100`           | Color saturation from 0% to 200%.                                                                           |
-| `androidBackground.blurPixels`               | `0`             | Blur radius from 0 to 12 pixels.                                                                            |
-| `androidBackground.grayscalePercent`         | `0`             | Grayscale amount from 0% to 100%.                                                                           |
-| `androidBackground.sepiaPercent`             | `0`             | Sepia amount from 0% to 100%.                                                                               |
-| `androidBackground.hueRotateDegrees`         | `0`             | Hue rotation from 0 to 360 degrees.                                                                         |
+| Field                                        | Default         | Behavior                                                                                        |
+| -------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------- |
+| `desktopBackground.mode`                     | `images`        | Render images, a solid color, or a gradient.                                                    |
+| `desktopBackground.solidColor`               | `#111827`       | Solid background color in six-digit hexadecimal form.                                           |
+| `desktopBackground.gradientStartColor`       | `#101827`       | Gradient start color in six-digit hexadecimal form.                                             |
+| `desktopBackground.gradientEndColor`         | `#243b63`       | Gradient end color in six-digit hexadecimal form.                                               |
+| `desktopBackground.gradientAngleDegrees`     | `135`           | Gradient angle from 0 to 360 degrees.                                                           |
+| `desktopBackground.enabled`                  | `true`          | Render selected backgrounds in App and Wallpaper modes. Floating stays transparent.             |
+| `desktopBackground.builtInIds`               | `['milky-way']` | Select bundled backgrounds. The first ID is shown first.                                        |
+| `desktopBackground.parallaxEnabled`          | `true`          | In App and interactive Wallpaper mode, follow mouse movement.                                   |
+| `desktopBackground.slideshowEnabled`         | `true`          | Fade through selected built-in and custom images when more than one is available.               |
+| `desktopBackground.folderPath`               | `null`          | Original desktop folder path, combined with selected built-in images when present.              |
+| `desktopBackground.imagePaths`               | `[]`            | Original custom desktop image paths. An empty list means no custom files are selected.          |
+| `desktopBackground.slideshowIntervalSeconds` | `30`            | Hold each image for 5 to 3600 seconds before beginning the next fade.                           |
+| `desktopBackground.fadeDurationSeconds`      | `2`             | Fade between images over 0 to 15 seconds.                                                       |
+| `desktopBackground.brightnessPercent`        | `60`            | Background brightness from 20% to 100%.                                                         |
+| `desktopBackground.contrastPercent`          | `100`           | Background contrast from 50% to 150%.                                                           |
+| `desktopBackground.saturationPercent`        | `100`           | Color saturation from 0% to 200%.                                                               |
+| `desktopBackground.blurPixels`               | `0`             | Blur radius from 0 to 12 pixels.                                                                |
+| `desktopBackground.grayscalePercent`         | `0`             | Grayscale amount from 0% to 100%.                                                               |
+| `desktopBackground.sepiaPercent`             | `0`             | Sepia amount from 0% to 100%.                                                                   |
+| `desktopBackground.hueRotateDegrees`         | `0`             | Hue rotation from 0 to 360 degrees.                                                             |
+| `androidBackground.mode`                     | `images`        | Render images, a solid color, or a gradient.                                                    |
+| `androidBackground.solidColor`               | `#111827`       | Solid background color in six-digit hexadecimal form.                                           |
+| `androidBackground.gradientStartColor`       | `#101827`       | Gradient start color in six-digit hexadecimal form.                                             |
+| `androidBackground.gradientEndColor`         | `#243b63`       | Gradient end color in six-digit hexadecimal form.                                               |
+| `androidBackground.gradientAngleDegrees`     | `135`           | Gradient angle from 0 to 360 degrees.                                                           |
+| `androidBackground.enabled`                  | `true`          | Show or hide the background in the Android app and live wallpaper.                              |
+| `androidBackground.builtInIds`               | `['milky-way']` | Select bundled backgrounds. The first ID is shown first.                                        |
+| `androidBackground.slideshowEnabled`         | `false`         | Cycle through selected built-in and imported backgrounds in the Android app and live wallpaper. |
+| `androidBackground.parallaxEnabled`          | `true`          | Follow phone tilt and rotation with a smooth return toward center when the phone settles.       |
+| `androidBackground.slideshowIntervalSeconds` | `30`            | Hold each image for 5 to 3600 seconds before beginning the next fade.                           |
+| `androidBackground.fadeDurationSeconds`      | `2`             | Fade between images over 0 to 15 seconds.                                                       |
+| `androidBackground.brightnessPercent`        | `60`            | Background brightness from 20% to 100%.                                                         |
+| `androidBackground.contrastPercent`          | `100`           | Background contrast from 50% to 150%.                                                           |
+| `androidBackground.saturationPercent`        | `100`           | Color saturation from 0% to 200%.                                                               |
+| `androidBackground.blurPixels`               | `0`             | Blur radius from 0 to 12 pixels.                                                                |
+| `androidBackground.grayscalePercent`         | `0`             | Grayscale amount from 0% to 100%.                                                               |
+| `androidBackground.sepiaPercent`             | `0`             | Sepia amount from 0% to 100%.                                                                   |
+| `androidBackground.hueRotateDegrees`         | `0`             | Hue rotation from 0 to 360 degrees.                                                             |
 
 Bundled wallpaper files ship with each native app. Android custom image blobs and their active state use background asset storage. Desktop built-ins are packaged under Electron resources, while user-selected files remain at their original paths. See [UI Settings](/settings/ui#android-backgrounds) and [Storage and Data](/architecture/storage-and-data) for the platform workflows and backup behavior.
 

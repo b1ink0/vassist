@@ -1,3 +1,4 @@
+import { excludeStageAssetsPlugin } from "./tools/vite-plugins/stage-assets-scope-plugin";
 import { defineConfig } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import { extensionTestHostPlugin } from "./tools/vite-plugins/extension-test-host-plugin.js";
@@ -18,6 +19,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       vadAssetsPlugin("dist"),
       excludeBackgroundAssetsPlugin("dist"),
+      excludeStageAssetsPlugin("dist"),
       extensionTestHostPlugin(),
     ],
     publicDir: "public",

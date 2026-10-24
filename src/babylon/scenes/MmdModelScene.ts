@@ -52,7 +52,9 @@ import Logger from "../../services/common/LoggerService";
 import { VmdLoader } from "babylon-mmd";
 import { pmxConverterService } from "../../services/mmd/PMXConverterService";
 import { modelStorageService } from "../../services/storage/ModelStorageService";
-import { stageStorageService } from "../../services/storage/StageStorageService";
+import { loadStage } from "../stages/StageManager";
+import type { StageRuntime } from "../stages/types";
+import type { StageOptions } from "../../config/stageConfig";
 import {
   isAndroid,
   isDesktop,
@@ -853,7 +855,8 @@ export const buildMmdModelScene = async (
       avatarShadowEnabled = enabled;
       avatarShadowReceiver?.setEnabled(enabled);
       avatarShadowLight?.setEnabled(enabled);
-      shadowGenerator.setDarkness(enabled ? defaultShadowDarkness : 1);
+      if (stageRuntime) stageRuntime.setAvatarShadows(enabled);
+      else shadowGenerator.setDarkness(enabled ? defaultShadowDarkness : 1);
     };
   }
 
@@ -1110,124 +1113,40 @@ export const buildMmdModelScene = async (
   // STAGE LOADING
   // ========================================
 
-  let stageMesh: Mesh | null = null;
-
-  const loadStageFromSource = async (
-    stageSource: string,
-    stageLabel: string,
-  ): Promise<Mesh> => {
-    const stageResult = await LoadAssetContainerAsync(stageSource, scene, {
-      pluginExtension: ".bpmx",
-      pluginOptions: {
-        mmdmodel: {
-          materialBuilder: materialBuilder,
-          boundingBoxMargin: 60,
-          loggingEnabled: true,
-        },
-      },
-      onProgress: (event) => {
-        if (event.lengthComputable) {
-          const progress = (event.loaded / event.total) * 100;
-          Logger.log("MmdModelScene", `Stage loading: ${progress.toFixed(1)}%`);
-        }
-      },
-    });
-
-    Logger.log("MmdModelScene", "Stage loaded, adding to scene...");
-
-    stageResult.addAllToScene();
-    const loadedStageMesh = (stageResult.meshes[0] as Mesh | undefined) ?? null;
-    if (!loadedStageMesh) {
-      throw new Error(
-        `Stage \"${stageLabel}\" loaded but no root mesh was returned`,
+  let stageRuntime: StageRuntime | null = null;
+  if (!isDedicatedARScene) {
+    const metadata = modelMesh.metadata as MeshMetadataState | undefined;
+    const avatarMeshes = metadata?.meshes ?? [modelMesh];
+    try {
+      stageRuntime = await loadStage(
+        scene,
+        finalConfig,
+        avatarMeshes,
+        mmdRoot,
+        materialBuilder,
+      );
+    } catch (error) {
+      Logger.error("MmdModelScene", "Failed to load stage", error);
+      window.dispatchEvent(
+        new CustomEvent("vassist-stage-error", {
+          detail: getErrorMessage(error),
+        }),
       );
     }
-
-    return loadedStageMesh;
-  };
-
-  try {
-    if (isDedicatedARScene) {
-      Logger.log(
-        "MmdModelScene",
-        "Stage loading skipped for dedicated AR scene",
-      );
-    } else if (finalConfig.stageUrl === null) {
-      Logger.log(
-        "MmdModelScene",
-        "Stage loading skipped by embed configuration",
-      );
-    } else if (finalConfig.stageUrl) {
-      Logger.log(
-        "MmdModelScene",
-        `Loading embed-configured stage: ${finalConfig.stageUrl}`,
-      );
-
-      stageMesh = await loadStageFromSource(
-        finalConfig.stageUrl,
-        "embed-configured stage",
-      );
-    } else {
-      const defaultStage = await stageStorageService.getDefaultStage();
-
-      if (defaultStage && defaultStage.stageData) {
-        Logger.log("MmdModelScene", `Loading stage: ${defaultStage.name}`);
-
-        const stageBlobUrl = URL.createObjectURL(defaultStage.stageData);
-
-        try {
-          stageMesh = await loadStageFromSource(
-            stageBlobUrl,
-            defaultStage.name,
-          );
-        } finally {
-          URL.revokeObjectURL(stageBlobUrl);
-        }
-
-        Logger.log(
-          "MmdModelScene",
-          `✓ Stage "${defaultStage.name}" loaded successfully`,
-        );
-      } else {
-        Logger.log(
-          "MmdModelScene",
-          "No default stage selected, using default ground plane",
-        );
-      }
-    }
-
-    if (stageMesh) {
-      // Setup stage shadows
-      if (finalConfig.enableShadows && shadowGenerator) {
-        const stageMetadata = stageMesh.metadata as
-          | MeshMetadataState
-          | undefined;
-        const stageMeshes = Array.isArray(stageMetadata?.meshes)
-          ? stageMetadata.meshes
-          : [stageMesh];
-        for (const mesh of stageMeshes) {
-          mesh.receiveShadows = true;
-          shadowGenerator.addShadowCaster(mesh, false);
-        }
-      }
-
-      // Parent stage to mmdRoot
-      stageMesh.parent = mmdRoot;
-
-      // Store stage in scene metadata
-      scene.metadata.stageMesh = stageMesh;
-
-      // Hide default ground when stage is loaded
-      if (scene.metadata.defaultGround) {
-        scene.metadata.defaultGround.setEnabled(false);
-        Logger.log("MmdModelScene", "Default ground hidden (stage is active)");
-      }
-    }
-  } catch (error) {
-    Logger.error("MmdModelScene", "Failed to load stage:", error);
-    // Don't throw - fall back to default ground
-    Logger.warn("MmdModelScene", "Falling back to default ground plane");
   }
+  const stageMesh = stageRuntime?.root ?? null;
+  scene.metadata.stageMesh = stageMesh;
+  if (stageMesh) ground.setEnabled(false);
+  const handleStageParallax = (event: Event) => {
+    const { x, y } = (event as CustomEvent<{ x: number; y: number }>).detail;
+    stageRuntime?.setParallax(x, y);
+  };
+  if (stageRuntime)
+    window.addEventListener("vassist:stage-parallax", handleStageParallax);
+  scene.onDisposeObservable.add(() => {
+    window.removeEventListener("vassist:stage-parallax", handleStageParallax);
+    stageRuntime?.dispose();
+  });
 
   // ========================================
   // SCENE PHYSICS INITIALIZATION (for ground collider)
@@ -1293,6 +1212,7 @@ export const buildMmdModelScene = async (
   }
 
   modelMesh.parent = mmdRoot;
+  stageRuntime?.setAvatarShadows(avatarShadowEnabled);
 
   // Cast the avatar's shadow onto a camera-facing plane behind it. Keeping this
   // receiver in the 3D scene makes the shadow follow pose and camera movement.
@@ -1425,7 +1345,9 @@ export const buildMmdModelScene = async (
         Math.abs(cameraDirection.z) * halfSize.z;
       const depth = backmostDepth + modelHeight * 0.08;
 
-      const cameraRight = activeCamera.getDirection(Vector3.Right()).normalize();
+      const cameraRight = activeCamera
+        .getDirection(Vector3.Right())
+        .normalize();
       const cameraUp = activeCamera.getDirection(Vector3.Up()).normalize();
       // Keep the projected offset proportional to avatar height as the camera
       // orbits and the required receiver depth changes.
@@ -1447,9 +1369,8 @@ export const buildMmdModelScene = async (
     };
 
     updateShadowReceiver();
-    const shadowReceiverObserver = scene.onBeforeRenderObservable.add(
-      updateShadowReceiver,
-    );
+    const shadowReceiverObserver =
+      scene.onBeforeRenderObservable.add(updateShadowReceiver);
     scene.onDisposeObservable.add(() => {
       scene.onBeforeRenderObservable.remove(shadowReceiverObserver);
       backdropShadows.dispose();
@@ -1709,7 +1630,7 @@ export const buildMmdModelScene = async (
     // Create a clipping plane at specified height
     // Normal pointing DOWN (0,-1,0) clips everything BELOW the Y coordinate
     const clipPlane = new Plane(0, -1, 0, clipPlaneY);
-    scene.clipPlane = clipPlane;
+    if (!stageRuntime?.isEnvironment) scene.clipPlane = clipPlane;
 
     // Store clipping plane Y value in metadata for debug panel access
     scene.metadata.portraitClipPlaneY = clipPlaneY;
@@ -1998,7 +1919,13 @@ export const buildMmdModelScene = async (
   defaultPipeline.imageProcessing.vignetteEnabled = false;
 
   defaultPipeline.imageProcessing.contrast = quality.contrast || 1.2;
-  defaultPipeline.imageProcessing.exposure = quality.exposure || 1.05;
+  defaultPipeline.imageProcessing.exposure =
+    (quality.exposure || 1.05) * (stageRuntime?.brightness ?? 1);
+  scene.metadata.updateStageOptions = (options: Partial<StageOptions>) => {
+    stageRuntime?.updateOptions(options);
+    defaultPipeline.imageProcessing.exposure =
+      (quality.exposure || 1.05) * (stageRuntime?.brightness ?? 1);
+  };
 
   defaultPipeline.imageProcessing.colorCurvesEnabled = true;
   const colorCurves = new ColorCurves();
@@ -2189,13 +2116,6 @@ export const buildMmdModelScene = async (
       void arController.exitAR();
       arController.dispose();
       arController = null;
-    }
-
-    // Dispose stage mesh if loaded
-    if (scene.metadata.stageMesh) {
-      Logger.log("MmdModelScene", "Disposing stage mesh");
-      scene.metadata.stageMesh.dispose();
-      scene.metadata.stageMesh = null;
     }
   });
 

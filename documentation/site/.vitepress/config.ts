@@ -166,7 +166,10 @@ export default defineConfig({
         },
         {
           text: "Credits",
-          items: [{ text: "Wallpaper Images", link: "/legal/wallpapers" }],
+          items: [
+            { text: "Wallpaper Images", link: "/legal/wallpapers" },
+            { text: "Stage Environments", link: "/legal/stages" },
+          ],
         },
       ],
     },

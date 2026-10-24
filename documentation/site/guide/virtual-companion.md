@@ -4,7 +4,7 @@ import AppIcon from "../.vitepress/theme/components/AppIcon.vue"
 
 # Live Assistant
 
-The live 3D assistant sits alongside the chat and page tools. It animates, reacts while you talk to it, plays emotes, and stays visible while you work on other things. You can swap avatars, stages, and motions on the fly from the floating controls without touching Settings.
+The live 3D assistant sits alongside the chat and page tools. It animates, reacts while you talk to it, plays emotes, and stays visible while you work on other things. You can swap avatars and motions from the assistant controls without touching Settings. Supported native app and wallpaper modes also offer stage selection.
 
 <figure class="doc-figure">
 	<img src="/assets/companion.png" alt="Live Assistant with live avatar controls visible." />
@@ -13,7 +13,7 @@ The live 3D assistant sits alongside the chat and page tools. It animates, react
 
 ## What it does while you use VAssist
 
-- Renders the current avatar and stage.
+- Renders the current avatar, with optional stages on supported native surfaces.
 - Switches between animation states: idle, thinking, talking, walking, celebration.
 - Lip-syncs during spoken reply playback when your TTS setup supports it.
 - Displays short assistant output in a floating chat bubble near the model.
@@ -27,7 +27,8 @@ When the avatar is visible and chat is closed, a vertical stack of buttons sits 
 | ------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | Chat button   | AI spark (or X to close)         | Opens the chat. Drag to reposition when in chat-only mode. Shows attachment icon when a file is dragged over it. |
 | Zoom control  | + / - / reset                    | Zooms the Live Assistant view in or out, and resets back to default size.                                        |
-| Avatar button | person outline                   | Opens the avatar and stage picker panel.                                                                         |
+| Avatar button | person outline                   | Opens the avatar picker and camera controls.                                                                     |
+| Stage button  | box                              | Opens the stage picker and quick environment controls on supported native surfaces.                              |
 | Emote button  | music note (spins while playing) | Opens the emote list.                                                                                            |
 | Reload button | refresh arrow                    | Reloads the page.                                                                                                |
 
@@ -38,20 +39,23 @@ These buttons hide when the chat is open.
 Click the <AppIcon name="user" /> **avatar button** to open the picker panel. It lists all your imported models starting with **VAssist Default**.
 
 - Click any model to switch immediately. A check mark shows the current selection.
-- Click the <AppIcon name="box" /> stage icon in the camera controls row below the list to switch the panel to stage selection. Click the <AppIcon name="user" /> person icon to switch back to avatars.
-- **No Stage** renders the avatar with no background.
+- In Desktop App and Wallpaper modes and on Android, click the separate <AppIcon name="box" /> **stage button** to choose an environment. The picker stays open while switching stages. The stage button and stage are unavailable during Android AR; AR shows the camera view and placed avatar, then restores the selected stage after exit.
+- **No Stage** uses your background settings. [Stage settings](../settings/three-d#stages) include studio environments, rooms, and custom imports.
+
+The stage picker uses the same narrow pill list as the avatar picker, with hidden scrollbars and a fade mask on desktop. Click the stage dock button again to close it. Below the list, a **season pill** chooses automatic seasons or a specific season. Small icon buttons control **motion**, **avatar shadows**, **seasonal effects**, **environment animation**, **brightness**, and **lighting presets** where supported. Inactive toggles appear faded; hover or focus a button to see its label. Changes preview immediately and save automatically.
+
+Click the <AppIcon name="clock" /> **clock icon** to open a centered time dial. Click or drag around the ring to choose a time; releasing saves and closes it. Click outside or press Escape to dismiss it. With a keyboard, arrow keys adjust time and Enter confirms. The <AppIcon name="globe" /> **local time icon** follows the device clock. Quiet stages move their key light through the day, so their shadows change direction with the time. These controls update the environment without resetting the avatar or its emote camera.
 
 ## Camera controls (below the avatar list)
 
 When the avatar panel is open, a row of small buttons appears below the model list:
 
-| Button                                               | What it does                                                             |
-| ---------------------------------------------------- | ------------------------------------------------------------------------ |
-| 2D / 3D (highlighted when 3D)                        | Toggles between flat 2D framing and a free 3D camera.                    |
-| Reset camera (refresh icon)                          | Snaps the camera back to its default position.                           |
-| Lock / Unlock (lock icon, highlighted when unlocked) | Freezes or releases camera movement.                                     |
-| Pin position (pin icon, highlighted when saving)     | Saves dragged camera placement across sessions. Turn off to stop saving. |
-| Stage toggle (box / person icon)                     | Switches the panel between the avatar list and stage list.               |
+| Button                                               | What it does                                                                              |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| 2D / 3D (highlighted when 3D)                        | Toggles between flat 2D framing and a free 3D camera.                                     |
+| Reset camera (refresh icon)                          | Snaps the camera back to its default position.                                            |
+| Lock / Unlock (lock icon, highlighted when unlocked) | Freezes or releases camera movement.                                                      |
+| Pin position (pin icon, highlighted when saving)     | Saves dragged camera placement across sessions. Turn off to stop saving.                  |
 | <AppIcon name="sticker-border" /> Sticker Border     | Toggles the avatar outline. Change its color or thickness in **Settings → 3D → Display**. |
 
 ## Playing emotes

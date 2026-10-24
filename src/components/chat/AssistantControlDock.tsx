@@ -2,6 +2,8 @@
  * @fileoverview Floating assistant control dock with positioning logic.
  */
 
+import { canRenderStages } from "../../babylon/stages/stageAvailability";
+import { BUILT_IN_STAGES, getBuiltInStage } from "../../config/stageConfig";
 import {
   lazy,
   Suspense,
@@ -277,7 +279,16 @@ const AssistantControlDock = ({
           stageStorageService
             .getDefaultStage()
             .then((defaultStage) => {
-              setSelectedStageId(defaultStage?.id || null);
+              const selection = uiConfig.stage?.selection;
+              setSelectedStageId(
+                selection?.kind === "builtin"
+                  ? `builtin:${selection.id}`
+                  : selection?.kind === "custom"
+                    ? selection.id
+                    : selection?.kind === "none"
+                      ? null
+                      : defaultStage?.id || null,
+              );
             })
             .catch((err) => {
               Logger.error(
@@ -291,7 +302,7 @@ const AssistantControlDock = ({
           Logger.error("AssistantControlDock", "Failed to load stages:", err);
         });
     }
-  }, [isAvatarPanelOpen, panelMode]);
+  }, [isAvatarPanelOpen, panelMode, uiConfig.stage?.selection]);
 
   useEffect(() => {
     if ((isChatOpen && !isDesktop) || modelDisabled) {
@@ -1001,23 +1012,31 @@ const AssistantControlDock = ({
   const handleStageSelect = useCallback(
     async (stageId: string | null) => {
       try {
-        if (stageId === null) {
-          await stageStorageService.clearAllDefaults();
-        } else {
+        if (!canRenderStages) return;
+        const builtin = stageId?.startsWith("builtin:")
+          ? getBuiltInStage(stageId.slice(8))
+          : undefined;
+        if (stageId && !builtin)
           await stageStorageService.setDefaultStage(stageId);
-        }
+        updateUIConfig(
+          "stage.selection",
+          builtin
+            ? { kind: "builtin", id: builtin.id }
+            : stageId
+              ? { kind: "custom", id: stageId }
+              : { kind: "none" },
+        );
         setSelectedStageId(stageId);
-        setIsAvatarPanelOpen(false);
         Logger.log(
           "AssistantControlDock",
           `Stage ${stageId || "none"} selected, reloading scene...`,
         );
-        reloadScene();
+        requestAnimationFrame(recreateScene);
       } catch (err) {
         Logger.error("AssistantControlDock", "Failed to select stage:", err);
       }
     },
-    [reloadScene],
+    [recreateScene, updateUIConfig],
   );
 
   const [_forceUpdate, setForceUpdate] = useState(0);
@@ -1217,11 +1236,22 @@ const AssistantControlDock = ({
       : 86,
     ASSISTANT_CONTROL_PANEL_MAX_HEIGHT,
   );
-  const maxListLength = Math.max(models.length, stages.length);
   const avatarPanelHeight = Math.min(
-    (maxListLength + 1) * ASSISTANT_CONTROL_ROW_HEIGHT,
+    (models.length + 1) * ASSISTANT_CONTROL_ROW_HEIGHT,
     ASSISTANT_CONTROL_PANEL_MAX_HEIGHT,
   );
+  const stageDefinition = selectedStageId?.startsWith("builtin:")
+    ? getBuiltInStage(selectedStageId.slice(8))
+    : undefined;
+  const stageControlCount =
+    (stageDefinition?.time ? 2 : 0) +
+    2 +
+    (selectedStageId && stageDefinition?.seasonalEffects !== false ? 1 : 0) +
+    (stageDefinition?.animated ? 1 : 0) +
+    (selectedStageId ? 1 : 0) +
+    (stageDefinition?.moods ? 1 : 0);
+  const stageControlsHeight =
+    8 + (selectedStageId ? 39 : 0) + Math.ceil(stageControlCount / 3) * 39 - 4;
   const showUtilityButtons =
     (!isChatOpen || isDesktopAttachedModeWindow || isDesktop) && !modelDisabled;
   const canOpenControlPanels = !isChatOpen || isDesktop;
@@ -1230,10 +1260,17 @@ const AssistantControlDock = ({
     buttonPosition: renderedButtonPos,
     emoteHeight: emotePanelHeight,
     avatarHeight: avatarPanelHeight,
+    stageHeight: Math.min(
+      (stages.length + BUILT_IN_STAGES.length + 1) *
+        ASSISTANT_CONTROL_ROW_HEIGHT,
+      ASSISTANT_CONTROL_PANEL_MAX_HEIGHT,
+    ),
+    stageControlsHeight,
     isAndroid,
     isDesktop,
     isNormalDesktop: isDesktopAttachedModeWindow,
     showUtilityButtons,
+    showStageButton: canRenderStages && !isARMode,
     forcePanelToLeft:
       isChatOpen && isDesktop && !isAndroid && !isDesktopAttachedModeWindow,
   });
@@ -1271,21 +1308,13 @@ const AssistantControlDock = ({
     onCameraLockToggle: handleCameraLockToggle,
     onCameraSaveToggle: handleCameraSaveToggle,
     onStickerBorderToggle: () =>
-      updateUIConfig(
-        "stickerBorder.enabled",
-        !uiConfig.stickerBorder?.enabled,
-      ),
+      updateUIConfig("stickerBorder.enabled", !uiConfig.stickerBorder?.enabled),
     onToggleStagePanel: () => {
       setIsZoomExpanded(false);
       if (isEmotePanelOpen) setIsEmotePanelOpen(false);
-      if (isAvatarPanelOpen && panelMode === "stage") {
-        setPanelMode("avatar");
-      } else if (isAvatarPanelOpen && panelMode === "avatar") {
-        setPanelMode("stage");
-      } else {
-        setPanelMode("stage");
-        setIsAvatarPanelOpen(true);
-      }
+      if (!canOpenControlPanels) return;
+      setIsAvatarPanelOpen(!(isAvatarPanelOpen && panelMode === "stage"));
+      setPanelMode("stage");
     },
   };
 
@@ -1365,8 +1394,11 @@ const AssistantControlDock = ({
           if (!canOpenControlPanels) return;
           setIsZoomExpanded(false);
           if (isEmotePanelOpen) setIsEmotePanelOpen(false);
-          setIsAvatarPanelOpen((open) => !open);
+          setIsAvatarPanelOpen(!(isAvatarPanelOpen && panelMode === "avatar"));
+          setPanelMode("avatar");
         }}
+        showStageButton={canRenderStages && !isARMode}
+        onToggleStage={assistantControlActions.onToggleStagePanel}
         onToggleAR={handleARToggle}
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}

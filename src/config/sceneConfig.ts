@@ -7,6 +7,7 @@
  * Follows the same pattern as animationConfig.js with getter functions.
  */
 
+import type { StageFormat } from "./stageConfig";
 import { resourceLoader } from "../utils/ResourceLoader";
 import {
   normalizeOptionalEmbedAssetBaseUrl,
@@ -24,6 +25,7 @@ interface SceneConfigData {
   enableModelLoading: boolean;
   modelUrl: string;
   stageUrl?: string | null;
+  stageFormat?: StageFormat;
   customModelFile?: File;
   cameraAnimationUrl: string;
   enableCameraAnimation: boolean;

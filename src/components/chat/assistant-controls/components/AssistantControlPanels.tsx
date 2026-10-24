@@ -1,3 +1,11 @@
+import { canRenderStages } from "../../../../babylon/stages/stageAvailability";
+import { StageControlPanel } from "./StageControlPanel";
+import {
+  panelClassName,
+  itemClassName,
+  iconButtonClassName,
+  panelButtonVariant,
+} from "../panelStyles";
 import { Button, Card } from "../../../../components/ui";
 import { Icon } from "../../../../components/icons";
 import EmotePlaybackBar from "../../EmotePlaybackBar";
@@ -43,15 +51,6 @@ interface AssistantControlPanelsProps {
   actions: AssistantControlActions;
   onSeek: (progress: number) => void;
 }
-
-const panelClassName =
-  "fixed w-[135px] max-h-[300px] overflow-y-auto px-1 snap-y snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden";
-
-const itemClassName =
-  "snap-center flex items-center gap-2 transition-all duration-200 overflow-hidden h-[35px] min-h-[35px] w-[125px] mb-2 rounded-[17.5px] whitespace-nowrap backdrop-blur-[10px]";
-
-const panelButtonVariant = (isLightBackground: boolean) =>
-  isLightBackground ? "dark" : "default";
 
 function EmotePanel({
   layout,
@@ -227,11 +226,8 @@ function AvatarPanel({
   isAndroid,
   isDesktop,
   isLightBackground,
-  panelMode,
   models,
-  stages,
   selectedModelId,
-  selectedStageId,
   actions,
 }: Pick<
   AssistantControlPanelsProps,
@@ -239,35 +235,22 @@ function AvatarPanel({
   | "isAndroid"
   | "isDesktop"
   | "isLightBackground"
-  | "panelMode"
   | "models"
-  | "stages"
   | "selectedModelId"
-  | "selectedStageId"
   | "actions"
 >) {
-  const options =
-    panelMode === "avatar"
-      ? [
-          {
-            id: null,
-            label: "VAssist Default",
-            selected: selectedModelId === null,
-          },
-          ...models.map((model) => ({
-            id: model.id,
-            label: model.name,
-            selected: selectedModelId === model.id,
-          })),
-        ]
-      : [
-          { id: null, label: "No Stage", selected: selectedStageId === null },
-          ...stages.map((stage) => ({
-            id: stage.id,
-            label: stage.name,
-            selected: selectedStageId === stage.id,
-          })),
-        ];
+  const options = [
+    {
+      id: null,
+      label: "VAssist Default",
+      selected: selectedModelId === null,
+    },
+    ...models.map((model) => ({
+      id: model.id,
+      label: model.name,
+      selected: selectedModelId === model.id,
+    })),
+  ];
 
   return (
     <Card
@@ -276,7 +259,7 @@ function AvatarPanel({
         left: `${layout.avatar.left}px`,
         top: `${layout.avatar.top}px`,
         zIndex: isAndroid ? 201 : 10001,
-        maxHeight: "min(300px, calc(100vh - 20px))",
+        maxHeight: layout.avatarMaxHeight ?? "min(300px, calc(100vh - 20px))",
       }}
       variant="none"
       className={cn(
@@ -287,11 +270,7 @@ function AvatarPanel({
       {options.map((option) => (
         <Button
           key={option.id ?? "default"}
-          onClick={() =>
-            panelMode === "avatar"
-              ? actions.onModelSelect(option.id)
-              : actions.onStageSelect(option.id)
-          }
+          onClick={() => actions.onModelSelect(option.id)}
           variant={panelButtonVariant(isLightBackground)}
           className={cn(
             `${itemClassName} justify-start px-3 text-[13px]`,
@@ -318,8 +297,6 @@ function CameraControlsPanel({
   cameraSaveEnabled,
   stickerBorderEnabled,
   actions,
-  isAvatarPanelOpen,
-  panelMode,
 }: Pick<
   AssistantControlPanelsProps,
   | "layout"
@@ -330,12 +307,9 @@ function CameraControlsPanel({
   | "cameraSaveEnabled"
   | "stickerBorderEnabled"
   | "actions"
-  | "isAvatarPanelOpen"
-  | "panelMode"
 >) {
   const variant = panelButtonVariant(isLightBackground);
-  const buttonClass =
-    "flex items-center justify-center gap-1 transition-all duration-200 h-[35px] min-h-[35px] w-[35px] text-[13px] rounded-[17.5px] backdrop-blur-[10px]";
+  const buttonClass = iconButtonClassName;
 
   return (
     <Card
@@ -426,23 +400,6 @@ function CameraControlsPanel({
         >
           <Icon name="sticker-border" size={16} />
         </Button>
-        <Button
-          onClick={actions.onToggleStagePanel}
-          variant={variant}
-          className={buttonClass}
-          title={
-            isAvatarPanelOpen && panelMode === "stage"
-              ? "Switch to Avatar List"
-              : isAvatarPanelOpen && panelMode === "avatar"
-                ? "Switch to Stage List"
-                : "Select Stage"
-          }
-        >
-          <Icon
-            name={isAvatarPanelOpen && panelMode === "avatar" ? "box" : "user"}
-            size={16}
-          />
-        </Button>
       </div>
     </Card>
   );
@@ -516,18 +473,25 @@ export function AssistantControlPanels({
       {isAvatarPanelOpen &&
         !isEmotePanelOpen &&
         canShowPanels &&
-        !modelDisabled && (
+        !modelDisabled &&
+        (panelMode === "stage" && canRenderStages ? (
+          <StageControlPanel
+            key={selectedStageId ?? "none"}
+            layout={layout}
+            stages={stages}
+            selectedStageId={selectedStageId}
+            isLightBackground={isLightBackground}
+            actions={actions}
+          />
+        ) : (
           <>
             <AvatarPanel
               layout={layout}
               isAndroid={isAndroid}
               isDesktop={isDesktop}
               isLightBackground={isLightBackground}
-              panelMode={panelMode}
               models={models}
-              stages={stages}
               selectedModelId={selectedModelId}
-              selectedStageId={selectedStageId}
               actions={actions}
             />
             <CameraControlsPanel
@@ -539,11 +503,9 @@ export function AssistantControlPanels({
               cameraSaveEnabled={cameraSaveEnabled}
               stickerBorderEnabled={stickerBorderEnabled}
               actions={actions}
-              isAvatarPanelOpen={isAvatarPanelOpen}
-              panelMode={panelMode}
             />
           </>
-        )}
+        ))}
     </>
   );
 }

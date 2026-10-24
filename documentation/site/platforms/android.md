@@ -17,6 +17,8 @@ Do setup in the full Android app first. The wallpaper reads those saved choices 
 
 The setup wizard starts with Blue Milky Way selected. In **Settings > UI > Display**, choose bundled wallpapers, import images, or use a solid color or customizable gradient for the app and live wallpaper. Android stores imported images in VAssist. See [Android backgrounds](/settings/ui#android-backgrounds) for slideshow, parallax, image effects, and background color controls.
 
+In the full app and live wallpaper, you can also enable a 3D stage from **Settings > UI > Display**, **Settings > 3D > Models > Stages**, or the Live Assistant stage button. A fresh setup starts without a built-in stage; a previously saved custom default may load. The same saved stage settings are used in the app and wallpaper. AR is the exception: while the camera view is active, VAssist hides the selected background and stage so the camera view shows through; both return when you exit AR.
+
 ## Android Local AI
 
 - Android Local LLM runs GGUF models with [llama.cpp](https://github.com/ggml-org/llama.cpp) and `.litertlm` models with LiteRT-LM. The local model manager handles both formats.
@@ -29,7 +31,7 @@ These are the local Android options you see in setup and settings. They are diff
 
 ## Augmented reality
 
-AR places the Live Assistant in the camera view on ARCore-compatible Android devices. It needs camera permission.
+AR places the Live Assistant in the camera view on ARCore-compatible Android devices. It needs camera permission. The normal app background and selected stage are hidden during AR, then restored when you leave the session. Your saved background and stage choices are unchanged.
 
 1. Open the full app with the Live Assistant visible and tap the <AppIcon name="view-in-ar" /> icon in the floating assistant controls. Its tooltip says **View Avatar in AR** and its screen-reader label is **Enter AR mode**.
 2. Move the phone slowly and aim at the floor while the app scans for a surface.

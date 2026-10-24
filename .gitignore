@@ -16,6 +16,7 @@ release
 *.local
 
 # Editor directories and files
+.codex*
 .vscode/*
 !.vscode/extensions.json
 .idea

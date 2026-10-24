@@ -1325,6 +1325,10 @@ export class AnimationManager {
       return;
     }
 
+    if (this.cameraAnimationEnabled) {
+      this.cleanupCameraAnimation();
+    }
+
     try {
       Logger.log(
         "AnimationManager",

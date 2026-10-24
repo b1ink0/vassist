@@ -1,3 +1,4 @@
+import { excludeStageAssetsPlugin } from "../../tools/vite-plugins/stage-assets-scope-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,6 +21,7 @@ export default defineConfig({
     vadAssetsPlugin("packages/react/dist"),
     packageRuntimeAssetsPlugin("packages/react/dist"),
     excludeBackgroundAssetsPlugin("packages/react/dist"),
+    excludeStageAssetsPlugin("packages/react/dist"),
   ],
   define: createViteDefines(true, "embed"),
   assetsInclude: ["**/*.wasm"],

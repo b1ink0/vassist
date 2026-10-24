@@ -85,5 +85,7 @@ If the docs and the exports ever disagree, `packages/embed/src/index.ts`, `packa
 - `src/embed/` for host-facing config, branding, portal containers, and settings policy
 - `src/services/proxies/` for runtime routing logic
 - `src/components/` for shared product UI
+- `src/babylon/stages/` for built-in and imported stage environments, lighting, shadows, seasons, and parallax
+- `src/babylon/ar/` for the Android AR session and placement flow
 - `packages/` for the public browser API boundary
 - `electron/`, `extension/`, and `android/` for shell-specific code

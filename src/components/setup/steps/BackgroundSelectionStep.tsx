@@ -1,3 +1,5 @@
+import { StageSelectionControls } from "../../settings/StageSettings";
+import { DefaultStageSettings } from "../../../config/stageConfig";
 import { useSetup } from "../../../contexts/SetupContext";
 import {
   DEFAULT_BACKGROUND_FILL_SETTINGS,
@@ -66,11 +68,28 @@ export default function BackgroundSelectionStep({
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold">Choose a background</h2>
         <p className="text-sm text-white/70">
-          Blue Milky Way is selected by default. Use images, choose a solid
-          color, or customize a gradient. You can turn the background off.
+          Choose an image, color, or gradient, or give your avatar a stage. Your
+          background is kept for when the stage is off.
         </p>
       </div>
 
+      {setupData.ui.enableModelLoading && (
+        <StageSelectionControls
+          saveCustomDefault={false}
+          settings={setupData.ui.stage ?? DefaultStageSettings}
+          onSettingsChange={(settings) =>
+            void updateSetupData("ui.stage", settings)
+          }
+          parallaxEnabled={background?.parallaxEnabled !== false}
+          shadowEnabled={setupData.ui.enableAvatarShadow !== false}
+          onParallaxChange={(value) =>
+            void updateSetupData("ui.background.parallaxEnabled", value)
+          }
+          onShadowChange={(value) =>
+            void updateSetupData("ui.enableAvatarShadow", value)
+          }
+        />
+      )}
       <BackgroundSelectionControls
         platform={isAndroid ? "android" : "desktop"}
         enabled={enabled}

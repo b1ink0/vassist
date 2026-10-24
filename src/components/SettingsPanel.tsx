@@ -152,6 +152,7 @@ const SettingsPanel = ({
 }: SettingsPanelProps) => {
   const { hostId } = useEmbedHost();
   const reactCustomizations = useVAssistReactCustomizations(hostId);
+  const appliedRequest = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState<SettingsTabId>("ui");
   const [activeNestedTarget, setActiveNestedTarget] =
     useState<VAssistSettingsTargetId | null>(null);
@@ -368,6 +369,7 @@ const SettingsPanel = ({
       requestedView?.tab ?? getSettingsTabFromTarget(requestedView?.target);
 
     if (!requestedTab) {
+      appliedRequest.current = null;
       return;
     }
 
@@ -375,6 +377,9 @@ const SettingsPanel = ({
       return;
     }
 
+    const key = JSON.stringify(requestedView);
+    if (appliedRequest.current === key) return;
+    appliedRequest.current = key;
     setActiveTab(requestedTab);
   }, [requestedView, visibleTabs]);
 

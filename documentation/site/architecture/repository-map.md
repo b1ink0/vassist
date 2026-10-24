@@ -27,7 +27,9 @@ Use this page when you know the job you need to do and want the shortest path to
 | `src/stores/`           | Zustand stores and app-level state transitions                                                      |
 | `src/config/`           | Default config, prompts, feature defaults, scene presets, and lists                                 |
 | `src/utils/`            | Shared runtime utilities, resource loading, platform checks, and DOM helpers                        |
-| `src/babylon/`          | Live Assistant scene, animation, camera, and interaction layers                                     |
+| `src/babylon/`          | Live Assistant rendering, animation, camera, interaction, stage environments, and Android AR layers |
+| `src/babylon/stages/`   | Built-in and imported stages, lighting, seasonal effects, shadows, placement, assets, and parallax  |
+| `src/babylon/ar/`       | Android AR session lifecycle, camera mapping, surface placement, and avatar interaction             |
 
 ## If You Are Working On Runtime-Specific Code
 

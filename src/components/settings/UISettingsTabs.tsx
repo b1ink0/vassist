@@ -5,6 +5,8 @@ import Icon from "../icons/Icon";
 import Toggle from "../common/Toggle";
 import ShortcutsConfig from "../common/ShortcutsConfig";
 import { Button, Card, Input, Select, SettingsRow } from "../ui";
+import StageSettings from "./StageSettings";
+import { canConfigureStages } from "../../babylon/stages/stageAvailability";
 import BackgroundSettings from "./BackgroundSettings";
 import DesktopBackgroundSettings from "./DesktopBackgroundSettings";
 import type { BackupSelection } from "../../services/storage/AppDataBackupService";
@@ -215,6 +217,7 @@ export const DisplayTab = ({
       )}
     </div>
 
+    {canConfigureStages(uiConfig.desktopMode.mode) && <StageSettings />}
     {isAndroid && <BackgroundSettings isLightBackground={isLightBackground} />}
     {isDesktop && (
       <DesktopBackgroundSettings isLightBackground={isLightBackground} />

@@ -32,6 +32,8 @@ interface AssistantControlStackProps {
   onReload: () => void;
   onToggleEmotes: () => void;
   onToggleAvatar: () => void;
+  showStageButton: boolean;
+  onToggleStage: () => void;
   onToggleAR: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -76,6 +78,8 @@ export function AssistantControlStack({
   onReload,
   onToggleEmotes,
   onToggleAvatar,
+  showStageButton,
+  onToggleStage,
   onToggleAR,
   onZoomIn,
   onZoomOut,
@@ -109,6 +113,8 @@ export function AssistantControlStack({
         left: layout.button.left,
         top: layout.button.top,
         bottom: layout.button.bottom,
+        transform: `scale(${layout.dockScale ?? 1})`,
+        transformOrigin: layout.button.bottom ? "bottom left" : "top left",
         zIndex: isAndroid ? 200 : 10000,
       }}
       className="fixed flex flex-col gap-2 items-center"
@@ -204,6 +210,31 @@ export function AssistantControlStack({
             />
           </Button>
 
+          {showStageButton && (
+            <Button
+              onClick={onToggleStage}
+              variant={variant}
+              className={cn(
+                utilityButtonClass(isLightBackground),
+                visibilityClass,
+                isAvatarPanelOpen &&
+                  panelMode === "stage" &&
+                  "ring-2 ring-white/50",
+              )}
+              title="Stages"
+              aria-label="Stages"
+              aria-expanded={isAvatarPanelOpen && panelMode === "stage"}
+            >
+              <Icon
+                name="box"
+                size={24}
+                className={cn(
+                  isLightBackground ? "glass-text" : "glass-text-black",
+                  "drop-shadow-lg",
+                )}
+              />
+            </Button>
+          )}
           {isAndroid && (
             <Button
               onClick={onToggleAR}

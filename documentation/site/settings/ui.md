@@ -49,6 +49,12 @@ Adaptive theme only affects the assistant UI layer, not the website or native ho
 
 ### Android backgrounds
 
+The **Stages** toggle above the background controls opens the same stage picker and options available in **3D > Models > Stages**. Choose a preview to select a stage. Stage options include brightness, time or mood, seasons, animation, parallax, shadows, and avatar alignment where supported. Turn Stages off to return to your saved background. Stage controls are dimmed when the avatar is off.
+
+The setup wizard also offers these controls when the avatar is enabled. Stages render in the Android app and live wallpaper, and in desktop App and Wallpaper modes. Desktop Floating mode keeps its transparent background.
+
+During Android AR, the camera view temporarily hides the configured background and stage, and pauses the background slideshow. Leaving AR restores the saved background and stage.
+
 Manages built-in and custom wallpapers behind the Live Assistant on Android. Blue Milky Way is selected and enabled by default. Choose **Images**, **Solid color**, or **Gradient** as the background type.
 
 The bundled image sources and licensing details are listed in [Wallpaper credits](/legal/wallpapers).
@@ -65,31 +71,62 @@ The same background controls are available in the setup wizard and Settings. Ope
 2. Tap the upload button and pick a JPEG, PNG, WebP, or GIF file. Uploads remain on this device.
 3. Tap an uploaded image to make it the active image. With at least two selected or uploaded images, enable **Background slideshow** to fade through them in the Android app and live wallpaper. Set the time per image and fade duration below the toggle.
 
-**Background parallax** is on by default. It gently follows phone tilt and rotation with a subtle slow drift. The sensor offset eases toward center when the phone settles. Turn it off to keep the image still. System reduced-motion preferences disable the effect.
+**Background parallax** is on by default. It gently follows phone tilt and rotation with a subtle slow drift. The sensor offset eases toward center when the phone settles. When a 3D stage is active, the wallpaper slideshow pauses on its current image and parallax moves the stage environment instead. Turn parallax off to keep the image and stage still. System reduced-motion preferences disable the effect.
 
 **To switch or remove the active background:** Tap a different image to switch, or use **Clear Background** to remove it without deleting the file. To delete a background from storage entirely, tap the delete icon on that item.
 
-| Control                  | Behavior                                                                               |
-| ------------------------ | -------------------------------------------------------------------------------------- |
-| Background type          | Show images, a solid color, or a customizable gradient.                                 |
-| Background color         | Choose a solid background color with the native color picker.                           |
-| Gradient preset          | Start with Midnight, Ocean, Aurora, Sunset, or Forest, then customize it.               |
-| Gradient colors and angle| Set both gradient colors and its direction.                                             |
-| Show background          | Show or hide the selected image in the app and live wallpaper.                         |
-| Background brightness    | Set image brightness from 20% to 100%. Defaults to 60%.                                |
-| More image effects       | Apply a preset or adjust contrast, saturation, blur, grayscale, sepia, and hue.         |
-| Built-in wallpaper       | Choose which bundled wallpapers to use.                                                |
-| Custom background upload | Import JPEG, PNG, WebP, or GIF.                                                        |
-| Activate background      | Choose the starting uploaded image when slideshow is enabled, or the only image shown. |
-| Background slideshow     | Fade through selected built-in wallpapers and uploaded images.                         |
-| Time per image           | Choose how long each image is shown before the next fade.                              |
-| Fade duration            | Choose how long the transition between images takes.                                   |
-| Clear Background         | Stop the slideshow and clear the active background without deleting saved images.      |
-| Delete background asset  | Permanently delete a stored asset.                                                     |
+| Control                   | Behavior                                                                               |
+| ------------------------- | -------------------------------------------------------------------------------------- |
+| Background type           | Show images, a solid color, or a customizable gradient.                                |
+| Background color          | Choose a solid background color with the native color picker.                          |
+| Gradient preset           | Start with Midnight, Ocean, Aurora, Sunset, or Forest, then customize it.              |
+| Gradient colors and angle | Set both gradient colors and its direction.                                            |
+| Show background           | Show or hide the selected image in the app and live wallpaper.                         |
+| Background brightness     | Set image brightness from 20% to 100%. Defaults to 60%.                                |
+| More image effects        | Apply a preset or adjust contrast, saturation, blur, grayscale, sepia, and hue.        |
+| Built-in wallpaper        | Choose which bundled wallpapers to use.                                                |
+| Custom background upload  | Import JPEG, PNG, WebP, or GIF.                                                        |
+| Activate background       | Choose the starting uploaded image when slideshow is enabled, or the only image shown. |
+| Background slideshow      | Fade through selected built-in wallpapers and uploaded images.                         |
+| Time per image            | Choose how long each image is shown before the next fade.                              |
+| Fade duration             | Choose how long the transition between images takes.                                   |
+| Clear Background          | Stop the slideshow and clear the active background without deleting saved images.      |
+| Delete background asset   | Permanently delete a stored asset.                                                     |
 
 ### Desktop backgrounds
 
 In **Settings > UI > Display**, choose **Images**, **Solid color**, or **Gradient**. Images are selected from the bundled wallpapers, image files, or a folder. Blue Milky Way is selected and enabled by default. Desktop packages full-resolution built-in files with the app. For your own files, Desktop stores their paths and reads the images from their original locations. It does not copy them into VAssist storage. Supported formats are JPEG, PNG, WebP, and GIF. Images larger than 50 MB are skipped.
+
+The bundled backgrounds are shared by Android and desktop. Blue Milky Way is the default selection.
+
+### Built-in backgrounds
+
+<div class="doc-figure-grid">
+  <figure class="doc-figure">
+    <img src="/assets/backgrounds/milky-way.webp" alt="Blue Milky Way wallpaper showing a colorful night sky" loading="lazy" />
+    <figcaption>Blue Milky Way, selected by default</figcaption>
+  </figure>
+  <figure class="doc-figure">
+    <img src="/assets/backgrounds/night-fence.webp" alt="Dark night sky above a fence" loading="lazy" />
+    <figcaption>Dark stars and fence</figcaption>
+  </figure>
+  <figure class="doc-figure">
+    <img src="/assets/backgrounds/aurora-homes.webp" alt="Northern lights above a mountain village" loading="lazy" />
+    <figcaption>Aurora and houses</figcaption>
+  </figure>
+  <figure class="doc-figure">
+    <img src="/assets/backgrounds/fog-cabin.webp" alt="A cabin in a foggy woodland at night" loading="lazy" />
+    <figcaption>Woodland cabin</figcaption>
+  </figure>
+  <figure class="doc-figure">
+    <img src="/assets/backgrounds/city-night.webp" alt="City at night with light trails" loading="lazy" />
+    <figcaption>City after dark</figcaption>
+  </figure>
+  <figure class="doc-figure">
+    <img src="/assets/backgrounds/soft-lights.webp" alt="Abstract soft colored bokeh lights" loading="lazy" />
+    <figcaption>Soft coloured lights</figcaption>
+  </figure>
+</div>
 
 See [Wallpaper credits](/legal/wallpapers) for image sources and licensing.
 
@@ -101,7 +138,7 @@ The setup wizard and Settings use the same background controls. Open **More imag
 
 For a non-image background, choose **Solid color** and select a color, or choose **Gradient**. Gradient presets include Midnight, Ocean, Aurora, Sunset, and Forest. Set the start and end colors and adjust the angle to customize the gradient.
 
-**Background parallax** is on by default. In App mode and interactive Wallpaper mode, the background follows mouse movement. Non-interactive Wallpaper mode does not track the mouse. Turn off **Background parallax** to keep the image still. System reduced-motion preferences disable the effect.
+**Background parallax** is on by default. In App mode and interactive Wallpaper mode, the background follows mouse movement. Non-interactive Wallpaper mode does not track the mouse. When a 3D stage is active, the slideshow pauses on its current image and parallax moves the stage environment instead. Turn off **Background parallax** to keep the image and stage still. System reduced-motion preferences disable the effect.
 
 If an image is moved, deleted, or cannot be read, VAssist skips it. Use **Refresh** to scan a selected folder again after its contents change. Clearing the selection removes the saved paths from VAssist settings but does not delete the source images.
 

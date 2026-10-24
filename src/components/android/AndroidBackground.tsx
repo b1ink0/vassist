@@ -7,6 +7,8 @@ import { useState, useEffect, useRef } from "react";
 import { backgroundStorageService } from "../../services/storage/BackgroundStorageService";
 import Logger from "../../services/common/LoggerService";
 import { useUIConfig } from "../../hooks/config/useConfigUI";
+import { useStageSurface } from "../../hooks/app/useStageSurface";
+import { getStageSurfaceActive } from "../../babylon/stages/stageSurfaceState";
 import {
   getBackgroundFillCSS,
   getBackgroundImageFilter,
@@ -15,12 +17,18 @@ import {
   BUILT_IN_BACKGROUNDS,
   getBuiltInBackgroundPreviewUrl,
 } from "../../config/backgroundCatalog";
+import {
+  isARModeRequested,
+  onARModeStateChanged,
+} from "../../babylon/ar/ARModeLifecycle";
 
 type BackgroundImage = { id: string; url: string };
 type BackgroundMotionBridge = { start: () => void; stop: () => void };
 
 function AndroidBackground() {
   const { androidBackground } = useUIConfig();
+  const stageActive = useStageSurface();
+  const [isARMode, setIsARMode] = useState(isARModeRequested);
   const [images, setImages] = useState<BackgroundImage[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [nextIndex, setNextIndex] = useState<number | null>(null);
@@ -31,6 +39,14 @@ function AndroidBackground() {
   const hasBackground = Boolean(currentImage);
   const nextImage = nextIndex === null ? null : images[nextIndex];
   const imageFilter = getBackgroundImageFilter(androidBackground);
+
+  useEffect(
+    () =>
+      onARModeStateChanged(({ requested, active }) => {
+        setIsARMode(requested || active === true);
+      }),
+    [],
+  );
 
   useEffect(() => {
     const layer = parallaxLayerRef.current;
@@ -80,17 +96,26 @@ function AndroidBackground() {
       }
     };
     const handleTilt = (event: Event) => {
+      if (isARMode) return;
       const { x, y } = (event as CustomEvent<{ x: number; y: number }>).detail;
       if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      if (getStageSurfaceActive()) {
+        window.dispatchEvent(
+          new CustomEvent("vassist:stage-parallax", { detail: { x, y } }),
+        );
+        return;
+      }
       targetX = Math.max(-1, Math.min(1, x)) * 2.2;
       targetY = Math.max(-1, Math.min(1, y)) * 2.2;
       scheduleOffset();
     };
     const updateMotion = () => {
       if (
-        !layer ||
-        !hasBackground ||
+        isARMode ||
+        (!layer && !stageActive) ||
+        (!hasBackground && !stageActive) ||
         !androidBackground.parallaxEnabled ||
+        (!androidBackground.enabled && !stageActive) ||
         reducedMotion.matches
       ) {
         motionBridge?.stop();
@@ -110,12 +135,23 @@ function AndroidBackground() {
       window.removeEventListener("vassist:background-tilt", handleTilt);
       reducedMotion.removeEventListener("change", updateMotion);
       motionBridge?.stop();
+      if (stageActive) {
+        window.dispatchEvent(
+          new CustomEvent("vassist:stage-parallax", { detail: { x: 0, y: 0 } }),
+        );
+      }
       if (animationFrame !== null) {
         window.cancelAnimationFrame(animationFrame);
       }
       clearOffset();
     };
-  }, [androidBackground.parallaxEnabled, hasBackground]);
+  }, [
+    androidBackground.enabled,
+    androidBackground.parallaxEnabled,
+    hasBackground,
+    isARMode,
+    stageActive,
+  ]);
 
   useEffect(() => {
     const handleBackgroundChange = () =>
@@ -134,10 +170,8 @@ function AndroidBackground() {
 
     const loadBackgrounds = async () => {
       try {
-        if (
-          !androidBackground.enabled ||
-          androidBackground.mode !== "images"
-        ) {
+        if (isARMode) return;
+        if (!androidBackground.enabled || androidBackground.mode !== "images") {
           setImages([]);
           return;
         }
@@ -228,6 +262,10 @@ function AndroidBackground() {
         const scheduleNext = () => {
           slideshowTimer = setTimeout(async () => {
             if (cancelled) return;
+            if (getStageSurfaceActive()) {
+              scheduleNext();
+              return;
+            }
             let followingIndex = activeImageIndex;
             let foundNextImage = false;
             for (
@@ -242,6 +280,10 @@ function AndroidBackground() {
               }
             }
             if (cancelled) return;
+            if (getStageSurfaceActive()) {
+              scheduleNext();
+              return;
+            }
             if (!foundNextImage) {
               scheduleNext();
               return;
@@ -289,9 +331,10 @@ function AndroidBackground() {
     androidBackground.slideshowEnabled,
     androidBackground.slideshowIntervalSeconds,
     backgroundRevision,
+    isARMode,
   ]);
 
-  if (!androidBackground.enabled) return null;
+  if (isARMode || !androidBackground.enabled) return null;
 
   if (androidBackground.mode !== "images") {
     return (
@@ -312,7 +355,7 @@ function AndroidBackground() {
     >
       <div
         className={
-          androidBackground.parallaxEnabled
+          androidBackground.parallaxEnabled && !stageActive
             ? "vassist-android-background-parallax-stage"
             : "absolute inset-0"
         }
@@ -322,7 +365,7 @@ function AndroidBackground() {
             src={currentImage.url}
             alt=""
             className={`absolute inset-0 h-full w-full object-cover ${
-              androidBackground.parallaxEnabled
+              androidBackground.parallaxEnabled && !stageActive
                 ? "vassist-background-parallax-sensor-image"
                 : ""
             }`}
@@ -333,7 +376,7 @@ function AndroidBackground() {
               src={nextImage.url}
               alt=""
               className={`absolute inset-0 h-full w-full object-cover ${
-                androidBackground.parallaxEnabled
+                androidBackground.parallaxEnabled && !stageActive
                   ? "vassist-background-parallax-sensor-image"
                   : ""
               }`}

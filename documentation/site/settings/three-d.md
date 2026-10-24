@@ -1,19 +1,19 @@
 # 3D Settings
 
-Settings → 3D has five tabs: **Display**, **Performance**, **Models**, **Animations**, and **Emotes**. The **Models** tab has **Avatars** and **Stages** sections. Together they cover the Live Assistant's visual assets and display settings.
+Settings → 3D has five tabs: **Display**, **Performance**, **Models**, **Animations**, and **Emotes**. The **Models** tab has an **Avatars** section and, on supported native surfaces, a **Stages** section. Together they cover the Live Assistant's visual assets and display settings.
 
 ## Display
 
 **Portrait mode** crops the view to upper-body framing. Use **Clipping Height** to adjust how much of the body is visible. Lower values show more. Higher values crop tighter. You can switch portrait mode on and off without reloading the avatar.
 
-**Avatar Shadow** is on by default. A translucent shadow appears behind the animated avatar in both 2D and 3D camera modes. Its light and receiver follow the camera together, keeping the shadow offset to the left and slightly downward as you rotate the view. Loaded Stages receive ordinary scene shadows instead. Turn this off to hide avatar shadows.
+**Avatar Shadow** is on by default. With **No Stage**, VAssist renders a soft avatar silhouette behind the character in both 2D and 3D camera modes; it follows the avatar and camera instead of sitting on a ground plane. With a stage active, the same toggle controls the stage's real 3D cast shadow, so it falls onto the environment and moves with its light. Turn this off to hide the avatar shadow.
 
 **Character Position** controls where the Live Assistant sits on screen (web and extension builds). Set it to **Last Location** and the position you drag it to is remembered across reloads. Switch it to any preset to snap it back.
 
 | Control            | Default        | Behavior                                                                                          |
 | ------------------ | -------------- | ------------------------------------------------------------------------------------------------- |
 | Enable Avatar      | On             | Turns the Live Assistant on or off. When off, the app falls back to chat-only mode.               |
-| Avatar Shadow      | On             | Show a translucent shadow behind the avatar, or cast shadows onto a loaded Stage.                    |
+| Avatar Shadow      | On             | Show a translucent shadow behind the avatar, or cast shadows onto a loaded Stage.                 |
 | Reload Avatar      | -              | Only when avatar is on. Reloads the scene immediately.                                            |
 | Portrait Mode      | Off            | Only when avatar is on. Switches to tighter upper-body framing.                                   |
 | Clipping Height    | Model preset   | Only when Portrait Mode is on. Lower values show more body. Higher values crop more aggressively. |
@@ -73,6 +73,8 @@ If the Live Assistant runs slowly or drops frames, work through this list in ord
 
 Manages character models and stages together.
 
+Stage selection uses compact rendered previews. Turn **Stages** on, then choose a preview. Open **Stage options** for the stage's supported controls. Turn the toggle off to use your saved background again. The same editor is available in **UI > Display** on supported native surfaces and in the setup wizard when the avatar is enabled. Custom stage import, rename, and deletion are under **Custom stages**.
+
 ### Adding a custom avatar
 
 Models must be packaged as a ZIP file. The ZIP must contain the `.pmx` file plus every texture image it references. The PMX file embeds relative paths to its textures, so those textures need to exist at the same relative paths inside the ZIP. Standard MMD model packages already have this structure. If you downloaded an MMD model, zip the whole folder as-is.
@@ -109,19 +111,76 @@ To control which parts of a model are visible (hide accessories, swap textures, 
 | Mesh part buttons      | Toggle individual mesh parts on/off, grouped by category.                        |
 | Custom model row       | Shows name and file size. Supports rename, delete, and default toggle.           |
 
-### Adding a custom stage
-
-Same structure as avatar model ZIPs: a `.pmx` stage file plus all its texture images at the correct relative paths. Hit **Upload PMX Stage (ZIP)** to import, then toggle it as default.
-
-Select **No Stage** to render the avatar against a transparent or neutral background.
-
 ### Stages
 
-| Control                | Behavior                                                          |
-| ---------------------- | ----------------------------------------------------------------- |
-| Upload PMX Stage (ZIP) | Import a zipped stage. Shows progress and error feedback.         |
-| No Stage row           | Default when no custom stages are installed.                      |
-| Stage row              | Shows name and size. Supports rename, delete, and default toggle. |
+Stages are available in Desktop App and Wallpaper modes, and in the Android app and live wallpaper. Floating desktop windows, the web app, extension, and browser integrations do not load stages or show stage controls. Android AR hides both the selected stage and the configured background while the camera view is active; they return when you leave AR.
+
+On a fresh setup, no built-in stage is selected. Turn on **Stages** and choose one of six studio environments, **Aster Observatory**, **Moss House**, or **Rainlight Library**. Select **No Stage** to use your background settings instead; your background selection remains saved when you switch to a stage. If you already have a custom stage saved as the default, it can load until you select **No Stage**.
+
+### Built-in stage previews
+
+These previews show the six quiet studio stages and the three furnished environments.
+
+<div class="doc-figure-grid">
+  <figure class="doc-figure">
+    <img src="/assets/stages/ink.webp" alt="Ink stage with a dark starry sky" loading="lazy" />
+    <figcaption>Ink</figcaption>
+  </figure>
+  <figure class="doc-figure">
+    <img src="/assets/stages/paper.webp" alt="Paper stage with a warm light studio" loading="lazy" />
+    <figcaption>Paper</figcaption>
+  </figure>
+  <figure class="doc-figure">
+    <img src="/assets/stages/slate.webp" alt="Slate stage with a circular stone plinth" loading="lazy" />
+    <figcaption>Slate</figcaption>
+  </figure>
+  <figure class="doc-figure">
+    <img src="/assets/stages/dusk.webp" alt="Dusk stage under a violet twilight sky" loading="lazy" />
+    <figcaption>Dusk</figcaption>
+  </figure>
+  <figure class="doc-figure">
+    <img src="/assets/stages/stillwater.webp" alt="Stillwater stage with a blue rippling surface" loading="lazy" />
+    <figcaption>Stillwater</figcaption>
+  </figure>
+  <figure class="doc-figure">
+    <img src="/assets/stages/pebble.webp" alt="Pebble stage with a rounded sandstone base" loading="lazy" />
+    <figcaption>Pebble</figcaption>
+  </figure>
+  <figure class="doc-figure">
+    <img src="/assets/stages/aster-observatory.webp" alt="Aster Observatory stage with a planetarium and orbital display" loading="lazy" />
+    <figcaption>Aster Observatory</figcaption>
+  </figure>
+  <figure class="doc-figure">
+    <img src="/assets/stages/moss-house.webp" alt="Moss House garden room with a window and plants" loading="lazy" />
+    <figcaption>Moss House</figcaption>
+  </figure>
+  <figure class="doc-figure">
+    <img src="/assets/stages/rainlight-library.webp" alt="Rainlight Library with warm lamps, bookshelves, and a rainy window" loading="lazy" />
+    <figcaption>Rainlight Library</figcaption>
+  </figure>
+</div>
+
+The six quiet stages have distinct palettes: Ink (near-black seamless studio), Paper (light studio), Slate (cool stone plinth), Dusk (violet horizon), Stillwater (deep blue rippling water), and Pebble (warm sandstone base). They follow local time, darken at night, and use subtle stars in dark skies. Ink keeps faint stars by day; Paper stays seamless.
+
+Use **Stage options** and select **Apply** in Settings. The Live Assistant's stage button has compact controls that preview and save immediately; its clock opens a dial that saves and closes on release.
+
+| Control                          | What it does                                                                                                                                                                                                                                       |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Season                           | Follows the local calendar or selects spring, summer, autumn, or winter. Seasonal palettes apply across built-in stages; effects are petals, pollen, leaves, or snow.                                                                              |
+| Seasonal effects                 | Toggles particles independently of environment animation. Moss House and Rainlight Library keep weather outdoors; Aster Observatory has seasonal lighting without weather particles.                                                               |
+| Environment brightness           | Adjusts exposure for the stage and avatar; saved per stage.                                                                                                                                                                                        |
+| Lighting and Mood                | All built-in stages follow local time or allow manual time on a 00:00–24:00 slider in 15-minute steps. Aster Observatory and Rainlight Library also have named Mood presets. Lighting affects stage lights and supported sky and shadow direction. |
+| Animate environment              | Toggles supported motion such as stars, water ripples, planetary rotation, rain, and fire.                                                                                                                                                         |
+| Avatar Shadow                    | Toggles the stage-cast shadow. With **No Stage**, it shows the avatar shadow behind the model.                                                                                                                                                     |
+| Avatar height / floor adjustment | Calibrates room scale and foot contact per avatar without resizing its physics rig. Existing PMX stages keep their placement.                                                                                                                      |
+
+Portrait mode keeps the room intact and frames the avatar's upper body.
+
+#### Importing a stage
+
+Use **Import** to choose a self-contained GLB, a Babylon scene with embedded textures, or a PMX stage ZIP. PMX ZIPs need the stage file and its texture images at their correct relative paths. GLB and Babylon imports cannot depend on separate files that were not included in the import.
+
+Custom stages support selection, renaming, and deletion. Existing imported PMX stages remain available. See the [environment art credits](../legal/stages) for the included assets.
 
 ## Animations
 

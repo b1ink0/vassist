@@ -162,6 +162,8 @@ export const iconMap = {
   box: HeroIconsSolid.CubeIcon,
   "view-in-ar": MdViewInAr,
   "sticker-border": HeroIconsSolid.Square2StackIcon,
+  parallax: HeroIconsSolid.ArrowsRightLeftIcon,
+  "avatar-shadow": HeroIconsSolid.Square3Stack3DIcon,
 };
 
 export default iconMap;

@@ -16,11 +16,11 @@ hero:
       link: /intro
 features:
   - title: Get started
-    details: Install VAssist and run the setup wizard to pick your AI provider, voice, and Live Assistant preferences.
+    details: Install VAssist and run setup to choose your AI provider, voice, background, and optional stage.
     link: /getting-started/installation
     linkText: Installation and setup
   - title: Usage guides
-    details: How to use chat, voice, the AI toolbar, the Live Assistant, emotes, history, and screen share.
+    details: Learn chat, voice, the AI toolbar, Live Assistant controls, stages, emotes, history, and screen share.
     link: /guide/
     linkText: Browse guides
   - title: Settings reference

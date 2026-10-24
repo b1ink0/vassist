@@ -6,6 +6,12 @@ import type { MmdAnimationSpan } from "babylon-mmd/esm/Runtime/Animation/mmdComp
 import type { ElectronAPI } from "../types/electron";
 import type { StickerBorderSettings } from "../config/uiConfig";
 import type { ARSessionController } from "./ar/ARSessionController";
+import type { TransformNode } from "@babylonjs/core/Meshes/transformNode";
+import type {
+  StageFormat,
+  StageSettings,
+  StageOptions,
+} from "../config/stageConfig";
 
 export type CameraMode = "2D" | "3D";
 
@@ -82,6 +88,7 @@ export interface UIPositionConfigLike {
 }
 
 export interface UIConfigLike {
+  stage?: StageSettings;
   enablePortraitMode?: boolean;
   stickerBorder?: Partial<StickerBorderSettings>;
   physicsEngine?: string;
@@ -126,6 +133,7 @@ export interface SceneBuildConfig {
   enableModelLoading?: boolean;
   modelUrl: string;
   stageUrl?: string | null;
+  stageFormat?: StageFormat;
   customModelFile?: File;
   modelId?: string;
   modelFileName?: string;
@@ -327,7 +335,8 @@ export interface SceneMetadataLike {
   positionManager?: PositionManagerLike;
   animationManager?: AnimationManagerOffsetLike | unknown;
   defaultGround?: Mesh;
-  stageMesh?: Mesh | null;
+  stageMesh?: TransformNode | null;
+  updateStageOptions?: (options: Partial<StageOptions>) => void;
   setShadowsEnabled?: (enabled: boolean) => void;
   interactionManager?: unknown;
   modelMesh?: unknown;

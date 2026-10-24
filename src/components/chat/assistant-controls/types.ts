@@ -96,8 +96,13 @@ export interface AssistantControlLayout {
   emote: { left: number; top: number };
   avatar: { left: number; top: number };
   camera: { left: number; top: number };
+  stage: { left: number; top: number };
+  stageControls: { left: number; top: number };
+  stageMaxHeight: number;
   button: { left: string; top?: string; bottom?: string };
   isLeftSide: boolean;
+  dockScale?: number;
+  avatarMaxHeight?: number;
 }
 
 export interface AssistantControlActions {

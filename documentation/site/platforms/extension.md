@@ -12,6 +12,8 @@ The browser extension injects VAssist into normal web pages. The Live Assistant,
 | Background and offscreen contexts do privileged work | Audio, model, and browser-extension work can keep running without blocking the visible page.                                              |
 | Page context is automatically read                   | When you ask a question that relates to the current page, VAssist extracts the relevant part and includes it in your query automatically. |
 
+The extension does not provide native desktop or Android wallpaper backgrounds or 3D environment stages. Its Live Assistant renders over the current web page.
+
 ## Page context
 
 When VAssist is active in the extension (or any browser environment), it can automatically read the current page to answer questions about it. Ask "summarize this article" or "what does this form do?" and VAssist extracts the relevant content from the DOM and includes it in your message before sending it to the AI. You do not need to copy anything.

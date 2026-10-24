@@ -805,8 +805,11 @@ const buildConfigsFromSetupData = (setupData: SetupData) => {
 
   const uiConfig: UIConfig = {
     ...DefaultUIConfig,
+    stage: setupData.ui?.stage ?? DefaultUIConfig.stage,
+    enableAvatarShadow: setupData.ui?.enableAvatarShadow ?? true,
     androidBackground: {
       ...DefaultUIConfig.androidBackground,
+      parallaxEnabled: setupData.ui?.background?.parallaxEnabled ?? true,
       enabled: setupData.ui?.background?.enabled ?? true,
       mode:
         setupData.ui?.background?.mode ??
@@ -853,6 +856,7 @@ const buildConfigsFromSetupData = (setupData: SetupData) => {
     },
     desktopBackground: {
       ...DefaultUIConfig.desktopBackground,
+      parallaxEnabled: setupData.ui?.background?.parallaxEnabled ?? true,
       enabled: setupData.ui?.background?.enabled ?? true,
       mode:
         setupData.ui?.background?.mode ??

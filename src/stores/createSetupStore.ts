@@ -15,6 +15,7 @@ import {
   DEFAULT_BACKGROUND_FILL_SETTINGS,
   DEFAULT_BACKGROUND_IMAGE_EFFECTS,
 } from "../config/uiConfig";
+import { DefaultStageSettings } from "../config/stageConfig";
 
 const DEFAULT_LLM_PROVIDER = isAndroid
   ? "android-local"
@@ -142,6 +143,8 @@ export const DEFAULT_SETUP_STATE = {
       writer: { enabled: true },
     },
     ui: {
+      stage: DefaultStageSettings,
+      enableAvatarShadow: true,
       enableModelLoading: true,
       enablePortraitMode: false,
       position: "bottom-right",
@@ -150,6 +153,7 @@ export const DEFAULT_SETUP_STATE = {
         ...DEFAULT_BACKGROUND_FILL_SETTINGS,
         ...DEFAULT_BACKGROUND_IMAGE_EFFECTS,
         enabled: true,
+        parallaxEnabled: true,
         builtInIds: ["milky-way"],
         androidSlideshowEnabled: false,
         desktopSlideshowEnabled: true,

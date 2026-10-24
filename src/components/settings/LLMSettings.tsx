@@ -1765,6 +1765,7 @@ const LLMSettings = ({
   }, []);
 
   const [activeSubTab, setActiveSubTab] = useState<LLMSubTabId>("provider");
+  const appliedSubTabRequest = useRef<string | null>(null);
   const subTabs = useMemo(
     () =>
       (
@@ -1819,14 +1820,18 @@ const LLMSettings = ({
   }, [activeSubTab]);
 
   useEffect(() => {
+    if (!requestedLocalSubTab) {
+      appliedSubTabRequest.current = null;
+      return;
+    }
     if (
-      !requestedLocalSubTab ||
-      requestedLocalSubTab === activeSubTab ||
+      appliedSubTabRequest.current === requestedLocalSubTab ||
       !subTabs.some((tab) => tab.id === requestedLocalSubTab)
     ) {
       return;
     }
 
+    appliedSubTabRequest.current = requestedLocalSubTab;
     setActiveSubTab(requestedLocalSubTab);
   }, [activeSubTab, requestedLocalSubTab, subTabs]);
 
