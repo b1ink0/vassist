@@ -6,7 +6,7 @@ Settings → 3D has five tabs: **Display**, **Performance**, **Models**, **Anima
 
 **Portrait mode** crops the view to upper-body framing. Use **Clipping Height** to adjust how much of the body is visible. Lower values show more. Higher values crop tighter. You can switch portrait mode on and off without reloading the avatar.
 
-**Avatar Shadow** is on by default. With **No Stage**, VAssist renders a soft avatar silhouette behind the character in both 2D and 3D camera modes; it follows the avatar and camera instead of sitting on a ground plane. With a stage active, the same toggle controls the stage's real 3D cast shadow, so it falls onto the environment and moves with its light. Turn this off to hide the avatar shadow.
+**Avatar Shadow** is on by default. With **No Stage**, VAssist renders a soft avatar silhouette behind the character in both 2D and 3D camera modes. It follows the avatar and camera instead of sitting on a ground plane. With a stage active, the same toggle controls the stage's real 3D cast shadow, so it falls onto the environment and moves with its light. Turn this off to hide the avatar shadow.
 
 **Character Position** controls where the Live Assistant sits on screen (web and extension builds). Set it to **Last Location** and the position you drag it to is remembered across reloads. Switch it to any preset to snap it back.
 
@@ -113,9 +113,9 @@ To control which parts of a model are visible (hide accessories, swap textures, 
 
 ### Stages
 
-Stages are available in Desktop App and Wallpaper modes, and in the Android app and live wallpaper. Floating desktop windows, the web app, extension, and browser integrations do not load stages or show stage controls. Android AR hides both the selected stage and the configured background while the camera view is active; they return when you leave AR.
+Stages are available in Desktop App and Wallpaper modes, and in the Android app and live wallpaper. Floating desktop windows, the web app, extension, and browser integrations do not load stages or show stage controls. Android AR hides both the selected stage and the configured background while the camera view is active. They return when you leave AR.
 
-On a fresh setup, no built-in stage is selected. Turn on **Stages** and choose one of six studio environments, **Aster Observatory**, **Moss House**, or **Rainlight Library**. Select **No Stage** to use your background settings instead; your background selection remains saved when you switch to a stage. If you already have a custom stage saved as the default, it can load until you select **No Stage**.
+On a fresh setup, no built-in stage is selected. Turn on **Stages** and choose one of six studio environments, **Aster Observatory**, **Moss House**, or **Rainlight Library**. Select **No Stage** to use your background settings instead. Your background selection remains saved when you switch to a stage. If you already have a custom stage saved as the default, it can load until you select **No Stage**.
 
 ### Built-in stage previews
 
@@ -160,15 +160,15 @@ These previews show the six quiet studio stages and the three furnished environm
   </figure>
 </div>
 
-The six quiet stages have distinct palettes: Ink (near-black seamless studio), Paper (light studio), Slate (cool stone plinth), Dusk (violet horizon), Stillwater (deep blue rippling water), and Pebble (warm sandstone base). They follow local time, darken at night, and use subtle stars in dark skies. Ink keeps faint stars by day; Paper stays seamless.
+The six quiet stages have distinct palettes: Ink (near-black seamless studio), Paper (light studio), Slate (cool stone plinth), Dusk (violet horizon), Stillwater (deep blue rippling water), and Pebble (warm sandstone base). They follow local time, darken at night, and use subtle stars in dark skies. Ink keeps faint stars by day. Paper stays seamless.
 
-Use **Stage options** and select **Apply** in Settings. The Live Assistant's stage button has compact controls that preview and save immediately; its clock opens a dial that saves and closes on release.
+Use **Stage options** and select **Apply** in Settings. The Live Assistant's stage button has compact controls that preview and save immediately. Its clock opens a dial that saves and closes on release.
 
 | Control                          | What it does                                                                                                                                                                                                                                       |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Season                           | Follows the local calendar or selects spring, summer, autumn, or winter. Seasonal palettes apply across built-in stages; effects are petals, pollen, leaves, or snow.                                                                              |
-| Seasonal effects                 | Toggles particles independently of environment animation. Moss House and Rainlight Library keep weather outdoors; Aster Observatory has seasonal lighting without weather particles.                                                               |
-| Environment brightness           | Adjusts exposure for the stage and avatar; saved per stage.                                                                                                                                                                                        |
+| Season                           | Follows the local calendar or selects spring, summer, autumn, or winter. Seasonal palettes apply across built-in stages. Effects are petals, pollen, leaves, or snow.                                                                              |
+| Seasonal effects                 | Toggles particles independently of environment animation. Moss House and Rainlight Library keep weather outdoors. Aster Observatory has seasonal lighting without weather particles.                                                               |
+| Environment brightness           | Adjusts exposure for the stage and avatar. The setting is saved per stage.                                                                                                                                                                         |
 | Lighting and Mood                | All built-in stages follow local time or allow manual time on a 00:00–24:00 slider in 15-minute steps. Aster Observatory and Rainlight Library also have named Mood presets. Lighting affects stage lights and supported sky and shadow direction. |
 | Animate environment              | Toggles supported motion such as stars, water ripples, planetary rotation, rain, and fire.                                                                                                                                                         |
 | Avatar Shadow                    | Toggles the stage-cast shadow. With **No Stage**, it shows the avatar shadow behind the model.                                                                                                                                                     |

@@ -21,30 +21,32 @@ The live 3D assistant sits alongside the chat and page tools. It animates, react
 
 ## The floating button cluster
 
-When the avatar is visible and chat is closed, a vertical stack of buttons sits near the Live Assistant:
+When the avatar is visible, a vertical stack of buttons sits near the Live Assistant:
 
-| Button        | Icon                             | What it does                                                                                                     |
-| ------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Chat button   | AI spark (or X to close)         | Opens the chat. Drag to reposition when in chat-only mode. Shows attachment icon when a file is dragged over it. |
-| Zoom control  | + / - / reset                    | Zooms the Live Assistant view in or out, and resets back to default size.                                        |
-| Avatar button | person outline                   | Opens the avatar picker and camera controls.                                                                     |
-| Stage button  | box                              | Opens the stage picker and quick environment controls on supported native surfaces.                              |
-| Emote button  | music note (spins while playing) | Opens the emote list.                                                                                            |
-| Reload button | refresh arrow                    | Reloads the page.                                                                                                |
+| Button        | Icon                               | What it does                                                                                                                                    |
+| ------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat button   | AI spark or chat icon (X to close) | Opens chat. Drag the dock to reposition it in chat-only mode or floating desktop mode. Shows an attachment icon when a file is dragged over it. |
+| Zoom control  | + / - / reset                      | Zooms the Live Assistant view in or out, and resets back to default size.                                                                       |
+| Avatar button | person outline                     | Opens the avatar picker and camera controls.                                                                                                    |
+| Stage button  | box                                | Opens the stage picker and quick environment controls on supported native surfaces.                                                             |
+| Emote button  | music note (spins while playing)   | Opens the emote list.                                                                                                                           |
+| Reload button | refresh arrow                      | Reloads the page.                                                                                                                               |
 
-These buttons hide when the chat is open.
+Use the chevron just above Chat to fade the other dock buttons out or show them again. Chat and the chevron stay available, and your choice is saved. Controls start expanded.
+
+In floating desktop mode, the chat controls menu sits beside the chat button. It provides chat history, new chat, temporary chat, settings, and other available options. In detached mode, the menu is available on both the avatar and chat windows.
 
 ## Switching avatars and stages
 
 Click the <AppIcon name="user" /> **avatar button** to open the picker panel. It lists all your imported models starting with **VAssist Default**.
 
 - Click any model to switch immediately. A check mark shows the current selection.
-- In Desktop App and Wallpaper modes and on Android, click the separate <AppIcon name="box" /> **stage button** to choose an environment. The picker stays open while switching stages. The stage button and stage are unavailable during Android AR; AR shows the camera view and placed avatar, then restores the selected stage after exit.
+- In Desktop App and Wallpaper modes and on Android, click the separate <AppIcon name="box" /> **stage button** to choose an environment. The picker stays open while switching stages. The stage button and stage are unavailable during Android AR. AR shows the camera view and placed avatar, then restores the selected stage after exit.
 - **No Stage** uses your background settings. [Stage settings](../settings/three-d#stages) include studio environments, rooms, and custom imports.
 
-The stage picker uses the same narrow pill list as the avatar picker, with hidden scrollbars and a fade mask on desktop. Click the stage dock button again to close it. Below the list, a **season pill** chooses automatic seasons or a specific season. Small icon buttons control **motion**, **avatar shadows**, **seasonal effects**, **environment animation**, **brightness**, and **lighting presets** where supported. Inactive toggles appear faded; hover or focus a button to see its label. Changes preview immediately and save automatically.
+The stage picker uses the same narrow pill list as the avatar picker, with hidden scrollbars. Long lists fade at the edges in floating and detached desktop windows. Click the stage dock button again to close it. Below the list, a **season pill** chooses automatic seasons or a specific season. Small icon buttons control **motion**, **avatar shadows**, **seasonal effects**, **environment animation**, **brightness**, and **lighting presets** where supported. Inactive toggles appear faded. Hover or focus a button to see its label. Changes preview immediately and save automatically.
 
-Click the <AppIcon name="clock" /> **clock icon** to open a centered time dial. Click or drag around the ring to choose a time; releasing saves and closes it. Click outside or press Escape to dismiss it. With a keyboard, arrow keys adjust time and Enter confirms. The <AppIcon name="globe" /> **local time icon** follows the device clock. Quiet stages move their key light through the day, so their shadows change direction with the time. These controls update the environment without resetting the avatar or its emote camera.
+Click the <AppIcon name="clock" /> **clock icon** to open a centered time dial. Click or drag around the ring to choose a time. Releasing saves and closes it. Click outside or press Escape to dismiss it. With a keyboard, arrow keys adjust time and Enter confirms. The <AppIcon name="globe" /> **local time icon** follows the device clock. Quiet stages move their key light through the day, so their shadows change direction with the time. These controls update the environment without resetting the avatar or its emote camera.
 
 ## Camera controls (below the avatar list)
 
@@ -85,6 +87,27 @@ If you turn the avatar off, VAssist keeps working. It just becomes a chat-first 
 ## Android live wallpaper
 
 On Android, the Live Assistant can run as a live wallpaper. It's the same model, motions, and emote library, just rendered as a wallpaper view instead of an in-app overlay. Do setup in the main app first. The wallpaper reads those saved settings.
+
+## Live Assistant in VR
+
+Use your avatar, stages, and chat in VR with floating controls. XR is experimental and requires a compatible headset, a WebXR browser, and native HTML-in-Canvas support.
+
+### Enter VR
+
+1. Connect your headset and enable **Canvas Draw Element** in a supported Chromium browser, then restart the browser.
+2. Enable and load your avatar. On desktop, open the dock’s headset button and choose **Open in XR**. Browser and embed users can open the headset button directly where XR is available.
+3. In the browser, choose **Enter VR**. The palette shows any missing requirements.
+
+You can use the browser independently or [pair it with desktop](/settings/ui#xr-browser-connection) to access desktop conversations, libraries, and AI providers. For a separate headset, configure HTTPS sharing there first. Quest Browser support is experimental and the interface may stop visually updating during immersion.
+
+### Controls
+
+- **Dock:** choose avatars, stages, motions, and zoom. Open chat for your conversation and voice controls.
+- **Controllers:** point and select. The right thumbstick moves you. The left turns, or scrolls when pointing at a panel.
+- **Panels:** grab the six-dot handle to reposition a panel. Use **Pin / Follow** to keep it in place or following your view.
+- **Headset palette:** enable hand tracking before entry, recenter your view, or choose **Exit VR**.
+
+Changing the avatar may leave VR while it reloads. Choose **Enter VR** again afterward.
 
 ## Related guides
 

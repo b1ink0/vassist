@@ -6,6 +6,7 @@
 
 import { isAndroid, isDesktop } from "../utils/PlatformUtils";
 import { DefaultStageSettings, type StageSettings } from "./stageConfig";
+import type { XrBrowserId } from "../types/xr";
 
 export type BackgroundThemeMode = "adaptive" | "light" | "dark";
 
@@ -177,6 +178,26 @@ export const DefaultStickerBorderSettings: StickerBorderSettings = {
 };
 
 export interface UIConfig {
+  assistantControlsCollapsed?: boolean;
+  xr: {
+    browser: XrBrowserId;
+    forceOpenXR: boolean;
+    handTracking?: boolean;
+    clientUrl?: string;
+    network?: import("../types/xr").XrNetworkOptions;
+    environments?: Record<
+      string,
+      { position: [number, number, number]; yaw: number; scale: number }
+    >;
+    panels?: Record<
+      string,
+      {
+        anchor: "follow" | "world" | "hand";
+        position: [number, number, number];
+        yaw: number;
+      }
+    >;
+  };
   desktopBackground: DesktopBackgroundConfig;
   androidBackground: AndroidBackgroundConfig;
   desktopMode: {
@@ -254,6 +275,8 @@ export interface UIConfig {
     showDebug: boolean;
   };
   smoothStreamingAnimation: boolean;
+  animateStreamingText: boolean;
+  fadeChatMessages: boolean;
   thinkingPanelAutoExpand: boolean;
   shortcuts: {
     enabled: boolean;
@@ -544,6 +567,8 @@ export const DefaultUIConfig: UIConfig = {
   },
 
   enableModelLoading: true,
+  assistantControlsCollapsed: false,
+  xr: { browser: "default", forceOpenXR: false },
 
   enablePortraitMode: false,
 
@@ -564,7 +589,7 @@ export const DefaultUIConfig: UIConfig = {
 
   autoLoadOnAllPages: true,
 
-  enableAIToolbar: true,
+  enableAIToolbar: !isDesktop && !isAndroid,
 
   aiToolbar: {
     showOnInputFocus: true,
@@ -609,12 +634,17 @@ export const DefaultUIConfig: UIConfig = {
   },
 
   backgroundDetection: {
-    mode: BackgroundThemeModes.ADAPTIVE,
+    mode: isDesktop
+      ? BackgroundThemeModes.LIGHT
+      : BackgroundThemeModes.ADAPTIVE,
     sampleGridSize: 5,
     showDebug: false,
   },
 
   smoothStreamingAnimation: false,
+  animateStreamingText: true,
+
+  fadeChatMessages: false,
 
   thinkingPanelAutoExpand: false,
 

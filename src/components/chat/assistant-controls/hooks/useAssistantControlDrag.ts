@@ -6,6 +6,7 @@ import type { ButtonPosition, DesktopApiForAssistantControls } from "../types";
 
 interface UseAssistantControlDragOptions {
   modelDisabled: boolean;
+  allowWindowDrag?: boolean;
   isChatOpen: boolean;
   desktopAPI: DesktopApiForAssistantControls | null;
   buttonPos: ButtonPosition;
@@ -17,6 +18,7 @@ interface UseAssistantControlDragOptions {
 
 export function useAssistantControlDrag({
   modelDisabled,
+  allowWindowDrag = false,
   isChatOpen,
   desktopAPI,
   buttonPos,
@@ -25,6 +27,7 @@ export function useAssistantControlDrag({
   endButtonDrag,
   onPositionCommitted,
 }: UseAssistantControlDragOptions) {
+  const canDragDock = modelDisabled || allowWindowDrag;
   const [isDragging, setIsDragging] = useState(false);
   const [dragVisualPos, setDragVisualPos] = useState<ButtonPosition | null>(
     null,
@@ -77,7 +80,7 @@ export function useAssistantControlDrag({
 
   const handleMouseDown = useCallback(
     async (event: ReactMouseEvent<HTMLElement>) => {
-      if (!modelDisabled || event.button !== 0) return;
+      if (!canDragDock || event.button !== 0) return;
 
       event.preventDefault();
       event.stopPropagation();
@@ -111,12 +114,12 @@ export function useAssistantControlDrag({
       window.dispatchEvent(new CustomEvent("chatButtonDragStart"));
       startButtonDrag();
     },
-    [modelDisabled, buttonPos, desktopAPI, startButtonDrag],
+    [canDragDock, buttonPos, desktopAPI, startButtonDrag],
   );
 
   const handleMouseMove = useCallback(
     (event: MouseEvent) => {
-      if (!modelDisabled || !isDragging) return;
+      if (!canDragDock || !isDragging) return;
 
       const canDragDesktopWindow = Boolean(
         isDesktop && desktopAPI?.window?.setPosition,
@@ -164,17 +167,11 @@ export function useAssistantControlDrag({
       dragVisualPosRef.current = nextPosition;
       scheduleDragVisualUpdate();
     },
-    [
-      modelDisabled,
-      isDragging,
-      isChatOpen,
-      desktopAPI,
-      scheduleDragVisualUpdate,
-    ],
+    [canDragDock, isDragging, isChatOpen, desktopAPI, scheduleDragVisualUpdate],
   );
 
   const handleMouseUp = useCallback(() => {
-    if (!modelDisabled || !isDragging) return;
+    if (!canDragDock || !isDragging) return;
 
     if (buttonDragAnimationFrameRef.current !== null) {
       cancelAnimationFrame(buttonDragAnimationFrameRef.current);
@@ -199,7 +196,7 @@ export function useAssistantControlDrag({
     );
     endButtonDrag();
   }, [
-    modelDisabled,
+    canDragDock,
     isDragging,
     desktopAPI,
     setButtonPos,
@@ -216,14 +213,14 @@ export function useAssistantControlDrag({
   }, []);
 
   useEffect(() => {
-    if (!modelDisabled) return;
+    if (!canDragDock) return;
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [modelDisabled, handleMouseMove, handleMouseUp]);
+  }, [canDragDock, handleMouseMove, handleMouseUp]);
 
   return {
     isDragging,

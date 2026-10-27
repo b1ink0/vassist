@@ -14,6 +14,7 @@ import { androidModelsPlugin } from "./tools/vite-plugins/android-models-plugin"
 import {
   createAppAliases,
   createReactPlugin,
+  thirdPartyLicensesPlugin,
   createViteDefines,
 } from "./tools/vite/shared-config";
 
@@ -62,6 +63,7 @@ export default defineConfig(({ mode }) => {
 
     plugins: [
       createReactPlugin(true),
+      thirdPartyLicensesPlugin(),
       tailwindcss(),
       androidModelsPlugin(packageModels),
       moveIndexHtmlPlugin(),

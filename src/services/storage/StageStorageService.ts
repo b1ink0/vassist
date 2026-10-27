@@ -283,9 +283,12 @@ class StageStorageService {
    */
   async getDefaultStage(): Promise<StageWithId | null> {
     try {
-      const allStages = await this.getAllStages();
-      const defaultStage = allStages.find((stage) => stage.isDefault === true);
-      return defaultStage || null;
+      const selected = (await this.getStagesList()).find(
+        (stage) => stage.isDefault,
+      );
+      if (!selected) return null;
+      const stage = await this.getStage(selected.id);
+      return stage ? { ...stage, id: selected.id } : null;
     } catch (error) {
       Logger.error("StageStorage", "Failed to get default stage:", error);
       return null;
@@ -299,12 +302,11 @@ class StageStorageService {
    */
   async setDefaultStage(stageId: string): Promise<boolean> {
     try {
-      await this.clearAllDefaults();
-
       const stage = await this.getStage(stageId);
       if (!stage) {
         throw new Error(`Stage ${stageId} not found`);
       }
+      await this.clearAllDefaults();
 
       stage.isDefault = true;
 
@@ -325,12 +327,16 @@ class StageStorageService {
    */
   async clearAllDefaults(): Promise<void> {
     try {
-      const allStages = await this.getAllStages();
+      const allStages = (await this.getStagesList()).filter(
+        (stage) => stage.isDefault,
+      );
 
       for (const stage of allStages) {
         if (stage.isDefault) {
-          stage.isDefault = false;
-          await storageServiceProxy.fileSave(stage.id, stage, this.CATEGORY);
+          const stored = await this.getStage(stage.id);
+          if (!stored) continue;
+          stored.isDefault = false;
+          await storageServiceProxy.fileSave(stage.id, stored, this.CATEGORY);
         }
       }
 

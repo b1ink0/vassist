@@ -1,17 +1,6 @@
 /**
- * @fileoverview Custom loading spinner component.
+ * @fileoverview Loading indicator styled to match the assistant controls.
  */
-
-/**
- * Loading indicator component for bottom-right corner or centered positioning.
- *
- * @param {Object} props
- * @param {boolean} props.isVisible - Visibility state
- * @param {number|null} props.progress - Progress percentage (0-100)
- * @param {boolean} props.centered - Whether to center in container
- * @returns {JSX.Element|null}
- */
-import { Icon } from "../icons";
 import { cn } from "../../utils/cn";
 
 interface LoadingIndicatorProps {
@@ -26,26 +15,45 @@ const LoadingIndicator = ({
   centered = false,
 }: LoadingIndicatorProps) => {
   if (!isVisible) return null;
+  const percentage =
+    progress !== null && Number.isFinite(progress)
+      ? Math.round(Math.min(100, Math.max(0, progress)))
+      : null;
 
   return (
     <div
+      role="progressbar"
+      aria-label="Loading"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={percentage ?? undefined}
       className={cn(
-        !centered && "fixed bottom-5 right-5",
-        "vassist-loading-surface z-[10000] pointer-events-auto flex items-center justify-center px-2 py-2 rounded-xl",
+        centered ? "relative" : "fixed bottom-5 right-5",
+        "glass-button glass-button-dark z-[10000] pointer-events-none flex h-12 w-12 shrink-0 items-center justify-center rounded-full",
       )}
     >
-      <div className="relative w-8 h-8 flex items-center justify-center">
-        <Icon
-          name="loading-2"
-          size={32}
-          className="animate-spin vassist-text-primary opacity-90"
+      <svg
+        aria-hidden="true"
+        className="absolute -inset-px h-12 w-12 animate-spin motion-reduce:animate-none"
+        viewBox="0 0 48 48"
+      >
+        <circle
+          cx="24"
+          cy="24"
+          r="23.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1"
+          strokeLinecap="round"
+          pathLength="1"
+          strokeDasharray="0.7 0.3"
         />
-        {progress !== null && (
-          <span className="absolute vassist-text-primary text-[9px] font-bold z-10">
-            {Math.round(progress)}
-          </span>
-        )}
-      </div>
+      </svg>
+      {percentage !== null && (
+        <span className="text-[10px] font-semibold tabular-nums">
+          {percentage}
+        </span>
+      )}
     </div>
   );
 };

@@ -492,7 +492,9 @@ export class StorageManager {
   private async _filesGetMetadataByCategory(
     category: string,
   ): Promise<Record<string, UnknownRecord>> {
-    const records = await this.adapter.query("files", { category });
+    const records = await (this.adapter.queryMetadata?.("files", {
+      category,
+    }) ?? this.adapter.query("files", { category }));
     const result: Record<string, UnknownRecord> = {};
     records.forEach((record) => {
       const metadata: UnknownRecord = {

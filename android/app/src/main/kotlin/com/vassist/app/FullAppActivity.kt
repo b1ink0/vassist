@@ -52,6 +52,8 @@ class FullAppActivity : ComponentActivity() {
     private lateinit var webView: WebView
     private lateinit var backgroundMotionBridge: BackgroundMotionBridge
     private var lastKeyboardHeight = 0
+    private var lastSystemInsetTop = -1
+    private var lastSystemInsetBottom = -1
     
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     
@@ -207,6 +209,9 @@ class FullAppActivity : ComponentActivity() {
             
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
+                lastSystemInsetTop = -1
+                lastSystemInsetBottom = -1
+                ViewCompat.requestApplyInsets(webView)
                 Log.d(TAG, "Page finished loading: $url")
             }
             
@@ -413,6 +418,22 @@ class FullAppActivity : ComponentActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(webView) { _, insets ->
             val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
             val keyboardHeightPx = imeInsets.bottom
+            val systemInsets = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            if (systemInsets.top != lastSystemInsetTop || systemInsets.bottom != lastSystemInsetBottom) {
+                lastSystemInsetTop = systemInsets.top
+                lastSystemInsetBottom = systemInsets.bottom
+                val topCss = systemInsets.top / density
+                val bottomCss = systemInsets.bottom / density
+                webView.post {
+                    webView.evaluateJavascript(
+                        "document.documentElement.style.setProperty('--vassist-system-inset-top', '${topCss}px');" +
+                            "document.documentElement.style.setProperty('--vassist-system-inset-bottom', '${bottomCss}px');",
+                        null
+                    )
+                }
+            }
             
             if (keyboardHeightPx != lastKeyboardHeight) {
                 lastKeyboardHeight = keyboardHeightPx

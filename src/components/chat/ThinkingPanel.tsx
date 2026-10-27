@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Collapsible } from "@base-ui/react/collapsible";
 import { Icon } from "../icons";
+import { cn } from "../../utils/cn";
 
 interface ThinkingPanelProps {
   thinking?: string | null;
@@ -11,6 +12,7 @@ interface ThinkingPanelProps {
   hasContent: boolean;
   /** User preference: auto-expand while reasoning streams */
   autoExpand: boolean;
+  isLightBackground: boolean;
 }
 
 const MAX_CONTENT_HEIGHT = 180; // px — scroll viewport cap (streaming AND done)
@@ -24,6 +26,7 @@ const ThinkingPanel = ({
   isStreamingMessage,
   hasContent,
   autoExpand,
+  isLightBackground,
 }: ThinkingPanelProps) => {
   const thinking = thinkingRaw ?? "";
   const thinkingActive =
@@ -60,35 +63,37 @@ const ThinkingPanel = ({
   }, [thinking, expanded, thinkingActive]);
 
   // Latest full line for the collapsed ticker
-  const lines = thinking.split("\n").filter((l) => l.trim().length > 0);
-  const currentLine = lines[lines.length - 1] ?? "";
+  const trimmedThinking = thinking.trimEnd();
+  const currentLine = trimmedThinking.slice(
+    trimmedThinking.lastIndexOf("\n") + 1,
+  );
 
   return (
     <Collapsible.Root
       open={expanded}
       onOpenChange={(nextOpen: boolean) => setUserExpanded(nextOpen)}
-      className="mb-2 rounded-lg border overflow-hidden border-white/10 bg-white/[0.04]"
+      className={cn(
+        "mb-2 rounded-xl border border-current/10 overflow-hidden [background:color-mix(in_srgb,currentColor_4%,transparent)]",
+        isLightBackground ? "glass-text" : "glass-text-black",
+      )}
       data-testid={`chat-message-thinking-${messageIndex}`}
     >
       <Collapsible.Trigger
-        className="glass-text flex w-full items-center gap-1.5 px-3 py-1.5 text-xs font-medium opacity-60 hover:opacity-90"
+        className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-current opacity-75 hover:opacity-100"
         data-testid={`chat-message-thinking-toggle-${messageIndex}`}
       >
         <span className="thinking-chevron inline-flex">
           <Icon name="chevron-right" size={12} />
         </span>
         <span className={thinkingActive ? "thinking-label-pulse" : undefined}>
-          {thinkingActive ? "Thinking..." : "Thought process"}
+          {thinkingActive ? "Thinking" : "Thought process"}
         </span>
         {!expanded && thinkingActive && (
           <span
-            className="ml-1 flex-1 min-w-0 relative h-[14px] overflow-hidden text-left font-normal opacity-70"
+            className="ml-1 flex-1 min-w-0 overflow-hidden text-left font-normal opacity-65"
             aria-hidden={true}
           >
-            <span
-              key={currentLine}
-              className="absolute inset-x-0 bottom-0 whitespace-nowrap overflow-hidden text-ellipsis block animate-thinking-ticker-line"
-            >
+            <span className="whitespace-nowrap overflow-hidden text-ellipsis block">
               {currentLine}
             </span>
           </span>
@@ -98,7 +103,7 @@ const ThinkingPanel = ({
       <Collapsible.Panel className="thinking-collapse-panel">
         <div
           ref={scrollRef}
-          className="glass-text px-3 pb-2 pt-0.5 text-[13px] leading-relaxed whitespace-pre-wrap opacity-60 overflow-y-auto thinking-scroll-area"
+          className="px-3 pb-3 pt-1 text-[13px] leading-relaxed whitespace-pre-wrap text-current opacity-75 overflow-y-auto thinking-scroll-area"
           style={{ maxHeight: MAX_CONTENT_HEIGHT }}
         >
           {thinking}

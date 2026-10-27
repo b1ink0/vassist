@@ -3,6 +3,18 @@
  */
 
 import {
+  sendChatMessage,
+  regenerateChatResponse,
+  sendVoiceChatMessage,
+  getSystemPromptFromConfig,
+  type AIServiceLike,
+  type TTSServiceLike,
+  type StorageServiceLike,
+  type DocumentInteractionServiceLike,
+  type VoiceConversationServiceLike,
+} from "../../services/chat/ChatResponseService";
+
+import {
   lazy,
   Suspense,
   useEffect,
@@ -28,9 +40,15 @@ import {
   type ResolvedVAssistEmbedConfig,
   type VAssistMessageEventPayload,
 } from "../../embed/config";
-import { useAppRuntimeServices } from "../../contexts/AppRuntimeContext";
+import {
+  useAppRuntimeServices,
+  useAppStoreApi,
+} from "../../contexts/AppRuntimeContext";
+import { getChatSession } from "../../services/chat/ChatSessionRuntime";
+import { playChatMessageSpeech } from "../../services/chat/ChatSpeechService";
 import { emitEmbedHostEvent } from "../../embed/runtimeStore";
-import { toChatMessageItems } from "../../stores/createAppStore";
+import { useXrRuntime } from "../../contexts/XrRuntimeContext";
+import { XrSurface } from "../xr/XrSurface";
 import {
   AIServiceProxy,
   TTSServiceProxy,
@@ -41,8 +59,7 @@ import DocumentInteractionService from "../../services/chat/DocumentInteractionS
 import VoiceConversationService, {
   ConversationStates,
 } from "../../services/audio/VoiceConversationService";
-import { DefaultAIConfig, DefaultTTSConfig } from "../../config/aiConfig";
-import { PromptConfig } from "../../config/promptConfig";
+
 import {
   useAssistantRef,
   useIsAssistantReady,
@@ -50,6 +67,7 @@ import {
 import {
   useChatActions,
   useChatMessages,
+  useIsProcessing,
   useCurrentChatId,
   useIsChatContainerVisible,
   useIsChatInputVisible,
@@ -108,19 +126,6 @@ interface ChatMessageLike {
   [key: string]: string | number | boolean | null | undefined | object;
 }
 
-interface ChatServiceLike {
-  addMessage: (
-    role: string,
-    content: string,
-    images?: string[] | null,
-    audios?: string[] | null,
-  ) => void;
-  getMessages: () => ChatMessageLike[];
-  getFormattedMessages: (systemPrompt: string) => AIMessage[];
-  getLastUserMessage: () => ChatMessageLike | null;
-  updateLastMessage: (content: string) => void;
-}
-
 interface DesktopApiForChatController {
   ipc?: {
     send: (channel: string, data?: unknown) => void;
@@ -129,63 +134,6 @@ interface DesktopApiForChatController {
       callback: (...args: unknown[]) => void,
     ) => (() => void) | void;
   };
-}
-
-interface AIMessage {
-  role: string;
-  content: string;
-  images?: string[];
-  audios?: string[];
-}
-
-interface AIResult {
-  success: boolean;
-  cancelled?: boolean;
-  error?: { message?: string } | unknown;
-}
-
-interface AIServiceLike {
-  isConfigured: () => boolean;
-  sendMessage: (
-    messages: AIMessage[],
-    onStream?: (chunk: string) => void | Promise<void>,
-    options?: unknown,
-  ) => Promise<AIResult>;
-  isGenerating: () => boolean;
-  abortRequest: () => void;
-}
-
-interface TTSGenerateResult {
-  audio?: Blob | ArrayBuffer;
-  bvmdUrl?: string;
-}
-
-interface TTSServiceLike {
-  isConfigured: () => boolean;
-  resumePlayback: () => void;
-  stopPlayback: () => void;
-  generateSpeech: (
-    text: string,
-    withLipSync?: boolean,
-  ) => Promise<TTSGenerateResult | null>;
-  queueAudio: (
-    text: string,
-    audioUrl: string,
-    bvmdUrl?: string,
-    sessionId?: string,
-  ) => void;
-  getQueueLength: () => number;
-  addEventListener: (
-    eventName: string,
-    callback: (...args: unknown[]) => void,
-  ) => void;
-  removeEventListener: (
-    eventName: string,
-    callback: (...args: unknown[]) => void,
-  ) => void;
-  resetSessionFlags: () => void;
-  markSessionComplete: (sessionId: string) => void;
-  isStopped?: boolean;
 }
 
 type DesktopAssistantRuntimeEvent =
@@ -205,32 +153,14 @@ type DesktopAssistantRuntimeEvent =
   | { type: "stop" };
 
 interface STTServiceLike {
-  isConfigured: () => boolean;
-  startRecording: () => Promise<void>;
+  isConfigured: () => Promise<boolean>;
+  startRecording: () => Promise<boolean>;
   stopRecording: () => void;
+  cancelRecording: () => void;
   setTranscriptionCallback: (callback: ((text: string) => void) | null) => void;
   setErrorCallback: (callback: ((error: unknown) => void) | null) => void;
   setRecordingStartCallback: (callback: (() => void) | null) => void;
   setRecordingStopCallback: (callback: (() => void) | null) => void;
-}
-
-interface StorageServiceLike {
-  configLoad: <T>(key: string, defaultValue?: T) => Promise<T>;
-}
-
-interface VoiceConversationServiceLike {
-  start: () => Promise<void>;
-  stop: () => void;
-  interrupt: () => void;
-  changeState: (state: ConversationState) => void;
-  setStateChangeCallback: (
-    callback: ((state: ConversationState) => void) | null,
-  ) => void;
-  setTranscriptionCallback: (
-    callback: ((text: string, images?: string[] | null) => void) | null,
-  ) => void;
-  isConversationActive: () => boolean;
-  getState: () => ConversationState;
 }
 
 interface MediaDeviceLike {
@@ -288,18 +218,6 @@ interface ChatHistoryServiceLike {
     isTemp: boolean;
     metadata: { sourceUrl: string };
   }) => Promise<void>;
-}
-
-interface DocumentInteractionServiceLike {
-  getContextForQuery: (
-    query: string,
-    aiSendMessage: (
-      messages: AIMessage[],
-      onStream?: (chunk: string) => void | Promise<void>,
-      options?: unknown,
-    ) => Promise<AIResult>,
-    abortSignal?: AbortSignal,
-  ) => Promise<string | null>;
 }
 
 interface ChatInputProps {
@@ -370,8 +288,34 @@ const ChatController = ({
   onRequireSetup,
   embedConfig,
 }: ChatControllerProps) => {
+  const xr = useXrRuntime();
+  const appStore = useAppStoreApi();
+  const isGeneratingReply = useIsProcessing();
+
+  const chatSession = getChatSession(appStore);
+  useEffect(
+    () =>
+      chatSession.registerSpeaker((index, text) =>
+        playChatMessageSpeech(appStore, index, text),
+      ),
+    [appStore, chatSession],
+  );
   const { chatService, chatHistoryService } = useAppRuntimeServices();
   const api = useDesktopApi() as DesktopApiForChatController | null;
+  useEffect(() => {
+    if (!isDesktop || isInputWindow || !api?.ipc) return;
+    const publish = () =>
+      api.ipc?.send("state:chatGeneration", isGeneratingReply);
+    publish();
+    const unsubscribe = api.ipc.on("chatInput:requestGenerationState", publish);
+    const unsubscribeStop = api.ipc.on("chatInput:stop", () => {
+      void getChatSession(appStore).execute({ type: "stop" });
+    });
+    return () => {
+      unsubscribe?.();
+      unsubscribeStop?.();
+    };
+  }, [api, appStore, isGeneratingReply]);
   const { updateAIConfig } = useConfigAIActions();
   const chatInputRef = useRef<HTMLElement | null>(null);
   const streamAbortControllerRef = useRef<AbortController | null>(null); // Track current stream to allow cancellation
@@ -396,8 +340,9 @@ const ChatController = ({
     setIsChatContainerVisible,
     setChatMessages,
     setIsProcessing,
-    setCurrentChatId,
     setPendingDropData,
+    setIsTempChat,
+    clearChat,
     closeChat,
   } = useChatActions();
   const _isVoiceMode = useIsVoiceMode();
@@ -416,6 +361,10 @@ const ChatController = ({
   const chatEnabled = embedConfig.features.chat;
   const toolbarEnabled = embedConfig.features.aiToolbar;
   const isNormalDesktop = isDesktopAttachedModeWindow;
+  const usesSeparateInputWindow =
+    isDesktop &&
+    !isNormalDesktop &&
+    !(isLiveWallpaperWindow && !isDetachedChatWindow);
 
   const assistantRef =
     appAssistantRef as MutableRefObject<AssistantHandle | null>;
@@ -608,8 +557,9 @@ const ChatController = ({
 
     api.ipc.send("desktop:chat-visibility", {
       visible: isChatContainerVisible || isChatInputVisible,
+      temporary: isTempChat,
     });
-  }, [api, isChatContainerVisible, isChatInputVisible]);
+  }, [api, isChatContainerVisible, isChatInputVisible, isTempChat]);
 
   useEffect(() => {
     if (!isDetachedAvatarWindow || !api?.ipc) {
@@ -631,8 +581,43 @@ const ChatController = ({
 
       setIsChatInputVisible(visible);
       setIsChatContainerVisible(visible);
+      if (
+        payload &&
+        typeof payload === "object" &&
+        "temporary" in payload &&
+        typeof payload.temporary === "boolean"
+      ) {
+        setIsTempChat(payload.temporary);
+      }
     });
-  }, [api, setIsChatContainerVisible, setIsChatInputVisible]);
+  }, [api, setIsChatContainerVisible, setIsChatInputVisible, setIsTempChat]);
+
+  useEffect(() => {
+    if (!isDetachedChatWindow || !api?.ipc) return;
+    return api.ipc.on("desktop:chat-command", (command: unknown) => {
+      if (command === "temporary") {
+        setIsTempChat((previous) => !previous);
+        return;
+      }
+      if (command !== "new" && command !== "history" && command !== "settings")
+        return;
+      if (command === "new") void clearChat();
+      setIsChatContainerVisible(true);
+      setIsChatInputVisible(true);
+      setIsQuickPanelOpen(false);
+      setIsHistoryPanelOpen(command === "history");
+      setIsSettingsPanelOpen(command === "settings");
+    });
+  }, [
+    api,
+    clearChat,
+    setIsChatContainerVisible,
+    setIsChatInputVisible,
+    setIsHistoryPanelOpen,
+    setIsQuickPanelOpen,
+    setIsSettingsPanelOpen,
+    setIsTempChat,
+  ]);
 
   useDesktopWindowResize(null, { disabled: avatarOnly });
 
@@ -640,425 +625,55 @@ const ChatController = ({
    * Handles AI response in voice mode.
    * Gets AI response and speaks it through VoiceConversationService.
    */
-  const handleVoiceAIResponse = useCallback(async () => {
-    const abortController = new AbortController();
-    streamAbortControllerRef.current = abortController;
-
-    setIsProcessing(true);
-
-    if (!aiService.isConfigured()) {
-      chatService.addMessage(
-        "assistant",
-        "Error: AI not configured. Please configure in Control Panel.",
-      );
-      setChatMessages(toChatMessageItems(chatService.getMessages()));
-      streamAbortControllerRef.current = null;
-      setIsProcessing(false);
-      voiceConversationService.changeState(ConversationStates.LISTENING);
-      return;
-    }
-
-    Logger.log("ChatController", "[Voice] Checking assistant ready state:", {
-      hasRef: !!assistantRef.current,
-      isReady: assistantRef.current?.isReady?.(),
-    });
-
-    if (canUseAssistant()) {
-      Logger.log(
-        "ChatController",
-        "[Voice] Starting BUSY state (thinking animation)",
-      );
-      await setAssistantState("BUSY");
-      Logger.log("ChatController", "[Voice] BUSY state set successfully");
-    } else {
-      Logger.warn(
-        "ChatController",
-        "[Voice] Assistant not ready, skipping BUSY state",
-      );
-    }
-
-    let voiceAIConfig = DefaultAIConfig;
-    let voiceTTSConfig = DefaultTTSConfig;
-    try {
-      voiceAIConfig = await storageService.configLoad(
-        "aiConfig",
-        DefaultAIConfig,
-      );
-      voiceTTSConfig = await storageService.configLoad(
-        "ttsConfig",
-        DefaultTTSConfig,
-      );
-    } catch (error) {
-      Logger.error(
-        "ChatController",
-        "Failed to load configs in handleVoiceAIResponse:",
-        error,
-      );
-    }
-
-    const systemPrompt = getSystemPromptFromConfig(voiceAIConfig);
-    const ttsEnabled = voiceTTSConfig.enabled && ttsService.isConfigured();
-
-    const messages = chatService.getFormattedMessages(systemPrompt);
-
-    const lastUserMessage = chatService.getLastUserMessage();
-    const hasAttachments =
-      lastUserMessage &&
-      ((lastUserMessage.images && lastUserMessage.images.length > 0) ||
-        (lastUserMessage.audios && lastUserMessage.audios.length > 0));
-
-    if (
-      lastUserMessage &&
-      lastUserMessage.content &&
-      !hasAttachments &&
-      !isAndroid &&
-      !isDesktop
-    ) {
-      if (abortController.signal.aborted) {
-        Logger.log(
-          "ChatController",
-          "[Voice] Document interaction cancelled before starting",
-        );
-        streamAbortControllerRef.current = null;
-        return;
-      }
-
-      try {
-        const aiSendMessage = async (
-          aiMessages: AIMessage[],
-          onStream?: (chunk: string) => void | Promise<void>,
-          options?: unknown,
-        ): Promise<AIResult> => {
-          return await aiService.sendMessage(aiMessages, onStream, options);
-        };
-
-        const pageContext = await documentInteractionService.getContextForQuery(
-          lastUserMessage.content,
-          aiSendMessage,
-          abortController.signal,
-        );
-
-        if (abortController.signal.aborted) {
-          Logger.log(
-            "ChatController",
-            "[Voice] Stream cancelled after document interaction",
-          );
-          streamAbortControllerRef.current = null;
-          return;
-        }
-
-        if (pageContext) {
-          Logger.log(
-            "ChatController",
-            "[Voice] Injecting page context into AI prompt",
-          );
-          const lastMessage = messages[messages.length - 1];
-          if (lastMessage && lastMessage.role === "user") {
-            lastMessage.content = pageContext + lastMessage.content;
-          }
-        }
-      } catch (error) {
-        Logger.warn(
-          "ChatController",
-          "[Voice] Failed to extract page context:",
-          error,
-        );
-      }
-    } else if (hasAttachments) {
-      Logger.log(
-        "ChatController",
-        "[Voice] Skipping document interaction - user has attachments (images/audios)",
-      );
-    }
-
-    if (ttsEnabled) {
-      ttsService.resumePlayback();
-    }
-
-    let fullResponse = "";
-    let fullResponseRaw = "";
-    let fullThinking = "";
-    let previousDisplayLength = 0;
-    let hasSwitchedToSpeaking = false;
-    let textBuffer = "";
-    const allChunks: string[] = [];
-    let nextChunkToGenerate = 0;
-    const MAX_QUEUED_AUDIO = 3;
-    let isGeneratingChunk = false;
-
-    let thinkingFramePending = false;
-    const flushThinkingDelta = () => {
-      thinkingFramePending = false;
-      const currentMessages = chatService.getMessages();
-      if (
-        currentMessages.length > 0 &&
-        currentMessages[currentMessages.length - 1]?.role === "assistant"
-      ) {
-        chatService.updateLastMessage(fullResponse, fullThinking);
-      } else {
-        chatService.addMessage(
-          "assistant",
-          fullResponse,
-          null,
-          null,
-          fullThinking,
-        );
-      }
-      setChatMessages(toChatMessageItems(chatService.getMessages()));
-    };
-    const applyThinkingDelta = (thinkingChunk: string) => {
-      fullThinking += thinkingChunk;
-      if (thinkingFramePending) return;
-      thinkingFramePending = true;
-      requestAnimationFrame(flushThinkingDelta);
-    };
-
-    const voiceTTSSessionId = `voice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    const generateTTSChunk = async (chunkIndex: number) => {
-      if (chunkIndex >= allChunks.length) return;
-
-      const chunkText = allChunks[chunkIndex];
-      if (!chunkText) {
-        return;
-      }
-
-      try {
-        const queueLength = ttsService.getQueueLength();
-        Logger.log(
-          "ChatController",
-          `[Voice] Generating TTS+lip sync chunk ${chunkIndex}: "${chunkText.substring(0, 50)}..." (queue: ${queueLength})`,
-        );
-
-        const result = await ttsService.generateSpeech(chunkText, true);
-
-        if (!result || !result.audio) {
-          Logger.warn(
-            "ChatController",
-            `[Voice] TTS generation returned null for chunk ${chunkIndex}`,
-          );
-          return;
-        }
-
-        const { audio, bvmdUrl } = result;
-
-        const audioBlob =
-          audio instanceof Blob
-            ? audio
-            : new Blob([audio], { type: "audio/mp3" });
-        const audioUrl = URL.createObjectURL(audioBlob);
-
-        ttsService.queueAudio(chunkText, audioUrl, bvmdUrl, voiceTTSSessionId);
-
-        Logger.log(
-          "ChatController",
-          `[Voice] TTS chunk ${chunkIndex} queued${bvmdUrl ? " with lip sync" : ""} (queue now: ${ttsService.getQueueLength()})`,
-        );
-      } catch (error) {
-        Logger.error(
-          "ChatController",
-          "[Voice] TTS chunk ${chunkIndex} failed:",
-          error,
-        );
-      }
-    };
-
-    const tryGenerateNextChunk = async () => {
-      if (isGeneratingChunk) {
-        return;
-      }
-
-      const queueLength = ttsService.getQueueLength();
-      if (
-        queueLength < MAX_QUEUED_AUDIO &&
-        nextChunkToGenerate < allChunks.length
-      ) {
-        isGeneratingChunk = true;
-        await generateTTSChunk(nextChunkToGenerate++);
-        isGeneratingChunk = false;
-
-        tryGenerateNextChunk();
-      }
-    };
-
-    const handleAudioFinished = () => {
-      tryGenerateNextChunk();
-    };
-    ttsService.addEventListener("audioFinished", handleAudioFinished);
-
-    if (ttsEnabled) {
-      Logger.log(
-        "ChatController",
-        `[Voice] Starting TTS session ${voiceTTSSessionId} (not marking complete until LLM done)`,
-      );
-    }
-
-    const result = await aiService.sendMessage(
-      messages as AIMessage[],
-      async (chunk: string) => {
-        if (abortController.signal.aborted) {
-          Logger.log(
-            "ChatController",
-            "[Voice] Streaming callback aborted, ignoring chunk",
-          );
-          return;
-        }
-
-        fullResponseRaw += chunk;
-
-        let displayResponse = fullResponseRaw.replace(
-          /<think>[\s\S]*?<\/think>/g,
-          "",
-        );
-        displayResponse = displayResponse.replace(/<think>.*$/s, "");
-        displayResponse = displayResponse.replace(/^\s+/, "");
-
-        fullResponse = displayResponse;
-
-        const newContent = displayResponse.slice(previousDisplayLength);
-        textBuffer += newContent;
-        previousDisplayLength = displayResponse.length;
-
-        const currentMessages = chatService.getMessages();
-        if (
-          currentMessages.length > 0 &&
-          currentMessages[currentMessages.length - 1]?.role === "assistant"
-        ) {
-          chatService.updateLastMessage(fullResponse);
-        } else {
-          chatService.addMessage("assistant", fullResponse);
-        }
-        setChatMessages(toChatMessageItems(chatService.getMessages()));
-
-        if (
-          !ttsEnabled &&
-          !hasSwitchedToSpeaking &&
-          fullResponse.length > 10 &&
-          canUseAssistant()
-        ) {
-          Logger.log(
-            "ChatController",
-            "[Voice] Starting speaking animation (no TTS)",
-          );
-          await triggerAssistantAction("speak");
-          hasSwitchedToSpeaking = true;
-        }
-
-        if (ttsEnabled) {
-          const sentenceEnd = /[.!?:]\s|[.!?:]\n|\n/.exec(textBuffer);
-
-          if (sentenceEnd) {
-            const chunkToSpeak = textBuffer
-              .substring(0, sentenceEnd.index + sentenceEnd[0].length)
-              .trim();
-            textBuffer = textBuffer.substring(
-              sentenceEnd.index + sentenceEnd[0].length,
-            );
-
-            if (
-              chunkToSpeak &&
-              chunkToSpeak.length >= 3 &&
-              chunkToSpeak.trim().length >= 3
-            ) {
-              allChunks.push(chunkToSpeak);
-              tryGenerateNextChunk();
-            }
-          }
-        }
-      },
-      { onReasoning: (chunk: string) => applyThinkingDelta(chunk) },
-    );
-
-    if (result.cancelled) {
-      Logger.log("ChatController", "Voice generation cancelled by user");
-      voiceConversationService.changeState(ConversationStates.LISTENING);
-      if (canUseAssistant()) {
-        await idleAssistant();
-      }
-      streamAbortControllerRef.current = null;
-      setIsProcessing(false);
-      return;
-    }
-
-    if (!result.success) {
-      Logger.error("ChatController", "Voice AI error:", result.error);
-      const voiceErrorMessage = getErrorMessage(result.error);
-      chatService.addMessage("assistant", `Error: ${voiceErrorMessage}`);
-      setChatMessages(toChatMessageItems(chatService.getMessages()));
-      voiceConversationService.changeState(ConversationStates.LISTENING);
-      if (canUseAssistant()) {
-        await idleAssistant();
-      }
-      streamAbortControllerRef.current = null;
-      setIsProcessing(false);
-      return;
-    }
-
-    Logger.log("ChatController", "[Voice] AI response complete:", fullResponse);
-
-    if (ttsEnabled && textBuffer.trim().length > 0) {
-      const finalChunk = textBuffer.trim();
-      allChunks.push(finalChunk);
-      tryGenerateNextChunk();
-    }
-
-    if (ttsEnabled && allChunks.length > 0) {
-      voiceConversationService.changeState(ConversationStates.GENERATING_VOICE);
-      Logger.log(
-        "ChatController",
-        `[Voice] Transitioning to GENERATING_VOICE state (${allChunks.length} TTS chunks to generate)`,
-      );
-
-      ttsService.resetSessionFlags();
-
-      Logger.log(
-        "ChatController",
-        `[Voice] Waiting for ${allChunks.length} TTS chunks to generate and queue...`,
-      );
-
-      while (nextChunkToGenerate < allChunks.length) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-
-      Logger.log(
-        "ChatController",
-        "[Voice] All TTS chunks generated and queued",
-      );
-
-      ttsService.markSessionComplete(voiceTTSSessionId);
-      Logger.log(
-        "ChatController",
-        `[Voice] Session ${voiceTTSSessionId} marked complete`,
-      );
-    } else {
-      Logger.warn(
-        "ChatController",
-        "[Voice] No TTS generated, returning to listening",
-      );
-      voiceConversationService.changeState(ConversationStates.LISTENING);
-    }
-
-    ttsService.removeEventListener("audioFinished", handleAudioFinished);
-
-    streamAbortControllerRef.current = null;
-    setIsProcessing(false);
-  }, [
-    setIsProcessing,
-    setChatMessages,
-    assistantRef,
-    canUseAssistant,
-    idleAssistant,
-    setAssistantState,
-    triggerAssistantAction,
-    chatService,
-  ]);
-
+  const executeVoiceMessage = useCallback(
+    (text: string, images: string[] | null) =>
+      sendVoiceChatMessage(
+        {
+          chatSession,
+          chatService,
+          streamAbortControllerRef,
+          aiService,
+          ttsService,
+          storageService,
+          documentInteractionService,
+          getSystemPromptFromConfig,
+          canUseAssistant,
+          triggerAssistantAction,
+          idleAssistant,
+          setChatMessages,
+          setIsProcessing,
+          getErrorMessage,
+          voiceConversationService,
+          setAssistantState,
+          appStore,
+          historyService,
+        },
+        text,
+        images,
+      ),
+    [
+      chatSession,
+      chatService,
+      canUseAssistant,
+      triggerAssistantAction,
+      idleAssistant,
+      setChatMessages,
+      setIsProcessing,
+      setAssistantState,
+      appStore,
+      historyService,
+    ],
+  );
   const handleVoiceTranscription = useCallback(
     async (
       text: string,
       images: string[] | null = null,
       skipForward = false,
     ) => {
+      if (chatSession.isRemote) {
+        await chatSession.execute({ type: "send", text, images });
+        return;
+      }
       Logger.log(
         "ChatController",
         "Voice transcription received:",
@@ -1084,7 +699,12 @@ const ChatController = ({
 
       // Desktop: Forward transcription to input window so it can send back with images
       // Skip if skipForward=true (already from input window)
-      if (!skipForward && isDesktop && !isInputWindow && api?.ipc) {
+      if (
+        !skipForward &&
+        usesSeparateInputWindow &&
+        !isInputWindow &&
+        api?.ipc
+      ) {
         Logger.log(
           "ChatController",
           "Forwarding transcription to input window for image attachment",
@@ -1094,13 +714,9 @@ const ChatController = ({
         return;
       }
 
-      // Add message and process
-      chatService.addMessage("user", text, images, null);
-      setChatMessages(toChatMessageItems(chatService.getMessages()));
-
-      await handleVoiceAIResponse();
+      await executeVoiceMessage(text, images);
     },
-    [setChatMessages, handleVoiceAIResponse, api, chatService],
+    [executeVoiceMessage, api, chatSession, usesSeparateInputWindow],
   );
 
   const handleVoiceModeChange = useCallback(
@@ -1108,7 +724,7 @@ const ChatController = ({
       Logger.log("ChatController", "Voice mode changed:", active);
       setIsVoiceMode(active);
 
-      if (isDesktop && !isInputWindow) {
+      if (usesSeparateInputWindow && !isInputWindow) {
         try {
           if (active) {
             Logger.log(
@@ -1140,10 +756,15 @@ const ChatController = ({
           }
         } catch (error) {
           Logger.error("ChatController", "Voice mode change error:", error);
+          setIsVoiceMode(false);
+          api?.ipc?.send("state:voiceSession", {
+            active: false,
+            error: getErrorMessage(error),
+          });
         }
       }
     },
-    [setIsVoiceMode],
+    [setIsVoiceMode, usesSeparateInputWindow, api],
   );
 
   /**
@@ -1153,7 +774,7 @@ const ChatController = ({
   useEffect(() => {
     // Only register in desktop main window
     // Web/Android: ChatInput handles state callback to avoid overwriting
-    if (isInputWindow || !isDesktop) return;
+    if (isInputWindow || !usesSeparateInputWindow) return;
 
     const handleStateChange = (state: ConversationState) => {
       setIsSpeaking(state === ConversationStates.SPEAKING);
@@ -1169,7 +790,25 @@ const ChatController = ({
     return () => {
       voiceConversationService.setStateChangeCallback(null);
     };
-  }, [setIsSpeaking, api]);
+  }, [setIsSpeaking, api, usesSeparateInputWindow]);
+
+  useEffect(() => {
+    if (!usesSeparateInputWindow || isInputWindow || !api?.ipc) return;
+    const publish = () =>
+      api.ipc?.send("state:voiceSession", { active: _isVoiceMode });
+    publish();
+    const unsubscribe = api.ipc.on("voice:requestSession", publish);
+    voiceConversationService.setErrorCallback((error) => {
+      api.ipc?.send("state:voiceSession", {
+        active: _isVoiceMode,
+        error: getErrorMessage(error),
+      });
+    });
+    return () => {
+      unsubscribe?.();
+      voiceConversationService.setErrorCallback(null);
+    };
+  }, [api, _isVoiceMode, usesSeparateInputWindow]);
 
   useEffect(() => {
     if (isTempChat && currentChatId) {
@@ -1541,46 +1180,6 @@ const ChatController = ({
    * @param {Object} aiConfig - AI configuration object
    * @returns {string} System prompt text
    */
-  const getSystemPromptFromConfig = (
-    aiConfig: Record<string, unknown> | null | undefined,
-  ): string => {
-    if (!aiConfig || !aiConfig.provider) {
-      return PromptConfig.systemPrompts.default.prompt;
-    }
-
-    const provider =
-      typeof aiConfig.provider === "string" ? aiConfig.provider : "";
-    const providerKey = provider === "chrome-ai" ? "chromeAi" : provider;
-    const providerConfig = aiConfig[providerKey] as
-      | {
-          selectedSystemPromptProfileId?: string;
-          systemPromptProfiles?: Array<{ id?: string; prompt?: string }>;
-        }
-      | undefined;
-
-    if (!providerConfig) {
-      return PromptConfig.systemPrompts.default.prompt;
-    }
-
-    const profiles = Array.isArray(providerConfig.systemPromptProfiles)
-      ? providerConfig.systemPromptProfiles
-      : [];
-    const selectedProfileId =
-      typeof providerConfig.selectedSystemPromptProfileId === "string"
-        ? providerConfig.selectedSystemPromptProfileId
-        : "";
-    const selectedProfile = profiles.find(
-      (profile) => profile?.id === selectedProfileId,
-    );
-    if (
-      typeof selectedProfile?.prompt === "string" &&
-      selectedProfile.prompt.trim().length > 0
-    ) {
-      return selectedProfile.prompt;
-    }
-
-    return PromptConfig.systemPrompts.default.prompt;
-  };
 
   /**
    * Handles the assistant control dock click to toggle chat visibility.
@@ -1820,457 +1419,23 @@ const ChatController = ({
     setIsQuickPanelOpen((previous) => !previous);
   });
 
-  /**
-   * Streams AI response with TTS generation.
-   */
-  const streamAIResponse = async () => {
-    // Create abort controller for this stream
-    const abortController = new AbortController();
-    streamAbortControllerRef.current = abortController;
-
-    const autoTTSSessionId = `auto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    let savedConfig = DefaultAIConfig;
-    let ttsConfig = DefaultTTSConfig;
-    try {
-      savedConfig = await storageService.configLoad(
-        "aiConfig",
-        DefaultAIConfig,
-      );
-      ttsConfig = await storageService.configLoad(
-        "ttsConfig",
-        DefaultTTSConfig,
-      );
-    } catch (configError) {
-      Logger.warn("ChatController", "Failed to load config:", configError);
-    }
-
-    const systemPrompt = getSystemPromptFromConfig(savedConfig);
-    const messages = chatService.getFormattedMessages(systemPrompt);
-
-    // DOCUMENT INTERACTION: Extract page context based on user query
-    // SKIP if user has attachments (images/audios) or on Android/Desktop platforms
-    const lastUserMessage = chatService.getLastUserMessage();
-    const hasAttachments =
-      lastUserMessage &&
-      ((lastUserMessage.images && lastUserMessage.images.length > 0) ||
-        (lastUserMessage.audios && lastUserMessage.audios.length > 0));
-
-    if (
-      lastUserMessage &&
-      lastUserMessage.content &&
-      !hasAttachments &&
-      !isAndroid &&
-      !isDesktop
-    ) {
-      Logger.log("ChatController", "Starting document interaction analysis...");
-
-      // Check if aborted before starting
-      if (abortController.signal.aborted) {
-        Logger.log(
-          "ChatController",
-          "Document interaction cancelled before starting",
-        );
-        return { success: false, cancelled: true };
-      }
-
-      try {
-        // Create AI send function for the analyzer (with utility session option)
-        const aiSendMessage = async (
-          aiMessages: AIMessage[],
-          onStream?: (chunk: string) => void | Promise<void>,
-          options?: unknown,
-        ): Promise<AIResult> => {
-          return await aiService.sendMessage(aiMessages, onStream, options);
-        };
-
-        const pageContext = await documentInteractionService.getContextForQuery(
-          lastUserMessage.content,
-          aiSendMessage,
-          abortController.signal,
-        );
-
-        // Check if aborted after document interaction
-        if (abortController.signal.aborted) {
-          Logger.log(
-            "ChatController",
-            "Stream cancelled after document interaction",
-          );
-          return { success: false, cancelled: true };
-        }
-
-        Logger.log(
-          "ChatController",
-          "Document interaction complete, message count:",
-          chatService.getMessages().length,
-        );
-
-        if (pageContext) {
-          Logger.log("ChatController", "Injecting page context into AI prompt");
-          // Add context to the last user message
-          const lastMessage = messages[messages.length - 1];
-          if (lastMessage && lastMessage.role === "user") {
-            lastMessage.content = pageContext + lastMessage.content;
-          }
-        }
-      } catch (error) {
-        Logger.warn("ChatController", "Failed to extract page context:", error);
-        // Continue without context - non-critical error
-      }
-    } else if (hasAttachments) {
-      Logger.log(
-        "ChatController",
-        "Skipping document interaction - user has attachments (images/audios)",
-      );
-    }
-
-    const ttsEnabled = ttsConfig.enabled && ttsService.isConfigured();
-
-    Logger.log("ChatController", "System prompt:", systemPrompt);
-    Logger.log("ChatController", "Messages to AI:", messages);
-
-    if (ttsEnabled) {
-      ttsService.resumePlayback();
-    }
-
-    let fullResponse = "";
-    let fullResponseRaw = "";
-    let fullThinking = "";
-    let previousDisplayLength = 0;
-
-    let thinkingFramePending = false;
-    const flushThinkingDelta = () => {
-      thinkingFramePending = false;
-      const currentMessages = chatService.getMessages();
-      if (
-        currentMessages.length > 0 &&
-        currentMessages[currentMessages.length - 1]?.role === "assistant"
-      ) {
-        chatService.updateLastMessage(fullResponse, fullThinking);
-      } else {
-        chatService.addMessage(
-          "assistant",
-          fullResponse,
-          null,
-          null,
-          fullThinking,
-        );
-      }
-      setChatMessages(toChatMessageItems(chatService.getMessages()));
-    };
-    const applyThinkingDelta = (thinkingChunk: string) => {
-      fullThinking += thinkingChunk;
-      if (thinkingFramePending) return;
-      thinkingFramePending = true;
-      requestAnimationFrame(flushThinkingDelta);
-    };
-    let hasSwitchedToSpeaking = false;
-    let textBuffer = "";
-    const allChunks: string[] = [];
-    let nextChunkToGenerate = 0;
-    const MAX_QUEUED_AUDIO = 3;
-    let isGeneratingChunk = false;
-
-    /**
-     * Generates TTS for a text chunk with lip sync.
-     *
-     * @param {number} chunkIndex - Index of chunk to generate
-     */
-    const generateTTSChunk = async (chunkIndex: number) => {
-      // Check if aborted (stop button pressed, chat closed, etc.)
-      if (abortController.signal.aborted) {
-        Logger.log(
-          "ChatController",
-          "TTS generation aborted, stopping chunk generation",
-        );
-        return;
-      }
-
-      if (chunkIndex >= allChunks.length) return;
-
-      const chunkText = allChunks[chunkIndex];
-
-      if (
-        !chunkText ||
-        typeof chunkText !== "string" ||
-        chunkText.trim().length === 0
-      ) {
-        Logger.warn(
-          "ChatController",
-          "Skipping empty/invalid chunk ${chunkIndex}:",
-          chunkText,
-        );
-        return;
-      }
-
-      Logger.log(
-        "ChatController",
-        `Generating TTS for chunk ${chunkIndex}: "${chunkText.substring(0, 100)}..." (type: ${typeof chunkText}, length: ${chunkText.length})`,
-      );
-
-      if (ttsService.isStopped) {
-        return;
-      }
-
-      try {
-        const result = await ttsService.generateSpeech(chunkText, true);
-
-        // Check again after async operation
-        if (abortController.signal.aborted || !result || !result.audio) {
-          if (abortController.signal.aborted) {
-            Logger.log(
-              "ChatController",
-              "TTS generation aborted after speech generation",
-            );
-          } else {
-            Logger.warn(
-              "ChatController",
-              `TTS generation returned null for chunk ${chunkIndex}`,
-            );
-          }
-          return;
-        }
-
-        const { audio, bvmdUrl } = result;
-
-        if (ttsService.isStopped || abortController.signal.aborted) {
-          return;
-        }
-
-        const audioBlob =
-          audio instanceof Blob
-            ? audio
-            : new Blob([audio], { type: "audio/mp3" });
-        const audioUrl = URL.createObjectURL(audioBlob);
-
-        ttsService.queueAudio(chunkText, audioUrl, bvmdUrl, autoTTSSessionId);
-      } catch (ttsError) {
-        Logger.warn(
-          "ChatController",
-          "TTS generation failed for chunk ${chunkIndex}:",
-          ttsError,
-        );
-      }
-    };
-
-    /**
-     * Generates next chunk if queue has space.
-     */
-    const tryGenerateNextChunk = async () => {
-      // Check if aborted before generating
-      if (abortController.signal.aborted) {
-        Logger.log("ChatController", "TTS chunk generation stopped (aborted)");
-        return;
-      }
-
-      if (isGeneratingChunk) {
-        return;
-      }
-
-      const queueLength = ttsService.getQueueLength();
-
-      if (
-        queueLength < MAX_QUEUED_AUDIO &&
-        nextChunkToGenerate < allChunks.length
-      ) {
-        isGeneratingChunk = true;
-        await generateTTSChunk(nextChunkToGenerate++);
-        isGeneratingChunk = false;
-
-        // Check if aborted before scheduling next
-        if (
-          !abortController.signal.aborted &&
-          nextChunkToGenerate < allChunks.length
-        ) {
-          setTimeout(() => tryGenerateNextChunk(), 0);
-        }
-      }
-    };
-
-    const handleAudioFinished = () => {
-      // Only continue generating if not aborted
-      if (!abortController.signal.aborted) {
-        tryGenerateNextChunk();
-      } else {
-        Logger.log(
-          "ChatController",
-          "Audio finished but generation aborted, not generating next chunk",
-        );
-      }
-    };
-    ttsService.addEventListener("audioFinished", handleAudioFinished);
-
-    const result = await aiService.sendMessage(
-      messages as AIMessage[],
-      async (chunk: string) => {
-        if (abortController.signal.aborted) {
-          Logger.log(
-            "ChatController",
-            "Streaming callback aborted, ignoring chunk",
-          );
-          return;
-        }
-
-        // Add chunk to raw response
-        fullResponseRaw += chunk;
-
-        // Remove all <think>...</think> blocks (including incomplete ones at the end)
-        // This regex handles complete think blocks
-        let displayResponse = fullResponseRaw.replace(
-          /<think>[\s\S]*?<\/think>/g,
-          "",
-        );
-
-        // Remove incomplete opening <think> tag at the end (if chunk ended mid-tag)
-        displayResponse = displayResponse.replace(/<think>.*$/s, "");
-
-        // Remove leading newlines/whitespace from the response
-        displayResponse = displayResponse.replace(/^\s+/, "");
-
-        // Update fullResponse with filtered content
-        fullResponse = displayResponse;
-
-        // Get only the new content since last update for TTS
-        const newContent = displayResponse.slice(previousDisplayLength);
-        textBuffer += newContent;
-        previousDisplayLength = displayResponse.length;
-
-        const currentMessages = chatService.getMessages();
-        Logger.log(
-          "ChatController",
-          "Streaming chunk received, current message count:",
-          currentMessages.length,
-        );
-        if (
-          currentMessages.length > 0 &&
-          currentMessages[currentMessages.length - 1]?.role === "assistant"
-        ) {
-          Logger.log("ChatController", "Updating existing assistant message");
-          chatService.updateLastMessage(fullResponse);
-        } else {
-          Logger.log(
-            "ChatController",
-            "Adding new assistant message (no existing one found!)",
-          );
-          chatService.addMessage("assistant", fullResponse);
-        }
-        setChatMessages(toChatMessageItems(chatService.getMessages()));
-
-        if (
-          !ttsEnabled &&
-          !hasSwitchedToSpeaking &&
-          fullResponse.length > 10 &&
-          canUseAssistant()
-        ) {
-          await triggerAssistantAction("speak");
-          hasSwitchedToSpeaking = true;
-        }
-
-        if (ttsEnabled) {
-          const sentenceEnd = /[.!?:]\s|[.!?:]\n|\n/.exec(textBuffer);
-
-          if (sentenceEnd) {
-            const chunkToSpeak = textBuffer
-              .substring(0, sentenceEnd.index + sentenceEnd[0].length)
-              .trim();
-            textBuffer = textBuffer.substring(
-              sentenceEnd.index + sentenceEnd[0].length,
-            );
-
-            if (
-              chunkToSpeak &&
-              chunkToSpeak.length >= 3 &&
-              chunkToSpeak.trim().length >= 3
-            ) {
-              allChunks.push(chunkToSpeak);
-
-              if (
-                !isGeneratingChunk &&
-                ttsService.getQueueLength() < MAX_QUEUED_AUDIO
-              ) {
-                tryGenerateNextChunk();
-              }
-            }
-          }
-        }
-      },
-      { onReasoning: (chunk: string) => applyThinkingDelta(chunk) },
-    );
-
-    if (result.cancelled) {
-      Logger.log("ChatController", "Generation cancelled by user");
-      ttsService.stopPlayback();
-      ttsService.removeEventListener("audioFinished", handleAudioFinished);
-      if (canUseAssistant()) {
-        await idleAssistant();
-      }
-      streamAbortControllerRef.current = null;
-      setIsProcessing(false);
-      return { success: false, cancelled: true };
-    }
-
-    if (!result.success) {
-      const errorMessage =
-        getErrorMessage(result.error) || "Unknown error occurred";
-      Logger.error("ChatController", "AI error:", result.error);
-
-      // Add error message to chat
-      chatService.addMessage("assistant", `Error: ${errorMessage}`);
-      setChatMessages(toChatMessageItems(chatService.getMessages()));
-
-      // Clean up TTS and event listeners
-      ttsService.stopPlayback();
-      ttsService.removeEventListener("audioFinished", handleAudioFinished);
-
-      // Reset assistant animation
-      if (canUseAssistant()) {
-        await idleAssistant();
-      }
-
-      streamAbortControllerRef.current = null;
-      setIsProcessing(false);
-      return { success: false, error: errorMessage };
-    }
-
-    if (ttsEnabled && textBuffer.trim().length > 0) {
-      const finalChunk = textBuffer.trim();
-      allChunks.push(finalChunk);
-      tryGenerateNextChunk();
-    }
-
-    if (ttsEnabled && allChunks.length > 0) {
-      // Wait for all chunks to be generated, but abort if cancelled
-      while (
-        nextChunkToGenerate < allChunks.length &&
-        !abortController.signal.aborted
-      ) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-
-      if (abortController.signal.aborted) {
-        Logger.log(
-          "ChatController",
-          "TTS chunk generation aborted while waiting for completion",
-        );
-      } else {
-        // The normal text-chat path must explicitly close its TTS session.
-        // Without this, the final short clip leaves the animation bridge
-        // waiting forever because TTSService intentionally withholds
-        // `audioEnd` until every generated chunk is marked complete.
-        ttsService.markSessionComplete(autoTTSSessionId);
-        Logger.log(
-          "ChatController",
-          `[TTS] Session ${autoTTSSessionId} marked complete`,
-        );
-      }
-    }
-
-    ttsService.removeEventListener("audioFinished", handleAudioFinished);
-
-    // Clear abort controller on successful completion
-    streamAbortControllerRef.current = null;
-
-    return { success: true, fullResponse };
+  const responseDependencies = {
+    chatSession,
+    chatService,
+    streamAbortControllerRef,
+    aiService,
+    ttsService,
+    storageService,
+    documentInteractionService,
+    getSystemPromptFromConfig,
+    canUseAssistant,
+    triggerAssistantAction,
+    idleAssistant,
+    setChatMessages,
+    setIsProcessing,
+    getErrorMessage,
+    voiceConversationService,
+    setAssistantState,
   };
 
   /**
@@ -2280,123 +1445,50 @@ const ChatController = ({
    * @param {Array} images - Image attachments
    * @param {Array} audios - Audio attachments
    */
-  const handleMessageSend = async (
+  const executeMessageSend = (
     message: string,
     images: string[] | null = null,
     audios: string[] | null = null,
-  ) => {
-    const attachmentInfo = [];
-    if (images && images.length > 0)
-      attachmentInfo.push(`${images.length} image(s)`);
-    if (audios && audios.length > 0)
-      attachmentInfo.push(`${audios.length} audio(s)`);
-    const attachmentStr =
-      attachmentInfo.length > 0 ? ` with ${attachmentInfo.join(" and ")}` : "";
-    Logger.log("ChatController", "Message sent:", message, attachmentStr);
-
-    // Cancel any ongoing stream (including document interaction)
-    if (streamAbortControllerRef.current) {
-      Logger.log(
-        "ChatController",
-        "Aborting ongoing stream (including document interaction)",
-      );
-      streamAbortControllerRef.current.abort();
-      streamAbortControllerRef.current = null;
-    }
-
-    // Also abort AI generation if it's running
-    if (aiService.isGenerating()) {
-      Logger.log("ChatController", "Aborting ongoing AI generation");
-      aiService.abortRequest();
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-
-    chatService.addMessage("user", message, images, audios);
-    setChatMessages(toChatMessageItems(chatService.getMessages()));
-
-    setIsProcessing(true);
-
-    ttsService.stopPlayback();
-
-    if (!aiService.isConfigured()) {
-      chatService.addMessage(
-        "assistant",
-        "Error: AI not configured. Please configure in Control Panel.",
-      );
-      setChatMessages(toChatMessageItems(chatService.getMessages()));
-      setIsProcessing(false);
-      return;
-    }
-
-    Logger.log("ChatController", "Checking assistant ready state:", {
-      hasRef: !!assistantRef.current,
-      isReady: assistantRef.current?.isReady?.(),
-    });
-
-    if (canUseAssistant()) {
-      Logger.log("ChatController", "Starting BUSY state (thinking animation)");
-      await setAssistantState("BUSY");
-      Logger.log("ChatController", "BUSY state set successfully");
-    } else {
-      Logger.warn("ChatController", "Assistant not ready, skipping BUSY state");
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    const result = await streamAIResponse();
-
-    if (!result.success) {
-      return;
-    }
-
-    setIsProcessing(false);
-
-    const messagesToPersist = chatService.getMessages();
-
-    if (!isTempChat && messagesToPersist.length > 0) {
-      try {
-        let chatId = currentChatId;
-        if (!chatId) {
-          chatId = historyService.generateChatId();
-          setCurrentChatId(chatId);
-        }
-
-        const sourceUrl = window.location.href;
-
-        await historyService.saveChat({
-          chatId,
-          chatService,
-          messages: toChatMessageItems(messagesToPersist),
-          isTemp: false,
-          metadata: {
-            sourceUrl,
-          },
-        });
-
-        Logger.log(
-          "ChatController",
-          "Chat auto-saved after AI response:",
-          chatId,
-        );
-      } catch (error) {
-        Logger.error("ChatController", "Failed to auto-save chat:", error);
-      }
-    }
-  };
+  ) =>
+    sendChatMessage(
+      {
+        ...responseDependencies,
+        appStore,
+        historyService,
+        sourceUrl: window.location.href,
+      },
+      message,
+      images,
+      audios,
+    );
+  const latestSender = useRef(executeMessageSend);
+  useEffect(() => {
+    latestSender.current = executeMessageSend;
+  });
+  useEffect(
+    () =>
+      chatSession.registerSender((...args) => latestSender.current(...args)),
+    [chatSession],
+  );
+  const handleMessageSend = (
+    message: string,
+    images: string[] | null = null,
+    audios: string[] | null = null,
+  ) => chatSession.execute({ type: "send", text: message, images, audios });
 
   /**
    * Register transcription callback with VoiceConversationService
    * Main window only - ChatInput not rendered in desktop main window
    */
   useEffect(() => {
-    if (isInputWindow) return;
+    if (isInputWindow || !usesSeparateInputWindow) return;
 
     voiceConversationService.setTranscriptionCallback(handleVoiceTranscription);
 
     return () => {
       voiceConversationService.setTranscriptionCallback(null);
     };
-  }, [handleVoiceTranscription]);
+  }, [handleVoiceTranscription, usesSeparateInputWindow]);
 
   /**
    * IPC bridge for desktop mode - listen for events from input window
@@ -2509,7 +1601,7 @@ const ChatController = ({
    * ChatInput is not rendered in desktop main window, so this must live here.
    */
   useEffect(() => {
-    if (!isDesktop || isInputWindow || !api?.ipc) {
+    if (!usesSeparateInputWindow || isInputWindow || !api?.ipc) {
       return;
     }
 
@@ -2558,10 +1650,17 @@ const ChatController = ({
 
     ensureSttCallbacks();
 
+    const unsubscribeMicCancel = ipc.on("chatInput:micCancel", () => {
+      inputWindowSttRecordingRef.current = false;
+      inputWindowSttProcessingRef.current = false;
+      sttService.cancelRecording();
+      sendSttState({ isRecording: false, isProcessing: false, error: "" });
+    });
+
     const unsubscribeMicToggle = ipc.on("chatInput:micToggle", async () => {
       ensureSttCallbacks();
 
-      if (!sttService.isConfigured()) {
+      if (!(await sttService.isConfigured())) {
         sendSttState({
           isRecording: false,
           isProcessing: false,
@@ -2570,7 +1669,7 @@ const ChatController = ({
         return;
       }
 
-      if (_isVoiceMode) {
+      if (_isVoiceMode || voiceConversationService.isConversationActive()) {
         sendSttState({
           isRecording: false,
           isProcessing: false,
@@ -2591,8 +1690,9 @@ const ChatController = ({
       try {
         if (inputWindowSttRecordingRef.current) {
           inputWindowSttProcessingRef.current = true;
+          inputWindowSttRecordingRef.current = false;
           sendSttState({
-            isRecording: true,
+            isRecording: false,
             isProcessing: true,
             error: "",
           });
@@ -2605,7 +1705,15 @@ const ChatController = ({
             error: "",
           });
           ttsService.stopPlayback();
-          await sttService.startRecording();
+          await VoiceConversationService.waitForStop();
+          const started = await sttService.startRecording();
+          if (!started) {
+            inputWindowSttProcessingRef.current = false;
+            sendSttState({
+              isRecording: inputWindowSttRecordingRef.current,
+              isProcessing: false,
+            });
+          }
         }
       } catch (error) {
         inputWindowSttRecordingRef.current = false;
@@ -2619,13 +1727,14 @@ const ChatController = ({
     });
 
     return () => {
+      unsubscribeMicCancel?.();
       unsubscribeMicToggle?.();
       sttService.setTranscriptionCallback(null);
       sttService.setErrorCallback(null);
       sttService.setRecordingStartCallback(null);
       sttService.setRecordingStopCallback(null);
     };
-  }, [api, _isVoiceMode]);
+  }, [api, _isVoiceMode, usesSeparateInputWindow]);
 
   /**
    * Handles drag-drop onto ChatContainer.
@@ -2660,22 +1769,8 @@ const ChatController = ({
   /**
    * Handles streaming regeneration (called by AppContext).
    */
-  const handleRegenerateWithStreaming = async () => {
-    Logger.log("ChatController", "Regenerating with streaming");
-
-    setIsProcessing(true);
-    ttsService.stopPlayback();
-
-    if (canUseAssistant()) {
-      await setAssistantState("BUSY");
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    await streamAIResponse();
-
-    setIsProcessing(false);
-  };
+  const handleRegenerateWithStreaming = () =>
+    regenerateChatResponse(responseDependencies);
 
   useEffect(() => {
     if (regenerateWithStreamingRef) {
@@ -2684,8 +1779,7 @@ const ChatController = ({
     if (editWithStreamingRef) {
       editWithStreamingRef.current = handleRegenerateWithStreaming;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [regenerateWithStreamingRef, editWithStreamingRef]);
+  });
 
   return (
     <>
@@ -2713,7 +1807,7 @@ const ChatController = ({
               <AssistantControlDock
                 onClick={handleAssistantControlClick}
                 isVisible={
-                  modelDisabled
+                  xr.active || modelDisabled
                     ? true
                     : isDesktop || isNormalDesktop
                       ? true
@@ -2733,14 +1827,23 @@ const ChatController = ({
             (isLiveWallpaperWindow && !isDetachedChatWindow)) &&
             !avatarOnly && (
               <Suspense fallback={null}>
-                <ChatInputTyped
-                  ref={chatInputRef}
-                  onSend={handleMessageSend}
-                  onClose={handleChatInputClose}
-                  onVoiceTranscription={handleVoiceTranscription}
-                  onVoiceMode={handleVoiceModeChange}
-                  embedConfig={embedConfig}
-                />
+                <XrSurface
+                  id="composer"
+                  widthMeters={0.85}
+                  heightMeters={0.36}
+                  widthPixels={850}
+                  heightPixels={360}
+                  offsetMeters={[0, -0.4, -0.15]}
+                >
+                  <ChatInputTyped
+                    ref={chatInputRef}
+                    onSend={handleMessageSend}
+                    onClose={handleChatInputClose}
+                    onVoiceTranscription={handleVoiceTranscription}
+                    onVoiceMode={handleVoiceModeChange}
+                    embedConfig={embedConfig}
+                  />
+                </XrSurface>
               </Suspense>
             )}
 

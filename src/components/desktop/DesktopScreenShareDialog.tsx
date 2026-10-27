@@ -66,7 +66,7 @@ const DesktopScreenShareDialog = () => {
   return (
     <div className="relative min-h-screen overflow-hidden bg-transparent text-white">
       <div className="relative mx-auto flex min-h-screen max-w-6xl items-center justify-center p-6">
-        <div className="flex max-h-[min(88vh,760px)] w-full flex-col overflow-hidden rounded-[28px] border border-white/14 bg-black/30 shadow-[0_24px_80px_rgba(0,0,0,0.38)] backdrop-blur-2xl">
+        <div className="flex max-h-[min(88vh,760px)] w-full flex-col overflow-hidden rounded-[28px] border border-white/14 bg-[rgba(20,21,26,0.96)] shadow-[0_24px_80px_rgba(0,0,0,0.38)] backdrop-blur-2xl">
           <div className="border-b border-white/10 px-6 py-5 md:px-8">
             <div className="flex items-start justify-between gap-4">
               <div>

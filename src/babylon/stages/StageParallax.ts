@@ -13,9 +13,12 @@ export function attachStageParallax(
   let offsetX = 0;
   let offsetY = 0;
   const observer = scene.onBeforeRenderObservable.add(() => {
+    if (scene.metadata?.xrActive) return;
     if (
       scene.isDisposed ||
-      (typeof document !== "undefined" && document.hidden)
+      (typeof document !== "undefined" &&
+        document.hidden &&
+        !scene.metadata?.xrActive)
     )
       return;
     if (
@@ -32,6 +35,12 @@ export function attachStageParallax(
   });
   return {
     setInput(x, y) {
+      if (scene.metadata?.xrActive) {
+        root.position.x -= offsetX * unitsPerMeter * 0.075;
+        root.position.z += offsetY * unitsPerMeter * 0.055;
+        targetX = targetY = offsetX = offsetY = 0;
+        return;
+      }
       if (!Number.isFinite(x) || !Number.isFinite(y)) return;
       targetX = Math.max(-1, Math.min(1, x));
       targetY = Math.max(-1, Math.min(1, y));

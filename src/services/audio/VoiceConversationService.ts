@@ -8,7 +8,7 @@
  * - Smooth state transitions
  */
 
-import { TTSServiceProxy, AIServiceProxy } from "../proxies";
+import { TTSServiceProxy, AIServiceProxy, STTServiceProxy } from "../proxies";
 import VoiceRecordingService from "./VoiceRecordingService";
 import Logger from "../common/LoggerService";
 import { isDesktop } from "../../utils/PlatformUtils";
@@ -27,6 +27,8 @@ export const ConversationStates = {
 
 class VoiceConversationService {
   private isActive: boolean;
+  private session = 0;
+  private stopping: Promise<void> | null = null;
   private currentState: string;
   private onStateChange: ((state: string) => void) | null;
   private onTranscription: ((text: string) => void) | null;
@@ -52,14 +54,23 @@ class VoiceConversationService {
    * Start voice conversation mode
    */
   async start(): Promise<void> {
+    await this.stopping;
     if (this.isActive) {
       Logger.warn("VoiceConversation", "Already active");
       return;
     }
 
+    const session = ++this.session;
     try {
       Logger.log("VoiceConversation", "Starting conversation mode...");
 
+      await STTServiceProxy.ensureConfigured();
+      if (!(await STTServiceProxy.isConfigured()))
+        throw new Error(
+          "STT not configured. Enable STT and configure settings first.",
+        );
+
+      if (session !== this.session) return;
       // Set up TTS event listeners for state transitions
       this._setupTTSEventListeners();
 
@@ -145,6 +156,8 @@ class VoiceConversationService {
         },
       });
 
+      if (session !== this.session || !VoiceRecordingService.isServiceActive())
+        return;
       this.isActive = true;
       this.changeState(ConversationStates.LISTENING);
 
@@ -160,14 +173,18 @@ class VoiceConversationService {
   /**
    * Stop voice conversation mode
    */
-  stop(): void {
+  stop(): Promise<void> {
+    ++this.session;
     Logger.log("VoiceConversation", "Stopping conversation mode...");
 
     // Remove TTS event listeners
     this._removeTTSEventListeners();
 
     // Stop VoiceRecordingService
-    VoiceRecordingService.stop();
+    const stopping = VoiceRecordingService.stop().finally(() => {
+      if (this.stopping === stopping) this.stopping = null;
+    });
+    this.stopping = stopping;
 
     // Stop any ongoing processes
     TTSServiceProxy.stopPlayback();
@@ -177,6 +194,11 @@ class VoiceConversationService {
     this.changeState(ConversationStates.IDLE);
 
     Logger.log("VoiceConversation", "Stopped");
+    return this.stopping;
+  }
+
+  async waitForStop(): Promise<void> {
+    await this.stopping;
   }
 
   /**

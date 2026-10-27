@@ -1,3 +1,4 @@
+import type { DockPanelTransitionProps } from "../hooks/useDockPanelTransition";
 import {
   useCallback,
   useEffect,
@@ -6,6 +7,7 @@ import {
   type PointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { useSpatialHtmlPanelHost } from "../../../xr/SpatialHtmlPanelContext";
 import { Button, Card, Select } from "../../../ui";
 import Icon from "../../../icons/Icon";
 import {
@@ -22,7 +24,11 @@ import {
   getBuiltInStage,
   type StageOptions,
 } from "../../../../config/stageConfig";
-import { isAndroid, isDesktop } from "../../../../utils/PlatformUtils";
+import {
+  isAndroid,
+  isDesktop,
+  isDesktopAttachedModeWindow,
+} from "../../../../utils/PlatformUtils";
 import { cn } from "../../../../utils/cn";
 import {
   panelClassName,
@@ -53,12 +59,14 @@ const seasonOptions = [
 ];
 
 export function StageControlPanel({
+  transitionProps,
   layout,
   stages,
   selectedStageId,
   isLightBackground,
   actions,
 }: {
+  transitionProps?: DockPanelTransitionProps;
   layout: AssistantControlLayout;
   stages: StoredStageItem[];
   selectedStageId: string | null;
@@ -66,6 +74,7 @@ export function StageControlPanel({
   actions: AssistantControlActions;
 }) {
   const config = useUIConfig();
+  const spatialHost = useSpatialHtmlPanelHost();
   const { updateUIConfig } = useConfigUIActions();
   const sceneRef = useSceneRef();
   const loading = useShowModelLoadingOverlay();
@@ -83,6 +92,7 @@ export function StageControlPanel({
   const [popup, setPopup] = useState<"time" | "brightness" | null>(null);
   const [now, setNow] = useState(() => new Date());
   const dialog = useRef<HTMLDialogElement>(null);
+  const timePointer = useRef<number | null>(null);
   const variant = panelButtonVariant(isLightBackground);
   const text = isLightBackground ? "glass-text" : "glass-text-black";
   const backgroundKey = isAndroid ? "androidBackground" : "desktopBackground";
@@ -110,9 +120,11 @@ export function StageControlPanel({
     return () => clearInterval(interval);
   }, []);
   useEffect(() => {
-    if (popup && dialog.current && !dialog.current.open)
-      dialog.current.showModal();
-  }, [popup]);
+    if (popup && dialog.current && !dialog.current.open) {
+      if (spatialHost) dialog.current.show();
+      else dialog.current.showModal();
+    }
+  }, [popup, spatialHost]);
 
   const change = (patch: Partial<StageOptions>) => {
     draft.current = { ...draft.current, ...patch };
@@ -122,6 +134,7 @@ export function StageControlPanel({
     timer.current = setTimeout(flush, 350);
   };
   const closePopup = () => {
+    timePointer.current = null;
     flush();
     setPopup(null);
   };
@@ -273,11 +286,16 @@ export function StageControlPanel({
   return (
     <>
       <Card
+        {...transitionProps}
         padding="none"
         variant="none"
         className={cn(
           panelClassName,
-          isDesktop && choices.length > 7 && "vassist-scroll-panel-mask",
+          transitionProps?.className,
+          isDesktop &&
+            !isDesktopAttachedModeWindow &&
+            choices.length > 7 &&
+            "vassist-scroll-panel-fade",
         )}
         style={{
           left: layout.stage.left,
@@ -310,9 +328,13 @@ export function StageControlPanel({
         ))}
       </Card>
       <Card
+        {...transitionProps}
         padding="none"
         variant="none"
-        className="fixed flex w-[135px] flex-col gap-1 p-1"
+        className={cn(
+          "fixed flex w-[135px] flex-col gap-1 p-1",
+          transitionProps?.className,
+        )}
         style={{
           left: layout.stageControls.left,
           top: layout.stageControls.top,
@@ -385,12 +407,14 @@ export function StageControlPanel({
                 )}
                 onPointerDown={(event) => {
                   event.preventDefault();
-                  event.currentTarget.setPointerCapture(event.pointerId);
+                  timePointer.current = event.pointerId;
+                  // XR forwards synthetic pointers that cannot use native capture.
+                  if (!spatialHost)
+                    event.currentTarget.setPointerCapture(event.pointerId);
                   pickTime(event);
                 }}
                 onPointerMove={(event) => {
-                  if (event.currentTarget.hasPointerCapture(event.pointerId))
-                    pickTime(event);
+                  if (timePointer.current === event.pointerId) pickTime(event);
                 }}
                 onPointerUp={closePopup}
                 onPointerCancel={closePopup}
@@ -527,7 +551,7 @@ export function StageControlPanel({
               </div>
             )}
           </dialog>,
-          document.body,
+          spatialHost ?? document.body,
         )}
     </>
   );

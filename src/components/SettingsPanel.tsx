@@ -235,6 +235,9 @@ const SettingsPanel = ({
           render: () => (
             <UISettings
               isLightBackground={isLightBackground}
+              requestedSubTab={
+                activeTab === "ui" ? (requestedView?.subTab ?? null) : null
+              }
               {...(onRequestResetSetupDialog
                 ? { onRequestResetSetupDialog }
                 : {})}

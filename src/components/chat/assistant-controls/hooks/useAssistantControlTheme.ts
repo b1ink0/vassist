@@ -50,7 +50,11 @@ export function useAssistantControlTheme({
       const canvas = document.getElementById(
         "vassist-babylon-canvas",
       ) as HTMLCanvasElement | null;
-      const elementBelow = document.elementFromPoint(x, y);
+      const dock = element.closest("[data-assistant-control-dock]") ?? element;
+      const elementBelow =
+        document
+          .elementsFromPoint(x, y)
+          .find((candidate) => !dock?.contains(candidate)) ?? null;
 
       let backgroundColor = "";
       let current: HTMLElement | null =

@@ -883,23 +883,16 @@ export function createLlamaServerManager({
     }
   }
 
-  /** Find an mmproj gguf next to the model file (VLM support). */
+  /** Match the model-specific projector name used by model imports. */
   function findMmproj(modelPath: string): string | undefined {
     const dir = path.dirname(modelPath);
     const base = path.basename(modelPath).toLowerCase();
     try {
       const entries = fs.readdirSync(dir);
-      // Prefer a projector whose name shares the model prefix
-      const prefix = base.split("-").slice(0, 2).join("-");
-      const isMmprojName = (e: string) => e.toLowerCase().startsWith("mmproj");
       const match = entries.find(
-        (e: string) =>
-          isMmprojName(e) &&
-          e.toLowerCase().includes(String(prefix.split("-")[0] ?? "")),
+        (entry: string) => entry.toLowerCase() === `mmproj-${base}`,
       );
-      const anyMmproj =
-        match || entries.find((e: string) => /^mmproj/i.test(e));
-      return anyMmproj ? path.join(dir, anyMmproj) : undefined;
+      return match ? path.join(dir, match) : undefined;
     } catch {
       return undefined;
     }

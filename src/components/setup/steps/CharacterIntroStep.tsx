@@ -43,7 +43,8 @@ const CharacterIntroStep = ({
       enableModelLoading: enabled,
       enablePortraitMode: displayMode === "portrait",
       position: selectedPosition,
-      enableAIToolbar: setupData?.ui?.enableAIToolbar ?? true,
+      enableAIToolbar:
+        setupData?.ui?.enableAIToolbar ?? (!isDesktop && !isAndroid),
     };
     updateSetupData({ ui: uiConfig });
   };
@@ -54,7 +55,8 @@ const CharacterIntroStep = ({
       enableModelLoading: characterEnabled,
       enablePortraitMode: mode === "portrait",
       position: selectedPosition,
-      enableAIToolbar: setupData?.ui?.enableAIToolbar ?? true,
+      enableAIToolbar:
+        setupData?.ui?.enableAIToolbar ?? (!isDesktop && !isAndroid),
     };
     updateSetupData({ ui: uiConfig });
   };
@@ -65,7 +67,8 @@ const CharacterIntroStep = ({
       enableModelLoading: characterEnabled,
       enablePortraitMode: displayMode === "portrait",
       position: position,
-      enableAIToolbar: setupData?.ui?.enableAIToolbar ?? true,
+      enableAIToolbar:
+        setupData?.ui?.enableAIToolbar ?? (!isDesktop && !isAndroid),
     };
     updateSetupData({ ui: uiConfig });
   };

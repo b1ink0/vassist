@@ -16,6 +16,7 @@ import {
   desktopCapturer,
   nativeImage,
   dialog,
+  shell,
 } from "electron";
 import { fileURLToPath } from "url";
 import { createRequire } from "module";
@@ -45,6 +46,7 @@ import { createWhisperCppManager } from "./main/services/whisperCppManager";
 import { createLlamaServerManager } from "./main/services/llamaServerManager";
 import { createLLMBackendManager } from "./main/services/llmBackendManager";
 import { DEFAULT_SERVICE_PORTS } from "../src/config/serviceEndpoints";
+import { registerXrHandlers } from "./main/xr/registerXrHandlers";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -234,6 +236,22 @@ registerUIIPCHandlers({
 });
 
 localServerManager.registerIPCHandlers(ipcMain);
+const xrHost = registerXrHandlers({
+  ipcMain,
+  getWindows: () => [state.mainWindow, state.avatarWindow, state.inputWindow],
+  getAssistantWindow: () => state.avatarWindow ?? state.mainWindow,
+  getChatWindow: () => state.mainWindow,
+  root: path.join(
+    devServerUrl ? process.cwd() : __dirname,
+    devServerUrl ? "dist-desktop/xr-app" : "xr-app",
+  ),
+  resourceRoot: path.join(
+    devServerUrl ? process.cwd() : __dirname,
+    devServerUrl ? "public/res" : "res",
+  ),
+  userData: () => app.getPath("userData"),
+  openExternal: (url) => shell.openExternal(url),
+});
 pythonServerManager.registerSetupIPCHandlers(ipcMain, localServerManager);
 
 ipcMain.handle("llamaServer:getStatus", () => llamaServerManager.getStatus());
@@ -308,6 +326,7 @@ app.on("before-quit", (event) => {
 
   event.preventDefault();
   quitCleanupStarted = true;
+  xrHost.dispose();
   pythonServerManager.cleanupBeforeQuit(localServerManager);
   whisperCppManager.cleanupBeforeQuit();
 

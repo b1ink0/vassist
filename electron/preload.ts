@@ -5,6 +5,7 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 import type { IpcRendererEvent } from "electron";
+import type { XrRendererReply, XrRendererRequest } from "../src/types/xr";
 
 type GenericCallback<T = unknown> = (payload: T) => void;
 
@@ -14,6 +15,21 @@ console.log("Preload script is executing!");
  * Expose protected methods to the renderer process
  */
 contextBridge.exposeInMainWorld("electron", {
+  xr: {
+    browsers: () => ipcRenderer.invoke("xr:browsers"),
+    open: (options: import("../src/types/xr").XrLaunchOptions) =>
+      ipcRenderer.invoke("xr:open", options),
+    revoke: () => ipcRenderer.invoke("xr:revoke"),
+    chooseTlsFiles: () => ipcRenderer.invoke("xr:tls-files"),
+    onRequest: (callback: (request: XrRendererRequest) => void) => {
+      const listener = (_event: IpcRendererEvent, request: XrRendererRequest) =>
+        callback(request);
+      ipcRenderer.on("xr:request", listener);
+      return () => ipcRenderer.removeListener("xr:request", listener);
+    },
+    reply: (reply: XrRendererReply) => ipcRenderer.send("xr:reply", reply),
+    invalidate: () => ipcRenderer.send("xr:invalidate"),
+  },
   // Window controls
   window: {
     minimize: () => ipcRenderer.invoke("window:minimize"),

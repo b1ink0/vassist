@@ -41,6 +41,10 @@ export interface StorageAdapterLike {
     table: StorageTableName,
     filter: StorageRecord,
   ): Promise<StorageRecord[]>;
+  queryMetadata?(
+    table: StorageTableName,
+    filter: StorageRecord,
+  ): Promise<StorageRecord[]>;
   getAll(table: StorageTableName): Promise<StorageRecord[]>;
   count(table: StorageTableName): Promise<number>;
   cleanupExpiredCache(): Promise<number>;

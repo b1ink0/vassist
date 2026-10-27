@@ -306,7 +306,9 @@ export function createStageSeasonalEffects(
     if (
       !enabled ||
       !systems.length ||
-      (typeof document !== "undefined" && document.hidden)
+      (typeof document !== "undefined" &&
+        document.hidden &&
+        !scene.metadata?.xrActive)
     )
       return;
     updateView();

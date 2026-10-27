@@ -16,13 +16,17 @@ Desktop is the most capable VAssist runtime. You get local GGUF models, local GP
 
 Open **Settings > UI > Mode** or **Quick Access > Mode** to switch between three desktop presentations:
 
-| Mode | Behavior |
-| --- | --- |
-| App | The standard resizable VAssist window with an opaque background. This is the default mode. |
-| Floating | A compact, transparent, always-on-top avatar window. |
+| Mode      | Behavior                                                                                                                   |
+| --------- | -------------------------------------------------------------------------------------------------------------------------- |
+| App       | The standard resizable VAssist window with an opaque background. This is the default mode.                                 |
+| Floating  | A compact, transparent, always-on-top avatar window.                                                                       |
 | Wallpaper | Places the Live Assistant behind desktop icons on Windows. Wallpaper mode is Windows-only and is click-through by default. |
 
-The **Controls** setting chooses whether the avatar and chat controls stay together or use separate windows in Floating and Wallpaper modes. **Interact** makes Wallpaper mode respond to pointer input. With it off, clicks pass through to the desktop. These controls are also available from Quick Access. See [UI Settings > Mode](/settings/ui#mode-sub-tab-desktop-only) for the control details.
+In Floating and Wallpaper modes, turn on **Separate chat window** to show chat and input apart from the avatar. With it off, they stay together. **Interact** makes Wallpaper mode respond to pointer input. With it off, clicks pass through to the desktop. These controls are also available from Quick Access. See [UI Settings > Mode](/settings/ui#mode-sub-tab-desktop-only) for the control details.
+
+In App and attached Wallpaper modes, open saved conversations with the sidebar button at the top left. In Floating mode, the chat controls menu beside the chat button contains history, new chat, temporary chat, and settings. With a separate chat window, those controls are also available beside the avatar.
+
+To resize floating chat, drag the small grip at the lower right of the chat area. In a detached chat window, drag the grip at the window's lower-right corner. The avatar zoom controls remain separate from the chat size.
 
 The setup wizard starts with Blue Milky Way selected. In **Settings > UI > Display**, choose bundled wallpapers, add image files or a folder, use a solid color, or customize a gradient. App and Wallpaper modes show the selected background and crossfade between multiple images when image mode is active. Floating mode stays clear. Your own files remain at their original paths. See [UI Settings](/settings/ui#desktop-backgrounds) for slideshow, image effects, color controls, and missing-file behavior, and [Wallpaper credits](/legal/wallpapers) for bundled image sources.
 

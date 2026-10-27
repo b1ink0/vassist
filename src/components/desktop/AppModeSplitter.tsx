@@ -19,6 +19,7 @@ export default function AppModeSplitter() {
   const isChatInputVisible = useIsChatInputVisible();
   const isChatOpen = isChatContainerVisible || isChatInputVisible;
   const draggingRef = useRef(false);
+  const splitterRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const pendingPercentRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -42,9 +43,13 @@ export default function AppModeSplitter() {
     };
 
     const handlePointerMove = (event: PointerEvent) => {
-      if (!draggingRef.current || window.innerWidth <= 0) return;
-
-      const modelPercent = (event.clientX / window.innerWidth) * 100;
+      if (!draggingRef.current) return;
+      const bounds =
+        splitterRef.current?.parentElement?.getBoundingClientRect();
+      const layoutWidth = bounds?.width ?? window.innerWidth;
+      if (layoutWidth <= 0) return;
+      const modelPercent =
+        ((event.clientX - (bounds?.left ?? 0)) / layoutWidth) * 100;
       const nextChatPercent = Math.min(
         MAX_CHAT_PERCENT,
         Math.max(MIN_CHAT_PERCENT, 100 - modelPercent),
@@ -91,6 +96,7 @@ export default function AppModeSplitter() {
 
   return (
     <div
+      ref={splitterRef}
       aria-label="Resize chat panel"
       role="separator"
       aria-orientation="vertical"
@@ -98,7 +104,7 @@ export default function AppModeSplitter() {
       aria-valuemax={MAX_CHAT_PERCENT}
       aria-valuenow={chatSplitPercent}
       data-electron-interactive="true"
-      className={`fixed top-0 bottom-0 z-[10000] w-2 -translate-x-1/2 cursor-col-resize group transition-colors duration-150 ${isDragging ? "bg-white/10" : "hover:bg-white/10"}`}
+      className={`pointer-events-auto fixed top-0 bottom-0 z-[10000] w-2 -translate-x-1/2 cursor-col-resize group transition-colors duration-150 ${isDragging ? "bg-white/10" : "hover:bg-white/10"}`}
       style={{ left: `${100 - chatSplitPercent}%` }}
       onPointerDown={(event) => {
         event.preventDefault();

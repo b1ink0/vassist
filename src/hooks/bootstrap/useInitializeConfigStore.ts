@@ -33,6 +33,7 @@ export function useInitializeConfigStore(
     if (!hasHydrated) {
       return;
     }
+    if (embedConfig?.transport.mode === "host-bridge") return;
 
     if (kokoroBootstrapCheckedRef.current) {
       return;
@@ -110,5 +111,11 @@ export function useInitializeConfigStore(
     return () => {
       cancelled = true;
     };
-  }, [hasHydrated, keepModelLoaded, ttsEnabled, ttsProvider]);
+  }, [
+    embedConfig?.transport.mode,
+    hasHydrated,
+    keepModelLoaded,
+    ttsEnabled,
+    ttsProvider,
+  ]);
 }

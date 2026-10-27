@@ -1,9 +1,8 @@
-import type { VAssistEmbedApi, VAssistEmbedConfig } from "../embed/config";
-
 /**
  * @fileoverview Global environment variable type declarations
  */
 
+import type { VAssistEmbedApi, VAssistEmbedConfig } from "../embed/config";
 declare global {
   interface Window {
     VAssistEmbed?: VAssistEmbedApi;
@@ -39,6 +38,12 @@ declare global {
    * @constant
    */
   const __EMBED_MODE__: boolean;
+
+  /**
+   * True when building for XR usage, false otherwise
+   * @constant
+   */
+  const __XR_MODE__: boolean;
 
   /**
    * True when building in production mode, false for development

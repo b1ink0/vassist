@@ -130,6 +130,11 @@ export interface SceneAnimationConfigLike {
 }
 
 export interface SceneBuildConfig {
+  presentation?: "xr";
+  modelVisibility?: {
+    textures: Record<string, unknown>[];
+    meshParts: Record<string, unknown>[];
+  };
   enableModelLoading?: boolean;
   modelUrl: string;
   stageUrl?: string | null;
@@ -337,6 +342,13 @@ export interface SceneMetadataLike {
   defaultGround?: Mesh;
   stageMesh?: TransformNode | null;
   updateStageOptions?: (options: Partial<StageOptions>) => void;
+  replaceXrStage?: (settings: StageSettings) => Promise<void>;
+  xrWorldUnitsPerMeter?: number;
+  xrActive?: boolean;
+  xrSpawnPosition?: [number, number, number];
+  xrFloorMeshes?: Mesh[];
+  setXrActive?: (active: boolean) => void;
+  exitXr?: () => Promise<void>;
   setShadowsEnabled?: (enabled: boolean) => void;
   interactionManager?: unknown;
   modelMesh?: unknown;

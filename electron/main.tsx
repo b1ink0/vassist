@@ -9,6 +9,7 @@ import "./index.css";
 import App from "../src/App";
 import { prepareVAssistTestRuntime } from "../src/testing/testBridge";
 import { isVAssistTestMode } from "../src/testing/runtime";
+import { installDesktopXrBridge } from "../src/services/xr/DesktopSessionBridge";
 
 const renderApp = () => {
   const rootElement = document.getElementById("root");
@@ -19,7 +20,7 @@ const renderApp = () => {
 
   createRoot(rootElement).render(
     <StrictMode>
-      <App mode="desktop" />
+      <App mode="desktop" onStoreReady={installDesktopXrBridge} />
     </StrictMode>,
   );
 };

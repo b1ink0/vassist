@@ -24,6 +24,28 @@ interface BinaryLikeObject {
 }
 
 class EmotePlayerService {
+  private audioListener = "local";
+  private audioOwner = "local";
+  setAudioListener(id: string): void {
+    this.audioListener = id;
+  }
+  getAudioOwner(): string {
+    return this.audioOwner;
+  }
+  setAudioOwner(id: string): void {
+    this.audioOwner = id;
+    if (this.currentAudio) this.currentAudio.muted = id !== this.audioListener;
+  }
+  private readonly playbackListeners = new Set<() => void>();
+  subscribePlayback(listener: () => void): () => void {
+    this.playbackListeners.add(listener);
+    return () => {
+      this.playbackListeners.delete(listener);
+    };
+  }
+  private notifyPlayback(): void {
+    for (const listener of this.playbackListeners) listener();
+  }
   private currentAudio: HTMLAudioElement | null;
   private currentAudioUrl: string | null;
   private currentMotionUrl: string | null;
@@ -129,7 +151,10 @@ class EmotePlayerService {
    * @param {string} emoteId - Emote ID to play
    * @returns {Promise<void>}
    */
-  async playEmote(emoteId: string): Promise<void> {
+  async playEmote(
+    emoteId: string,
+    audioOwner = this.audioListener,
+  ): Promise<void> {
     try {
       if (this.isPlaying) {
         Logger.warn(
@@ -181,6 +206,8 @@ class EmotePlayerService {
       }
 
       const audio = new Audio(audioUrl);
+      this.audioOwner = audioOwner;
+      audio.muted = audioOwner !== this.audioListener;
       this.currentAudio = audio;
       this.isPlaying = true;
       this.currentEmoteId = emoteId;
@@ -240,6 +267,7 @@ class EmotePlayerService {
       });
 
       await audio.play();
+      this.notifyPlayback();
     } catch (error) {
       Logger.error("EmotePlayer", "Failed to play emote:", error);
       this.isPlaying = false;
@@ -335,6 +363,7 @@ class EmotePlayerService {
     this.currentAudio = null;
     this.isPlaying = false;
     this.currentEmoteId = null;
+    this.notifyPlayback();
   }
 
   /**
@@ -413,6 +442,7 @@ class EmotePlayerService {
         : clampedProgress;
 
     this.animationManagerRef?.seekToProgress?.(animationProgress);
+    this.notifyPlayback();
   }
 
   /**
@@ -424,6 +454,7 @@ class EmotePlayerService {
     }
     this.currentAudio.pause();
     this.animationManagerRef?.pause?.();
+    this.notifyPlayback();
   }
 
   /**
@@ -434,9 +465,12 @@ class EmotePlayerService {
       return;
     }
     this.animationManagerRef?.resume?.();
-    this.currentAudio.play().catch((error) => {
-      Logger.warn("EmotePlayer", "Resume playback blocked:", error);
-    });
+    this.currentAudio
+      .play()
+      .then(() => this.notifyPlayback())
+      .catch((error) => {
+        Logger.warn("EmotePlayer", "Resume playback blocked:", error);
+      });
   }
 
   /**
@@ -484,7 +518,10 @@ class EmotePlayerService {
    * Start auto-play mode
    * @param {Array} emoteIds - Array of emote IDs to play
    */
-  async startAutoPlay(emoteIds: string[]): Promise<void> {
+  async startAutoPlay(
+    emoteIds: string[],
+    audioOwner = this.audioListener,
+  ): Promise<void> {
     if (!emoteIds || emoteIds.length === 0) {
       Logger.warn("EmotePlayer", "No emotes to auto-play");
       return;
@@ -496,11 +533,29 @@ class EmotePlayerService {
     );
 
     this.autoPlayActive = true;
+    this.audioOwner = audioOwner;
     this.shuffledQueue = this.shuffleArray(emoteIds);
     this.playedEmotes.clear();
 
     // Start playing the first emote
     await this.playNextInQueue();
+  }
+
+  updateAutoPlayQueue(emoteIds: string[]): void {
+    if (!this.autoPlayActive) return;
+    if (emoteIds.length === 0) {
+      this.stopAutoPlay();
+      return;
+    }
+    const available = new Set(emoteIds);
+    this.playedEmotes = new Set(
+      [...this.playedEmotes].filter((id) => available.has(id)),
+    );
+    this.shuffledQueue = this.shuffleArray(
+      emoteIds.filter(
+        (id) => !this.playedEmotes.has(id) && id !== this.currentEmoteId,
+      ),
+    );
   }
 
   /**
@@ -545,7 +600,7 @@ class EmotePlayerService {
     this.playedEmotes.add(nextEmoteId);
 
     try {
-      await this.playEmote(nextEmoteId);
+      await this.playEmote(nextEmoteId, this.audioOwner);
     } catch (error) {
       Logger.error(
         "EmotePlayer",

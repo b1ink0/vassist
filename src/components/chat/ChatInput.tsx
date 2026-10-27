@@ -19,6 +19,9 @@ import {
   type ResolvedVAssistEmbedConfig,
 } from "../../embed/config";
 import { useEmbedHost } from "../../embed/EmbedHostContext";
+import { useAppStoreApi } from "../../contexts/AppRuntimeContext";
+import { getChatSession } from "../../services/chat/ChatSessionRuntime";
+import { useXrRuntime } from "../../contexts/XrRuntimeContext";
 import { getHostCommandEventName } from "../../embed/hostCommands";
 import { STTServiceProxy } from "../../services/proxies";
 import { TTSServiceProxy } from "../../services/proxies";
@@ -31,6 +34,7 @@ import { useDesktopWindowResize } from "../../hooks/useDesktopWindowResize";
 import {
   useChatActions,
   useChatDraft,
+  useIsProcessing,
   useIsChatInputVisible,
   usePendingDropData,
 } from "../../hooks/app/useChat";
@@ -46,6 +50,12 @@ import {
   useConfigAIActions,
 } from "../../hooks/config/useConfigAI";
 import { useConfigStore } from "../../stores/useConfigStore";
+import {
+  ComposerPrimaryAction,
+  type ComposerAction,
+} from "./ComposerPrimaryAction";
+import { ComposerMenu, type ComposerMenuItem } from "./ComposerMenu";
+import { VoiceWaveform } from "./VoiceWaveform";
 import { Icon } from "../icons";
 import { Button, Select } from "../ui";
 import Logger from "../../services/common/LoggerService";
@@ -145,9 +155,16 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
     ref,
   ) => {
     const { hostId, embedConfig: contextEmbedConfig } = useEmbedHost();
+    const xr = useXrRuntime();
     const isVisible = useIsChatInputVisible();
     const pendingDropData = usePendingDropData();
     const message = useChatDraft();
+    const appStore = useAppStoreApi();
+    const sessionProcessing = useIsProcessing();
+    const [remoteProcessing, setRemoteProcessing] = useState(false);
+    const [inputFocused, setInputFocused] = useState(false);
+    const [composerMenuOpen, setComposerMenuOpen] = useState(false);
+    const discardRecordingRef = useRef(false);
     const { setPendingDropData, setChatDraft: setMessage } = useChatActions();
     const isSettingsPanelOpen = useIsSettingsPanelOpen();
     const isQuickPanelOpen = useIsQuickPanelOpen();
@@ -209,7 +226,6 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
     const [isProcessingRecording, setIsProcessingRecording] = useState(false);
     const [recordingError, setRecordingError] = useState("");
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-    const submitButtonRef = useRef<HTMLButtonElement | null>(null);
     const [isLightBackground, setIsLightBackground] = useState(false);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const [isClosing, setIsClosing] = useState(false);
@@ -257,8 +273,14 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       };
     }, []);
 
-    const [isVoiceMode, setIsVoiceMode] = useState(false);
-    const [voiceState, setVoiceState] = useState(ConversationStates.IDLE);
+    const [isVoiceMode, setIsVoiceMode] = useState(
+      () => !isInputWindow && VoiceConversationService.isConversationActive(),
+    );
+    const [voiceState, setVoiceState] = useState(() =>
+      isInputWindow
+        ? ConversationStates.IDLE
+        : VoiceConversationService.getState(),
+    );
 
     useEffect(() => {
       if (!voiceCallEnabled && isVoiceMode) {
@@ -309,7 +331,6 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
     // Screen share state (Desktop only)
     const [isScreenShareActive, setIsScreenShareActive] = useState(false);
     const isDesktopInputWindow = isDesktop && isInputWindow;
-
     useEffect(() => {
       if (!isDesktopInputWindow || !api?.ipc) return;
 
@@ -410,7 +431,8 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       setIsSettingsPanelOpen,
     ]);
 
-    const effectiveIsVisible = isInputWindow ? localIsVisible : isVisible;
+    const effectiveIsVisible =
+      xr.active || (isInputWindow ? localIsVisible : isVisible);
     const effectivePendingDropData = isInputWindow
       ? localPendingDropData
       : pendingDropData;
@@ -434,6 +456,21 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       if (!isDesktopInputWindow || !api?.ipc) return;
 
       api.ipc.send("mic:requestState");
+      const unsubscribeVoiceSession = api.ipc.on(
+        "state:voiceSession",
+        (payload: { active?: boolean; error?: string }) => {
+          if (typeof payload.active === "boolean")
+            setIsVoiceMode(payload.active);
+          if (typeof payload.error === "string")
+            setRecordingError(payload.error);
+        },
+      );
+      api.ipc.send("voice:requestSession");
+      const unsubscribeGeneration = api.ipc.on(
+        "state:chatGeneration",
+        (processing: boolean) => setRemoteProcessing(processing === true),
+      );
+      api.ipc.send("chatInput:requestGenerationState");
 
       const unsubscribePendingDrop = api.ipc.on(
         "state:pendingDropData",
@@ -496,6 +533,11 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       const unsubscribeSttTranscription = api.ipc.on(
         "stt:transcriptionReceived",
         (text: string) => {
+          if (discardRecordingRef.current) {
+            discardRecordingRef.current = false;
+            setIsProcessingRecording(false);
+            return;
+          }
           if (typeof text !== "string" || text.trim().length === 0) {
             return;
           }
@@ -537,6 +579,8 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       );
 
       return () => {
+        unsubscribeVoiceSession?.();
+        unsubscribeGeneration?.();
         unsubscribePendingDrop?.();
         unsubscribeMicDevices?.();
         unsubscribeSelectedMic?.();
@@ -553,9 +597,22 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
     const adjustTextareaHeight = () => {
       const textarea = textareaRef.current;
       if (textarea) {
-        textarea.style.height = "auto";
-        const newHeight = Math.min(textarea.scrollHeight, 200);
-        textarea.style.height = `${newHeight}px`;
+        const measure = textarea.cloneNode(true) as HTMLTextAreaElement;
+        measure.removeAttribute("data-testid");
+        measure.setAttribute("aria-hidden", "true");
+        measure.tabIndex = -1;
+        measure.style.cssText = `position:absolute;visibility:hidden;pointer-events:none;width:${textarea.clientWidth}px;min-height:0;height:0;max-height:none;transition:none;`;
+        textarea.parentElement?.appendChild(measure);
+        const style = getComputedStyle(measure);
+        const contentHeight =
+          measure.scrollHeight -
+          parseFloat(style.paddingTop) -
+          parseFloat(style.paddingBottom);
+        measure.remove();
+        textarea.style.setProperty(
+          "--composer-text-height",
+          `${Math.max(24, contentHeight)}px`,
+        );
       }
     };
 
@@ -674,6 +731,11 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
 
     useEffect(() => {
       STTServiceProxy.setTranscriptionCallback((text: string) => {
+        if (discardRecordingRef.current) {
+          discardRecordingRef.current = false;
+          setIsProcessingRecording(false);
+          return;
+        }
         Logger.log("ChatInput", "Transcription received:", text);
         setMessage(text);
         setRecordingError("");
@@ -796,6 +858,8 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
         return;
       }
 
+      setMicDevices(MicrophoneService.getDevices());
+      setSelectedMicId(MicrophoneService.getSelectedDeviceId());
       const unsubscribe = MicrophoneService.subscribe(
         ({ devices, selectedDeviceId }: MicStateLike) => {
           setMicDevices(devices);
@@ -1078,7 +1142,10 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
         if (!isVoiceMode && effectiveIsVisible) {
           Logger.log("ChatInput", "External voice mode start requested");
           try {
-            if (!STTServiceProxy.isConfigured()) {
+            if (
+              !isDesktopInputWindow &&
+              !(await STTServiceProxy.isConfigured())
+            ) {
               setRecordingError(
                 "STT not configured. Please configure in Control Panel.",
               );
@@ -1339,8 +1406,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
         ) {
           Logger.log("ChatInput", "Auto-sending message from demo action");
           setTimeout(() => {
-            // Click the submit button to trigger the form submission
-            submitButtonRef.current?.click();
+            handleSubmit();
           }, 100);
         }
       };
@@ -1363,6 +1429,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       attachedImages.length,
       effectiveIsVisible,
       hostId,
+      handleSubmit,
       isVoiceMode,
       message,
     ]);
@@ -1683,7 +1750,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
         return;
       }
 
-      if (!STTServiceProxy.isConfigured()) {
+      if (!isDesktopInputWindow && !(await STTServiceProxy.isConfigured())) {
         setRecordingError(
           "STT not configured. Please configure in Control Panel.",
         );
@@ -1706,7 +1773,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
           if (isDesktopInputWindow && api?.ipc) {
             api.ipc.send("chatInput:voiceMode", false);
           } else {
-            VoiceConversationService.stop();
+            await VoiceConversationService.stop();
             if (CameraService.isRunning()) {
               Logger.log("ChatInput", "Stopping camera after voice call ended");
               await CameraService.stop();
@@ -1879,13 +1946,14 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       }
 
       if (isDesktopInputWindow && api?.ipc) {
+        if (!isRecording) discardRecordingRef.current = false;
         setRecordingError("");
         setIsProcessingRecording(true);
         api.ipc.send("chatInput:micToggle");
         return;
       }
 
-      if (!STTServiceProxy.isConfigured()) {
+      if (!isDesktopInputWindow && !(await STTServiceProxy.isConfigured())) {
         setRecordingError(
           "STT not configured. Please configure in Control Panel.",
         );
@@ -1893,7 +1961,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
         return;
       }
 
-      if (isVoiceMode) {
+      if (isVoiceMode || VoiceConversationService.isConversationActive()) {
         setRecordingError("Voice call is active. Stop voice call first.");
         setTimeout(() => setRecordingError(""), 3000);
         return;
@@ -1907,6 +1975,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       try {
         if (isRecording) {
           Logger.log("ChatInput", "Stopping recording");
+          setIsRecording(false);
           setIsProcessingRecording(true);
           STTServiceProxy.stopRecording();
         } else {
@@ -1915,7 +1984,13 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
           TTSServiceProxy.stopPlayback();
 
           setRecordingError("");
-          await STTServiceProxy.startRecording();
+          discardRecordingRef.current = false;
+          await VoiceConversationService.waitForStop();
+          const started = await STTServiceProxy.startRecording();
+          if (!started) {
+            setIsRecording(STTServiceProxy.isCurrentlyRecording());
+            setIsProcessingRecording(false);
+          }
         }
       } catch (error: unknown) {
         Logger.error("ChatInput", "Microphone error:", error);
@@ -1985,21 +2060,119 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
     const voiceStateDisplay = isVoiceMode
       ? getVoiceStateDisplay()
       : { icon: "stop", label: "Ready", class: "idle", showInterrupt: false };
-    const iconButtonClass = (options?: {
-      active?: boolean;
-      activeClassName?: string;
-      disabled?: boolean;
-      pulse?: boolean;
-    }) =>
-      cn(
-        "p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm flex items-center gap-1",
-        options?.disabled ? "opacity-50 cursor-not-allowed" : null,
-        isLightBackground ? "glass-text" : "glass-text-black",
-        options?.active && options.activeClassName,
-        options?.pulse && "animate-pulse",
-      );
     const hasAttachments =
       attachedImages.length > 0 || attachedAudios.length > 0;
+    const isGenerating = isDesktopInputWindow
+      ? remoteProcessing
+      : sessionProcessing;
+    const hasContent = Boolean(message.trim()) || hasAttachments;
+    const stopReply = () => {
+      if (isDesktopInputWindow) api?.ipc?.send("chatInput:stop");
+      else void getChatSession(appStore).execute({ type: "stop" });
+    };
+    const primaryAction: ComposerAction = isVoiceMode
+      ? "end-voice"
+      : isRecording
+        ? "finish-recording"
+        : isProcessingRecording
+          ? "processing"
+          : isGenerating
+            ? "stop"
+            : hasContent
+              ? "send"
+              : "voice";
+    const handlePrimaryAction = () => {
+      if (primaryAction === "voice" || primaryAction === "end-voice")
+        void handleVoiceModeToggle();
+      else if (primaryAction === "stop") stopReply();
+      else if (primaryAction === "finish-recording") void handleMicClick();
+      else if (primaryAction === "send") handleSubmit();
+    };
+    const composerMenuItems: ComposerMenuItem[] = [
+      {
+        label: "Attach image",
+        icon: "image",
+        onClick: () => imageInputRef.current?.click(),
+        testId: isVoiceMode
+          ? "chat-voice-attach-image-button"
+          : "chat-attach-image-button",
+        disabled: isRecording || isProcessingRecording,
+      },
+      ...(!isVoiceMode
+        ? [
+            {
+              label: "Attach audio",
+              icon: "music",
+              onClick: () => audioInputRef.current?.click(),
+              testId: "chat-attach-audio-button",
+              disabled: isRecording || isProcessingRecording,
+            },
+            {
+              label: "Thinking",
+              icon: "bulb",
+              onClick: () => toggleThinking(!thinkingEnabled),
+              active: thinkingEnabled,
+              testId: "chat-thinking-toggle",
+            },
+          ]
+        : []),
+      ...(isVoiceMode && cameraEnabled
+        ? [
+            {
+              label: isCameraActive ? "Stop camera" : "Start camera",
+              icon: "camera",
+              onClick: () => {
+                void handleCameraClick();
+              },
+              active: isCameraActive,
+              testId: "chat-voice-camera-toggle-button",
+            },
+          ]
+        : []),
+      ...(isVoiceMode && screenShareEnabled
+        ? [
+            {
+              label: isScreenShareActive ? "Stop screen share" : "Share screen",
+              icon: "screen-share",
+              onClick: () => {
+                void handleScreenShareClick();
+              },
+              active: isScreenShareActive,
+              testId: "chat-voice-screen-share-button",
+            },
+          ]
+        : []),
+      ...(!isVoiceMode && voiceCallEnabled
+        ? [
+            {
+              label: "Voice conversation",
+              icon: "waveform",
+              onClick: () => {
+                void handleVoiceModeToggle();
+              },
+              testId: "chat-start-voice-conversation",
+              disabled: isRecording || isProcessingRecording,
+            },
+          ]
+        : []),
+      ...(resolvedEmbedConfig.features.settings
+        ? [
+            {
+              label: "Quick Access",
+              icon: "tools",
+              onClick: handleQuickPanelToggle,
+              testId: "chat-quick-panel-button",
+              active: isQuickPanelOpen,
+            },
+          ]
+        : []),
+      {
+        label: "Close chat",
+        icon: "close",
+        onClick: wrappedOnClose,
+        testId: "chat-close-button",
+      },
+    ];
     const shouldFollowKeyboard =
       isAndroid &&
       keyboardOffset > 0 &&
@@ -2015,6 +2188,9 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
             : "left-0 right-0 justify-center",
         )}
         style={{
+          ...(xr.active
+            ? { position: "absolute", inset: "auto 0 0", width: "100%" }
+            : {}),
           ...(shouldFollowKeyboard
             ? {
                 transform: `translateY(-${keyboardOffset}px)`,
@@ -2031,7 +2207,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
             isInputWindow && "flex flex-col justify-end",
           )}
           style={{
-            touchAction: "none",
+            touchAction: "pan-y",
             ...(isInputWindow ? { minHeight: "400px" } : {}),
           }}
         >
@@ -2066,99 +2242,6 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
               </div>
             </div>
           )}
-          {hasAttachments && (
-            <div
-              className={cn(
-                "w-full max-w-3xl mb-2",
-                !isInputWindow && "mx-auto",
-              )}
-            >
-              <div
-                className={cn(
-                  "glass-input",
-                  isLightBackground && "glass-input-dark",
-                  "p-2 rounded-lg",
-                  isClosing ? "animate-fade-out" : "animate-slide-up-fade-in",
-                )}
-                data-electron-interactive="true"
-              >
-                <div className="flex items-center gap-2 flex-wrap">
-                  {attachedImages.map((img, index) => (
-                    <div key={`img-${index}`} className="relative group">
-                      <img
-                        src={img.dataUrl}
-                        alt={img.name}
-                        className="w-16 h-16 object-cover rounded-lg border-2 border-white/30"
-                      />
-                      <Button
-                        type="button"
-                        onClick={() => handleRemoveImage(index)}
-                        variant={isLightBackground ? "dark" : "default"}
-                        size="icon"
-                        className="absolute -top-2 -right-2 rounded-full w-6 h-6 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20"
-                        title="Remove image"
-                      >
-                        <Icon
-                          name="close"
-                          size={10}
-                          className={
-                            isLightBackground
-                              ? "glass-text"
-                              : "glass-text-black"
-                          }
-                        />
-                      </Button>
-                      <div
-                        className={cn(
-                          isLightBackground ? "glass-text" : "glass-text-black",
-                          "text-xs mt-1 text-center truncate w-16",
-                        )}
-                        title={img.name}
-                      >
-                        {(img.name.split(".")[0] || "").substring(0, 8)}
-                      </div>
-                    </div>
-                  ))}
-
-                  {attachedAudios.map((audio, index) => (
-                    <div key={`audio-${index}`} className="relative group">
-                      <div className="w-16 h-16 flex items-center justify-center bg-purple-500/20 rounded-lg border-2 border-purple-400/30">
-                        <Icon name="music" size={24} />
-                      </div>
-                      <Button
-                        type="button"
-                        onClick={() => handleRemoveAudio(index)}
-                        variant={isLightBackground ? "dark" : "default"}
-                        size="icon"
-                        className="absolute -top-2 -right-2 rounded-full w-6 h-6 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20"
-                        title="Remove audio"
-                      >
-                        <Icon
-                          name="close"
-                          size={10}
-                          className={
-                            isLightBackground
-                              ? "glass-text"
-                              : "glass-text-black"
-                          }
-                        />
-                      </Button>
-                      <div
-                        className={cn(
-                          isLightBackground ? "glass-text" : "glass-text-black",
-                          "text-xs mt-1 text-center truncate w-16",
-                        )}
-                        title={audio.name}
-                      >
-                        {(audio.name.split(".")[0] || "").substring(0, 8)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
           {recordingError && (
             <div
               data-electron-interactive="true"
@@ -2215,454 +2298,261 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
               className="hidden"
             />
 
-            {isVoiceMode ? (
-              <>
+            <div
+              data-electron-interactive="true"
+              onFocusCapture={() => setInputFocused(true)}
+              onBlurCapture={(event) => {
+                if (
+                  !event.currentTarget.contains(
+                    event.relatedTarget as Node | null,
+                  )
+                )
+                  setInputFocused(false);
+              }}
+              className={cn(
+                "composer-surface glass-container min-w-0 flex-1 rounded-[28px] p-2",
+                isLightBackground && "glass-container-dark",
+                isClosing ? "animate-fade-out" : "animate-slide-up-fade-in",
+              )}
+            >
+              {hasAttachments && (
                 <div
-                  data-electron-interactive="true"
-                  className={cn(
-                    "glass-container",
-                    isLightBackground && "glass-container-dark",
-                    "flex-1 px-5 py-2 md:py-3 rounded-xl flex items-center justify-between",
-                    isClosing ? "animate-fade-out" : "animate-slide-up-fade-in",
-                  )}
+                  className="flex gap-2 overflow-x-auto p-2 pb-3"
+                  aria-label="Attachments"
                 >
-                  <div className="flex items-center gap-3">
-                    <Icon
-                      name={voiceStateDisplay.icon}
-                      size={24}
-                      className={
-                        voiceStateDisplay.class === "listening"
-                          ? "animate-pulse"
-                          : ""
-                      }
-                    />
-                    <span
-                      className={cn(
-                        isLightBackground ? "glass-text" : "glass-text-black",
-                      )}
+                  {[
+                    ...attachedImages.map((file, index) => ({
+                      file,
+                      index,
+                      image: true,
+                    })),
+                    ...attachedAudios.map((file, index) => ({
+                      file,
+                      index,
+                      image: false,
+                    })),
+                  ].map(({ file, index, image }) => (
+                    <div
+                      key={`${image ? "image" : "audio"}-${index}`}
+                      className="relative w-20 shrink-0"
                     >
-                      {voiceStateDisplay.label}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {voiceStateDisplay.showInterrupt && (
+                      {image ? (
+                        <img
+                          src={file.dataUrl}
+                          alt={file.name}
+                          className="h-16 w-20 rounded-xl object-cover border border-current/15"
+                        />
+                      ) : (
+                        <div className="flex h-16 w-20 items-center justify-center rounded-xl border border-current/15 bg-current/5">
+                          <Icon name="music" size={24} />
+                        </div>
+                      )}
                       <Button
                         type="button"
-                        data-testid="chat-voice-interrupt-button"
-                        onClick={handleInterrupt}
-                        variant="unstyled"
-                        className={iconButtonClass({
-                          active: true,
-                          activeClassName: "text-red-400 hover:bg-red-500/12",
-                        })}
-                        title="Interrupt"
+                        variant={isLightBackground ? "dark" : "default"}
+                        onClick={() =>
+                          image
+                            ? handleRemoveImage(index)
+                            : handleRemoveAudio(index)
+                        }
+                        aria-label={`Remove ${file.name}`}
+                        className="absolute -right-1 -top-1 h-6 w-6 rounded-full p-0"
                       >
-                        <Icon
-                          name="hand-stop"
-                          size={16}
-                          className="text-current"
-                        />
+                        <Icon name="close" size={12} />
                       </Button>
-                    )}
-
-                    <Select
-                      value={selectedMicId || ""}
-                      onChange={(event) =>
-                        handleMicSelect(event.target.value || null)
-                      }
-                      variant={isLightBackground ? "dark" : "default"}
-                      options={micDeviceOptions}
-                      disabled={isRecording || isProcessingRecording}
-                      side="top"
-                      align="end"
-                      listClassName="min-w-[250px]"
-                      tooltip="Select Microphone"
-                      tooltipVariant={isLightBackground ? "dark" : "default"}
-                      trigger={
-                        <Button
-                          type="button"
-                          data-testid="chat-voice-mic-select"
-                          variant="unstyled"
-                          disabled={isRecording || isProcessingRecording}
-                          className={iconButtonClass({
-                            disabled: isRecording || isProcessingRecording,
-                          })}
-                        >
-                          <Icon
-                            name="microphone"
-                            size={16}
-                            className="text-current"
-                          />
-                          <Icon
-                            name="chevron-down"
-                            size={14}
-                            className="text-current"
-                          />
-                        </Button>
-                      }
-                    />
-
+                      <p
+                        className="mt-1 truncate text-[10px] opacity-65"
+                        title={file.name}
+                      >
+                        {file.name}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div
+                className="composer-layout"
+                data-expanded={
+                  !isVoiceMode &&
+                  !isRecording &&
+                  !isProcessingRecording &&
+                  (hasAttachments ||
+                    message.includes("\n") ||
+                    hasContent ||
+                    inputFocused ||
+                    composerMenuOpen)
+                }
+              >
+                <div className="composer-more">
+                  {isRecording ? (
                     <Button
                       type="button"
-                      data-testid="chat-voice-attach-image-button"
-                      onClick={() => imageInputRef.current?.click()}
                       variant="unstyled"
-                      className={iconButtonClass({
-                        active: attachedImages.length > 0,
-                        activeClassName: "text-blue-400",
-                      })}
-                      title={
-                        attachedImages.length > 0
-                          ? `${attachedImages.length} image(s)`
-                          : "Attach image"
-                      }
+                      className="composer-icon"
+                      aria-label="Cancel recording"
+                      onClick={() => {
+                        discardRecordingRef.current = true;
+                        setIsRecording(false);
+                        setIsProcessingRecording(false);
+                        if (isDesktopInputWindow)
+                          api?.ipc?.send("chatInput:micCancel");
+                        else STTServiceProxy.cancelRecording();
+                      }}
                     >
-                      <Icon name="image" size={16} className="text-current" />
-                      {attachedImages.length > 0 && (
-                        <span className="text-current">
-                          {attachedImages.length}
-                        </span>
-                      )}
+                      <Icon name="close" size={22} />
                     </Button>
-
-                    {cameraEnabled ? (
-                      <div className="relative flex items-center gap-1">
-                        <Button
-                          type="button"
-                          data-testid="chat-voice-camera-toggle-button"
-                          onClick={handleCameraClick}
-                          variant="unstyled"
-                          className={iconButtonClass({
-                            active: isCameraActive,
-                            activeClassName: "text-green-400",
-                            pulse: isCameraActive,
-                          })}
-                          title={
-                            isCameraActive ? "Stop Camera" : "Start Camera"
-                          }
-                        >
-                          <Icon
-                            name="camera"
-                            size={16}
-                            className="text-current"
+                  ) : (
+                    <ComposerMenu
+                      items={composerMenuItems}
+                      onOpenChange={(open) => {
+                        setComposerMenuOpen(open);
+                        if (!open || (!voiceInputEnabled && !voiceCallEnabled))
+                          return;
+                        if (isDesktopInputWindow)
+                          api?.ipc?.send("mic:requestState");
+                        else void MicrophoneService.refreshDevices();
+                      }}
+                      isLightBackground={isLightBackground}
+                      disabled={isProcessingRecording}
+                    >
+                      {(voiceInputEnabled || voiceCallEnabled) && (
+                        <>
+                          <Select
+                            value={selectedMicId || ""}
+                            onChange={(event) =>
+                              handleMicSelect(event.target.value || null)
+                            }
+                            options={micDeviceOptions}
+                            icon={<Icon name="microphone" size={19} />}
+                            variant={isLightBackground ? "ghost-dark" : "ghost"}
+                            side="top"
+                            tooltip="Microphone"
+                            aria-label="Microphone"
+                            data-testid="chat-voice-mic-select"
                           />
-                        </Button>
-
-                        <Select
-                          value={selectedCameraId || ""}
-                          onChange={(event) => {
-                            void handleCameraSelect(event.target.value || null);
-                          }}
-                          variant={isLightBackground ? "dark" : "default"}
-                          options={cameraDeviceOptions}
-                          side="top"
-                          align="end"
-                          listClassName="min-w-[250px]"
-                          tooltip="Select Camera"
-                          tooltipVariant={
-                            isLightBackground ? "dark" : "default"
-                          }
-                          trigger={
-                            <Button
-                              type="button"
+                          {isVoiceMode && cameraEnabled && (
+                            <Select
+                              value={selectedCameraId || ""}
+                              onChange={(event) => {
+                                void handleCameraSelect(
+                                  event.target.value || null,
+                                );
+                              }}
+                              options={cameraDeviceOptions}
+                              icon={<Icon name="camera" size={19} />}
+                              variant={
+                                isLightBackground ? "ghost-dark" : "ghost"
+                              }
+                              side="top"
+                              tooltip="Camera"
+                              aria-label="Camera"
                               data-testid="chat-voice-camera-select"
-                              variant="unstyled"
-                              className={iconButtonClass()}
-                            >
-                              <Icon
-                                name="chevron-down"
-                                size={14}
-                                className="text-current"
-                              />
-                            </Button>
-                          }
-                        />
-                      </div>
-                    ) : null}
-
-                    {screenShareEnabled ? (
+                            />
+                          )}
+                        </>
+                      )}
+                    </ComposerMenu>
+                  )}
+                </div>
+                {isVoiceMode || isRecording || isProcessingRecording ? (
+                  <div className="composer-content flex min-w-0 items-center px-2">
+                    <VoiceWaveform
+                      state={
+                        isVoiceMode
+                          ? voiceState
+                          : isRecording
+                            ? "listening"
+                            : "processing"
+                      }
+                      label={
+                        isVoiceMode
+                          ? voiceStateDisplay.label
+                          : isRecording
+                            ? "Recording"
+                            : "Transcribing"
+                      }
+                    />
+                  </div>
+                ) : null}
+                <textarea
+                  ref={textareaRef}
+                  data-testid="chat-input-textarea"
+                  value={message}
+                  onChange={(event) => setMessage(event.target.value)}
+                  onTransitionEnd={(event) => {
+                    if (event.propertyName === "padding-left")
+                      adjustTextareaHeight();
+                  }}
+                  onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
+                  placeholder="Message…"
+                  aria-label="Message"
+                  className={cn(
+                    "composer-content composer-textarea custom-scrollbar",
+                    (isVoiceMode || isRecording || isProcessingRecording) &&
+                      "hidden",
+                  )}
+                  rows={1}
+                />
+                <div className="composer-trailing flex items-center gap-1">
+                  {isVoiceMode ? (
+                    <Button
+                      type="button"
+                      variant="unstyled"
+                      className="composer-icon"
+                      data-testid="chat-voice-interrupt-button"
+                      aria-label="Interrupt reply"
+                      disabled={
+                        !voiceStateDisplay.showInterrupt &&
+                        voiceState !== ConversationStates.THINKING &&
+                        voiceState !== ConversationStates.GENERATING_VOICE
+                      }
+                      onClick={handleInterrupt}
+                    >
+                      <Icon name="stop" size={18} />
+                    </Button>
+                  ) : (
+                    voiceInputEnabled &&
+                    !isRecording && (
                       <Button
                         type="button"
-                        data-testid="chat-voice-screen-share-button"
-                        onClick={handleScreenShareClick}
                         variant="unstyled"
-                        className={iconButtonClass({
-                          active: isScreenShareActive,
-                          activeClassName: "text-blue-400",
-                          pulse: isScreenShareActive,
-                        })}
-                        title={
-                          isScreenShareActive
-                            ? "Stop Screen Share"
-                            : "Start Screen Share"
+                        className="composer-icon"
+                        data-testid="chat-voice-input-button"
+                        aria-label={
+                          isRecording ? "Finish recording" : "Dictate message"
                         }
+                        disabled={isProcessingRecording}
+                        onClick={handleMicClick}
                       >
                         <Icon
                           name={
-                            isScreenShareActive
-                              ? "screen-share-off"
-                              : "screen-share"
+                            isProcessingRecording
+                              ? "loading"
+                              : isRecording
+                                ? "check"
+                                : "microphone"
                           }
-                          size={16}
-                          className="text-current"
+                          size={21}
+                          className={
+                            isProcessingRecording ? "animate-spin" : ""
+                          }
                         />
                       </Button>
-                    ) : null}
-
-                    <Button
-                      type="button"
-                      data-testid="chat-voice-close-button"
-                      onClick={handleVoiceModeToggle}
-                      variant="unstyled"
-                      className={iconButtonClass()}
-                      title="Close Voice Mode"
-                    >
-                      <Icon name="close" size={16} className="text-current" />
-                    </Button>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div
-                  data-electron-interactive="true"
-                  className={cn(
-                    "glass-container",
-                    isLightBackground && "glass-container-dark",
-                    "flex-1 rounded-xl p-3 flex flex-col gap-2",
-                    isClosing ? "animate-fade-out" : "animate-slide-up-fade-in",
+                    )
                   )}
-                >
-                  <textarea
-                    ref={textareaRef}
-                    data-testid="chat-input-textarea"
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    onPaste={handlePaste}
-                    placeholder={
-                      isProcessingRecording
-                        ? "Processing audio..."
-                        : isRecording
-                          ? "Recording..."
-                          : hasAttachments
-                            ? `${attachedImages.length + attachedAudios.length} file(s) attached`
-                            : "Type a message..."
-                    }
-                    className="w-full bg-transparent text-white border-none outline-none placeholder-white/40 resize-none custom-scrollbar min-h-[24px] max-h-[200px]"
-                    rows={1}
-                  />
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="unstyled"
-                        tooltipVariant={isLightBackground ? "dark" : "default"}
-                        type="button"
-                        onClick={() => toggleThinking(!thinkingEnabled)}
-                        data-testid="chat-thinking-toggle"
-                        className={cn(
-                          iconButtonClass(),
-                          !thinkingEnabled && "opacity-50",
-                        )}
-                        title={thinkingEnabled ? "Thinking on" : "Thinking off"}
-                        aria-label="Toggle thinking mode"
-                        aria-pressed={thinkingEnabled}
-                      >
-                        <Icon name="bulb" size={18} />
-                      </Button>
-                      <Button
-                        variant="unstyled"
-                        tooltipVariant={isLightBackground ? "dark" : "default"}
-                        type="button"
-                        onClick={() => imageInputRef.current?.click()}
-                        data-testid="chat-attach-image-button"
-                        disabled={isRecording || isProcessingRecording}
-                        className={cn(
-                          "p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm flex items-center gap-1",
-                          attachedImages.length > 0
-                            ? "text-blue-400"
-                            : isLightBackground
-                              ? "glass-text"
-                              : "glass-text-black",
-                          (isRecording || isProcessingRecording) &&
-                            "opacity-50 cursor-not-allowed",
-                        )}
-                        title={
-                          attachedImages.length > 0
-                            ? `${attachedImages.length} image(s)`
-                            : "Attach Image"
-                        }
-                      >
-                        <Icon name="image" size={18} />
-                        {attachedImages.length > 0 && (
-                          <span>{attachedImages.length}</span>
-                        )}
-                      </Button>
-
-                      <Button
-                        variant="unstyled"
-                        tooltipVariant={isLightBackground ? "dark" : "default"}
-                        type="button"
-                        onClick={() => audioInputRef.current?.click()}
-                        data-testid="chat-attach-audio-button"
-                        disabled={isRecording || isProcessingRecording}
-                        className={cn(
-                          "p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm flex items-center gap-1",
-                          attachedAudios.length > 0
-                            ? "text-purple-400"
-                            : isLightBackground
-                              ? "glass-text"
-                              : "glass-text-black",
-                          (isRecording || isProcessingRecording) &&
-                            "opacity-50 cursor-not-allowed",
-                        )}
-                        title={
-                          attachedAudios.length > 0
-                            ? `${attachedAudios.length} audio(s)`
-                            : "Attach Audio"
-                        }
-                      >
-                        <Icon name="music" size={18} />
-                        {attachedAudios.length > 0 && (
-                          <span>{attachedAudios.length}</span>
-                        )}
-                      </Button>
-
-                      {voiceInputEnabled ? (
-                        <Button
-                          variant="unstyled"
-                          tooltipVariant={
-                            isLightBackground ? "dark" : "default"
-                          }
-                          type="button"
-                          onClick={handleMicClick}
-                          data-testid="chat-voice-input-button"
-                          disabled={isProcessingRecording}
-                          className={cn(
-                            "p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm",
-                            isProcessingRecording
-                              ? "text-yellow-400"
-                              : isRecording
-                                ? "text-red-400 animate-pulse"
-                                : isLightBackground
-                                  ? "glass-text"
-                                  : "glass-text-black",
-                          )}
-                          title={
-                            isProcessingRecording
-                              ? "Processing..."
-                              : isRecording
-                                ? "Stop Recording"
-                                : "Voice Input"
-                          }
-                        >
-                          <Icon
-                            name={
-                              isProcessingRecording
-                                ? "hourglass"
-                                : isRecording
-                                  ? "record"
-                                  : "microphone"
-                            }
-                            size={18}
-                          />
-                        </Button>
-                      ) : null}
-
-                      {voiceCallEnabled ? (
-                        <Button
-                          variant="unstyled"
-                          tooltipVariant={
-                            isLightBackground ? "dark" : "default"
-                          }
-                          type="button"
-                          onClick={handleVoiceModeToggle}
-                          data-testid="chat-voice-mode-button"
-                          disabled={isRecording || isProcessingRecording}
-                          className={cn(
-                            "p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm",
-                            isRecording || isProcessingRecording
-                              ? "opacity-50 cursor-not-allowed"
-                              : isLightBackground
-                                ? "glass-text"
-                                : "glass-text-black",
-                          )}
-                          title="Voice Mode"
-                        >
-                          <Icon name="phone" size={18} />
-                        </Button>
-                      ) : null}
-
-                      {resolvedEmbedConfig.features.settings ? (
-                        <Button
-                          variant="unstyled"
-                          tooltipVariant={
-                            isLightBackground ? "dark" : "default"
-                          }
-                          type="button"
-                          onClick={handleQuickPanelToggle}
-                          data-testid="chat-quick-panel-button"
-                          className={cn(
-                            "p-1.5 rounded-lg transition-all hover:bg-white/10 text-sm",
-                            isQuickPanelOpen
-                              ? "text-blue-300"
-                              : isLightBackground
-                                ? "glass-text"
-                                : "glass-text-black",
-                          )}
-                          title="Quick Access"
-                          aria-label="Quick access"
-                        >
-                          <Icon name="tools" size={18} />
-                        </Button>
-                      ) : null}
-
-                      <Button
-                        variant="unstyled"
-                        tooltipVariant={isLightBackground ? "dark" : "default"}
-                        type="button"
-                        onClick={wrappedOnClose}
-                        data-testid="chat-close-button"
-                        className={cn(
-                          "p-1.5 rounded-lg transition-all hover:bg-white/10",
-                          isLightBackground ? "glass-text" : "glass-text-black",
-                        )}
-                        title="Close"
-                      >
-                        <Icon name="close" size={18} />
-                      </Button>
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="unstyled"
-                        tooltipVariant={isLightBackground ? "dark" : "default"}
-                        ref={submitButtonRef}
-                        type="submit"
-                        data-testid="chat-send-button"
-                        disabled={!message.trim() && !hasAttachments}
-                        className={cn(
-                          "p-1.5 rounded-lg transition-all",
-                          message.trim() || hasAttachments
-                            ? cn(
-                                "hover:bg-white/10",
-                                isLightBackground
-                                  ? "glass-text"
-                                  : "glass-text-black",
-                              )
-                            : "opacity-30 cursor-not-allowed",
-                        )}
-                        title="Send message"
-                      >
-                        <Icon name="send" size={20} />
-                      </Button>
-                    </div>
-                  </div>
                 </div>
-              </>
-            )}
+              </div>
+            </div>
+            <ComposerPrimaryAction
+              action={primaryAction}
+              onClick={handlePrimaryAction}
+              isLightBackground={isLightBackground}
+              disabled={
+                primaryAction === "processing" ||
+                (primaryAction === "voice" && !voiceCallEnabled)
+              }
+            />
           </form>
         </div>
       </div>

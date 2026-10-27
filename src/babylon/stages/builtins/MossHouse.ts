@@ -209,7 +209,16 @@ export async function createMossHouse(
   textures.push(meadow);
   // Foundation and single UV-mapped oak floor instead of many contrasting planks.
   box("limestone plinth", 0, -0.18, 0.3, 11, 0.3, 9, stone);
-  box("continuous oak floor", 0, 0.005, 0.3, 10.7, 0.09, 8.7, oak);
+  const xrFloor = box(
+    "continuous oak floor",
+    0,
+    0.005,
+    0.3,
+    10.7,
+    0.09,
+    8.7,
+    oak,
+  );
   setTextureScale(oak.albedoTexture, 3, 3);
   setTextureScale(oak.bumpTexture, 3, 3);
   setTextureScale(oak.metallicTexture, 3, 3);
@@ -883,6 +892,7 @@ export async function createMossHouse(
   onProgress("Scene ready");
   return {
     id: "moss-house",
+    floorMeshes: [xrFloor],
     root,
     runtime,
     setTime,

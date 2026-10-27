@@ -13,6 +13,7 @@
  * - Transcription callbacks for real-time processing
  */
 
+import audioVisualizationService from "./AudioVisualizationService";
 import VADService from "./VADService";
 import { STTServiceProxy } from "../proxies";
 import Logger from "../common/LoggerService";
@@ -28,6 +29,11 @@ type VoiceRecordingCallbacks = {
 };
 
 class VoiceRecordingService {
+  private unsubscribeMicrophone: (() => void) | null = null;
+  private microphoneChange = Promise.resolve();
+  private session = 0;
+  private starting: Promise<void> | null = null;
+  private stopVisualization: (() => void) | null = null;
   private audioStream: MediaStream | null;
   private mediaRecorder: MediaRecorder | null;
   private audioChunks: Blob[];
@@ -65,12 +71,24 @@ class VoiceRecordingService {
    * Start VAD monitoring and recording system
    * @param {Object} callbacks - { onTranscription, onError, onRecordingStart, onRecordingStop, onVolumeChange }
    */
-  async start(callbacks: VoiceRecordingCallbacks = {}): Promise<void> {
+  start(callbacks: VoiceRecordingCallbacks = {}): Promise<void> {
+    if (this.starting) return this.starting;
+    const starting = this.startCapture(callbacks).finally(() => {
+      if (this.starting === starting) this.starting = null;
+    });
+    this.starting = starting;
+    return starting;
+  }
+
+  private async startCapture(
+    callbacks: VoiceRecordingCallbacks,
+  ): Promise<void> {
     if (this.isActive) {
       Logger.warn("VoiceRecording", "Already active");
       return;
     }
 
+    const session = ++this.session;
     try {
       Logger.log("VoiceRecording", "Starting VAD...");
 
@@ -87,13 +105,22 @@ class VoiceRecordingService {
       Logger.log("VoiceRecording", "Using audio constraints:", constraints);
 
       // Request microphone access
-      this.audioStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      if (session !== this.session) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      this.audioStream = stream;
+      const visualization =
+        audioVisualizationService.monitorFrames("microphone");
+      this.stopVisualization = visualization.stop;
 
       this.isActive = true;
 
       // Start VAD with callbacks
       await VADService.start({
         stream: this.audioStream,
+        onAudioFrame: visualization.push,
         onSpeechStart: () => {
           Logger.log("VoiceRecording", "Speech detected - starting recording");
           this.startRecording();
@@ -126,9 +153,56 @@ class VoiceRecordingService {
         },
       });
 
+      if (session !== this.session) return;
+      let selectedDevice = MicrophoneService.getSelectedDeviceId();
+      this.unsubscribeMicrophone = MicrophoneService.subscribe(
+        ({ selectedDeviceId }) => {
+          if (selectedDeviceId === selectedDevice) return;
+          selectedDevice = selectedDeviceId;
+          this.microphoneChange = this.microphoneChange
+            .then(async () => {
+              if (!this.isActive || session !== this.session) return;
+              const stream = await navigator.mediaDevices.getUserMedia(
+                MicrophoneService.getAudioConstraints(),
+              );
+              if (!this.isActive || session !== this.session) {
+                stream.getTracks().forEach((track) => track.stop());
+                return;
+              }
+              // A device switch discards only the unfinished speech segment.
+              if (this.mediaRecorder) {
+                this.mediaRecorder.onstop = null;
+                this.mediaRecorder.ondataavailable = null;
+                if (this.mediaRecorder.state !== "inactive")
+                  this.mediaRecorder.stop();
+              }
+              this.isRecording = false;
+              this.audioChunks = [];
+              try {
+                this.audioStream = stream;
+                await VADService.replaceStream(stream);
+                if (!this.isActive || session !== this.session) {
+                  stream.getTracks().forEach((track) => track.stop());
+                  return;
+                }
+                this.audioStream = stream;
+              } catch (error) {
+                stream.getTracks().forEach((track) => track.stop());
+                throw error;
+              }
+            })
+            .catch((error) => this.onError?.(error));
+        },
+      );
       Logger.log("VoiceRecording", "Started successfully");
     } catch (error) {
       Logger.error("VoiceRecording", "Failed to start:", error);
+      await VADService.stop().catch(() => {});
+      this.stopVisualization?.();
+      this.stopVisualization = null;
+      this.audioStream?.getTracks().forEach((track) => track.stop());
+      this.audioStream = null;
+      this.isActive = false;
       if (this.onError) {
         this.onError(error);
       }
@@ -140,12 +214,25 @@ class VoiceRecordingService {
    * Stop VAD monitoring and recording system
    */
   async stop(): Promise<void> {
+    this.isActive = false;
+    ++this.session;
+    this.unsubscribeMicrophone?.();
+    this.unsubscribeMicrophone = null;
+    if (this.mediaRecorder) {
+      this.mediaRecorder.onstop = null;
+      this.mediaRecorder.ondataavailable = null;
+      if (this.mediaRecorder.state !== "inactive") this.mediaRecorder.stop();
+    }
+    this.mediaRecorder = null;
+    this.isRecording = false;
+    this.audioChunks = [];
+    this.stopVisualization?.();
+    this.stopVisualization = null;
     Logger.log("VoiceRecording", "Stopping...");
 
-    // Stop any ongoing recording
-    this.stopRecording();
-
-    // Stop VAD
+    // Capture startup and device switching must settle before VAD is disposed.
+    await this.starting?.catch(() => {});
+    await this.microphoneChange;
     await VADService.stop();
 
     // Cleanup audio stream (already stopped by VAD, but null out reference)
@@ -166,7 +253,7 @@ class VoiceRecordingService {
    * Start recording user speech
    */
   startRecording(): void {
-    if (this.isRecording) return;
+    if (!this.isActive || this.isRecording) return;
     if (!this.audioStream) return;
 
     try {
@@ -221,6 +308,7 @@ class VoiceRecordingService {
    * Process recorded audio
    */
   async processRecording(): Promise<void> {
+    const session = this.session;
     try {
       // Create audio blob
       const mimeType = this.getSupportedMimeType();
@@ -242,7 +330,7 @@ class VoiceRecordingService {
       }
 
       // Check if STT is configured
-      if (!STTServiceProxy.isConfigured()) {
+      if (!(await STTServiceProxy.isConfigured())) {
         Logger.error("VoiceRecording", "STT not configured!");
         if (this.onError) {
           this.onError(
@@ -263,11 +351,13 @@ class VoiceRecordingService {
         `Transcription received: "${transcription}"`,
       );
 
+      if (!this.isActive || session !== this.session) return;
       // Notify transcription
       if (this.onTranscription) {
         this.onTranscription(transcription);
       }
     } catch (error) {
+      if (!this.isActive || session !== this.session) return;
       Logger.error("VoiceRecording", "Processing failed:", error);
       if (this.onError) {
         this.onError(error);

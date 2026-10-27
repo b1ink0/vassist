@@ -13,6 +13,7 @@ export interface StageWeatherBounds {
 }
 
 export interface AuthoredStage {
+  floorMeshes?: Mesh[];
   id: string;
   name?: string;
   root: TransformNode;
@@ -58,6 +59,7 @@ export interface QuietStageOptions {
 }
 
 export interface StageRuntime {
+  floorMeshes?: Mesh[];
   root: TransformNode;
   meshes: Mesh[];
   isEnvironment: boolean;

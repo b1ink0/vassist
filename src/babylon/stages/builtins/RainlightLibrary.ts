@@ -195,7 +195,7 @@ export async function createRainlightLibrary(
     return register(mesh, mat);
   }
   box("foundation", 0, -0.15, 0, 10.5, 0.28, 9.0, stone);
-  box("oak floor", 0, 0.012, 0, 10.2, 0.06, 8.8, floorMat);
+  const xrFloor = box("oak floor", 0, 0.012, 0, 10.2, 0.06, 8.8, floorMat);
   box("left wall", -5.2, 2.05, 0, 0.18, 4.1, 9, plaster);
   box("right wall", 5.2, 2.05, 0, 0.18, 4.1, 9, plaster);
   box("back fireplace wall", -2.27, 2.05, 4.5, 5.86, 4.1, 0.2, plaster);
@@ -838,6 +838,7 @@ export async function createRainlightLibrary(
   onProgress("Library ready");
   return {
     id: "rainlight-library",
+    floorMeshes: [xrFloor],
     animatedLighting: true,
     root,
     runtime,

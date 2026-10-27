@@ -5,11 +5,18 @@ import type {
 } from "./config";
 
 export type VAssistHostCommandName =
+  | "enter-xr"
   | "open-settings"
   | "submit-draft"
   | "focus-input"
   | "toolbar-action"
   | "enqueue-drop-data";
+
+export function dispatchEnterXrCommand(hostId: string): void {
+  window.dispatchEvent(
+    new CustomEvent(getHostCommandEventName(hostId, "enter-xr")),
+  );
+}
 
 export interface VAssistHostAttachment {
   dataUrl: string;

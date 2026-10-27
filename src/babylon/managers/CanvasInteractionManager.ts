@@ -1,3 +1,7 @@
+/**
+ * CanvasInteractionManager - Click-through canvas with selective model interaction
+ */
+
 import Logger from "../../services/common/LoggerService";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
@@ -7,10 +11,6 @@ import type { SceneWithMetadata, DesktopApiLike } from "../types";
 type DragStartCallback = (x: number, y: number) => void;
 type DragMoveCallback = (deltaX: number, deltaY: number) => void;
 type DragEndCallback = (x: number, y: number) => void;
-
-/**
- * CanvasInteractionManager - Click-through canvas with selective model interaction
- */
 export class CanvasInteractionManager {
   private readonly scene: SceneWithMetadata;
   private readonly canvas: HTMLCanvasElement;
@@ -116,6 +116,10 @@ export class CanvasInteractionManager {
   }
 
   private updateInteractiveState(clientX: number, clientY: number): boolean {
+    if (this.scene.metadata?.xrActive) {
+      this.canvas.style.pointerEvents = "auto";
+      return true;
+    }
     if (this.isDragging) {
       this.canvas.style.pointerEvents = "auto";
       return true;
@@ -139,7 +143,15 @@ export class CanvasInteractionManager {
       return true;
     }
 
-    const pickResult = this.scene.pick(x, y);
+    const pickResult = this.scene.pick(
+      x,
+      y,
+      (mesh) =>
+        mesh.isEnabled() &&
+        mesh.isVisible &&
+        mesh.isPickable &&
+        this.isModelMesh(mesh),
+    );
     const overModel =
       Boolean(pickResult?.hit) &&
       this.isModelMesh((pickResult?.pickedMesh as AbstractMesh | null) ?? null);
@@ -175,7 +187,7 @@ export class CanvasInteractionManager {
    */
   async handleCanvasPointerDown(event: PointerEvent): Promise<void> {
     // Only left button
-    if (event.button !== 0) return;
+    if (event.button !== 0 || this.scene.metadata?.xrActive) return;
 
     // A live-wallpaper HWND is desktop content, not a movable application
     // window. Keep this guard here so the normal floating-window drag path is
@@ -190,7 +202,15 @@ export class CanvasInteractionManager {
     const y = event.clientY - rect.top;
 
     // Check if clicking on model
-    const pickResult = this.scene.pick(x, y);
+    const pickResult = this.scene.pick(
+      x,
+      y,
+      (mesh) =>
+        mesh.isEnabled() &&
+        mesh.isVisible &&
+        mesh.isPickable &&
+        this.isModelMesh(mesh),
+    );
     const clickedOnModel =
       Boolean(pickResult?.hit) &&
       this.isModelMesh((pickResult?.pickedMesh as AbstractMesh | null) ?? null);

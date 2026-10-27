@@ -3,6 +3,8 @@ import { useDesktopApi } from "../../hooks/useDesktopStore";
 import { isDetachedChatWindow } from "../../utils/PlatformUtils";
 import { cn } from "../../utils/cn";
 import { Tooltip } from "../ui/Tooltip";
+import { useUIConfig } from "../../hooks/config/useConfigUI";
+import { useAssistantControlTheme } from "../chat/assistant-controls/hooks/useAssistantControlTheme";
 
 const MIN_WIDTH = 420;
 const MIN_HEIGHT = 420;
@@ -23,6 +25,14 @@ interface ResizeState {
  */
 export default function DetachedChatResizeHandle() {
   const api = useDesktopApi();
+  const uiConfig = useUIConfig();
+  const handleRef = useRef<HTMLDivElement>(null);
+  const isLightBackground = useAssistantControlTheme({
+    buttonRef: handleRef,
+    shouldRender: isDetachedChatWindow,
+    isDragging: false,
+    mode: uiConfig.backgroundDetection?.mode,
+  });
   const resizeStateRef = useRef<ResizeState | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const pendingBoundsRef = useRef<{
@@ -150,20 +160,25 @@ export default function DetachedChatResizeHandle() {
   };
 
   return (
-    <Tooltip content="Resize chat window" variant="default">
+    <Tooltip
+      content="Resize chat"
+      variant={isLightBackground ? "dark" : "default"}
+    >
       <div
+        ref={handleRef}
         data-electron-interactive="true"
         role="separator"
         aria-label="Resize detached chat window"
         onPointerDown={handlePointerDown}
         className={cn(
-          "fixed right-1 bottom-1 z-[100000] flex h-6 w-6 cursor-nwse-resize items-end justify-end rounded-sm bg-black/20 p-1 transition-opacity",
-          isResizing ? "opacity-100" : "opacity-70",
+          "fixed right-1 bottom-1 z-[100000] flex h-6 w-6 cursor-nwse-resize items-end justify-end rounded-sm p-1 transition-opacity hover:opacity-100",
+          isLightBackground ? "text-white" : "text-black",
+          isResizing ? "opacity-100" : "opacity-50",
         )}
       >
         <span
           aria-hidden="true"
-          className="h-3 w-3 rounded-br border-b-2 border-r-2 border-white/70"
+          className="h-3 w-3 rounded-br border-b-2 border-r-2 border-current drop-shadow-[0_0_2px_rgba(128,128,128,0.9)]"
         />
       </div>
     </Tooltip>

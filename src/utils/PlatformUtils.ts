@@ -12,6 +12,7 @@ export const isDesktop =
   typeof __DESKTOP_MODE__ !== "undefined" && __DESKTOP_MODE__;
 
 export const isEmbed = typeof __EMBED_MODE__ !== "undefined" && __EMBED_MODE__;
+export const isXR = typeof __XR_MODE__ !== "undefined" && __XR_MODE__;
 
 export const isProduction =
   typeof __PROD_MODE__ !== "undefined" && __PROD_MODE__;

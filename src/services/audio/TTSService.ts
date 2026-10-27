@@ -17,6 +17,7 @@ import { audioWorkerClient } from "../../workers/AudioWorkerClient";
 import Logger from "../common/LoggerService";
 import voiceStorageService from "./VoiceStorageService";
 import { isExtension } from "../../utils/PlatformUtils";
+import audioVisualizationService from "./AudioVisualizationService";
 import liveLipSyncService from "./LiveLipSyncService";
 
 type TTSState = {
@@ -1309,6 +1310,10 @@ class TTSService {
           usingLiveLipSync = await liveLipSyncService.attach(audio);
           usingGenericLipSync = !usingLiveLipSync;
         }
+        audioVisualizationService.monitorPlayback(
+          audio,
+          liveLipSyncService.getAudioAnalyser(audio),
+        );
         await audio.play();
         Logger.log(
           "TTSService",

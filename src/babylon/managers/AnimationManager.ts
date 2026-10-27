@@ -2257,7 +2257,11 @@ export class AnimationManager {
 
     // CRITICAL: Sync camera animation time with model animation for looping emotes
     // Camera animation needs to loop when the emote model animation loops
-    if (this.cameraAnimationEnabled && this.currentCameraAnimation) {
+    if (
+      !this.scene.metadata?.xrActive &&
+      this.cameraAnimationEnabled &&
+      this.currentCameraAnimation
+    ) {
       const mmdCamera = this.scene.metadata?.mmdCamera;
       if (mmdCamera && mmdCamera.currentAnimation) {
         const cameraAnimDuration = this.currentCameraAnimation.endFrame;
@@ -2847,6 +2851,7 @@ export class AnimationManager {
    */
   registerVisibilityHandler(): void {
     this.visibilityChangeHandler = () => {
+      if (this.scene.metadata?.xrActive) return;
       if (document.hidden) {
         // Tab is hidden - pause by setting playAnimation to false
         Logger.log("AnimationManager", "Tab hidden - pausing animation");
@@ -2962,7 +2967,7 @@ export class AnimationManager {
 
     try {
       const cameraDuration = this.currentCameraAnimation.endFrame;
-      const mmdCamera = this.scene.activeCamera as MmdCameraLike;
+      const mmdCamera = this.scene.metadata?.mmdCamera;
       if (!mmdCamera?.currentAnimation || cameraDuration <= 0) {
         return;
       }

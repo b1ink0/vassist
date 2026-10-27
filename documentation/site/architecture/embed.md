@@ -560,6 +560,14 @@ removeVAssistEmbed("toolbar");
 
 For multi-instance pages, do not rely on `window.VAssistEmbed.openChat()` or the other global instance helpers. Those target the default host only.
 
+## Experimental VR
+
+Set `features: { liveAssistant3d: true, xr: true }` to expose **Enter VR** in the existing embed. Call `assistant.enterXR()` directly from a user click after the avatar and XR runtime are ready. The global API also exposes `window.VAssistEmbed.enterXR()` for the default host. Iframe isolation delegates `xr-spatial-tracking` permission to its child.
+
+VR spatializes the existing React interface through Babylon's native HtmlTexture. It needs a secure context, a WebXR runtime and Chromium's **Canvas Draw Element** feature. Unsupported browsers retain the normal DOM interface. See [Live Assistant in VR](/guide/virtual-companion#live-assistant-in-vr) for current behavior and limitations.
+
+Storage remains local by default. To pair deliberately with desktop, pass a fresh link as `transport.xrPairingUrl` before mounting, or open an XR-enabled page using desktop's **Hosted app URL**. Pairing installs the remote adapter before hydration and leaves credentials on desktop. The paired session shares conversations, libraries and supported settings with the owning app. Do not put pairing links in saved configuration or analytics.
+
 ## Related
 
 - [`@vassist/react` →](/architecture/react)

@@ -9,13 +9,18 @@ import { cn } from "../../utils/cn";
 import { resolvePortalContainer } from "../../utils/resolvePortalContainer";
 import { Tooltip, type TooltipVariant } from "./Tooltip";
 
+const ghostSelectClasses =
+  "rounded-xl border-0 bg-transparent pl-3 pr-10 py-2.5 text-sm shadow-none transition-colors hover:bg-current/10 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
+
 const selectVariants = cva(
-  "glass-input w-full min-h-[36px] pr-11 text-left [font-family:inherit]",
+  "inline-flex w-full min-w-0 min-h-[36px] items-center gap-3 pr-11 text-left [font-family:inherit]",
   {
     variants: {
       variant: {
-        default: "",
-        dark: "glass-input-dark",
+        default: "glass-input",
+        dark: "glass-input glass-input-dark",
+        ghost: ghostSelectClasses,
+        "ghost-dark": ghostSelectClasses,
       },
     },
     defaultVariants: { variant: "default" },
@@ -50,6 +55,7 @@ interface SelectProps
   placeholder?: string;
   onChange?: (event: React.ChangeEvent<HTMLSelectElement>) => void;
   trigger?: SelectTriggerRender;
+  icon?: React.ReactNode;
   open?: boolean;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -77,6 +83,7 @@ const Select = ({
   required,
   onChange,
   trigger,
+  icon,
   open,
   defaultOpen,
   onOpenChange,
@@ -90,6 +97,7 @@ const Select = ({
   tooltip,
   tooltipVariant,
   "data-testid": dataTestId,
+  "aria-label": ariaLabel,
 }: SelectProps) => {
   const { embedConfig } = useEmbedHost();
   const [portalAnchor, setPortalAnchor] = React.useState<HTMLDivElement | null>(
@@ -151,42 +159,42 @@ const Select = ({
     onChange(syntheticEvent);
   };
 
-  const textClass =
-    variant === "dark"
-      ? "vassist-inverse-text-primary"
-      : "vassist-text-primary";
-  const popupClass =
-    variant === "dark"
-      ? "vassist-popup-surface-inverse"
-      : "vassist-popup-surface";
-  const groupLabelClass =
-    variant === "dark"
-      ? "vassist-select-group-label-inverse"
-      : "vassist-select-group-label";
-  const itemClass =
-    variant === "dark"
-      ? "vassist-select-item-inverse group flex cursor-default items-center gap-2 rounded-lg px-2 py-1.5 text-sm outline-none transition-colors"
-      : "vassist-select-item group flex cursor-default items-center gap-2 rounded-lg px-2 py-1.5 text-sm outline-none transition-colors";
-  const singleItemClass =
-    variant === "dark"
-      ? "vassist-select-item-single-inverse group flex cursor-default items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm outline-none transition-colors"
-      : "vassist-select-item-single group flex cursor-default items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm outline-none transition-colors";
-  const indicatorClass =
-    variant === "dark"
-      ? "vassist-select-indicator-inverse w-4"
-      : "vassist-select-indicator w-4";
-  const triggerIconClass =
-    variant === "dark"
-      ? "vassist-inverse-text-secondary"
-      : "vassist-text-secondary";
+  const inverse = variant === "dark" || variant === "ghost-dark";
+  const ghost = variant === "ghost" || variant === "ghost-dark";
+  const textClass = inverse
+    ? "vassist-inverse-text-primary"
+    : "vassist-text-primary";
+  const popupClass = inverse
+    ? "vassist-popup-surface-inverse"
+    : "vassist-popup-surface";
+  const groupLabelClass = inverse
+    ? "vassist-select-group-label-inverse"
+    : "vassist-select-group-label";
+  const itemClass = inverse
+    ? "vassist-select-item-inverse group flex cursor-default items-center gap-2 rounded-lg px-2 py-1.5 text-sm outline-none transition-colors"
+    : "vassist-select-item group flex cursor-default items-center gap-2 rounded-lg px-2 py-1.5 text-sm outline-none transition-colors";
+  const singleItemClass = inverse
+    ? "vassist-select-item-single-inverse group flex cursor-default items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm outline-none transition-colors"
+    : "vassist-select-item-single group flex cursor-default items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm outline-none transition-colors";
+  const indicatorClass = inverse
+    ? "vassist-select-indicator-inverse w-4"
+    : "vassist-select-indicator w-4";
+  const triggerIconClass = inverse
+    ? "vassist-inverse-text-secondary"
+    : "vassist-text-secondary";
   const triggerClassName = trigger
     ? className
-    : cn(selectVariants({ variant }), "relative", className);
+    : cn(
+        selectVariants({ variant }),
+        "relative",
+        ghost && textClass,
+        className,
+      );
 
   return (
     <div ref={setPortalAnchor}>
       <BaseSelect.Root
-        value={selectedValue || undefined}
+        value={selectedValue}
         onValueChange={triggerChange}
         open={open}
         defaultOpen={defaultOpen}
@@ -197,16 +205,31 @@ const Select = ({
       >
         <Tooltip
           content={tooltip}
-          variant={tooltipVariant ?? (variant === "dark" ? "dark" : "default")}
+          variant={tooltipVariant ?? (inverse ? "dark" : "default")}
         >
           <BaseSelect.Trigger
             className={triggerClassName}
             render={trigger}
             data-testid={dataTestId}
+            aria-label={ariaLabel}
           >
             {!trigger && (
               <>
-                <span className={cn("block truncate pr-5", textClass)}>
+                {icon && (
+                  <span
+                    className="inline-flex shrink-0 items-center"
+                    aria-hidden="true"
+                  >
+                    {icon}
+                  </span>
+                )}
+                <span
+                  className={cn(
+                    "block min-w-0 flex-1 truncate",
+                    !ghost && "pr-5",
+                    textClass,
+                  )}
+                >
                   {optionItems.find(
                     (opt) => String(opt.value) === selectedValue,
                   )?.label ??
@@ -238,7 +261,7 @@ const Select = ({
           >
             <BaseSelect.Popup
               className={cn(
-                "rounded-xl border p-1 shadow-xl [font-family:inherit]",
+                "composer-menu rounded-xl border p-1 shadow-xl [font-family:inherit]",
                 popupClass,
                 popupClassName,
               )}

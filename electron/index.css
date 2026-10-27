@@ -156,6 +156,45 @@ body:has(.vassist-app-mode-window),
     color: var(--vassist-text-primary);
   }
 
+  /* Adaptive floating controls need the same opaque light surface as the
+     explicitly selected light theme, even when other controls are dark. */
+  .vassist-theme-root[data-vassist-desktop-theme="adaptive"]
+    :is(
+      .glass-base:not(.glass-base-dark),
+      .glass-container:not(.glass-container-dark),
+      .glass-message:not(.glass-message-dark),
+      .glass-message-user:not(.glass-message-user-dark),
+      .glass-button:not(.glass-button-dark),
+      .glass-input:not(.glass-input-dark)
+    ) {
+    --vassist-text-primary: var(--vassist-desktop-light-text);
+    --vassist-text-secondary: var(--vassist-desktop-light-text-secondary);
+    --vassist-text-muted: var(--vassist-desktop-light-text-muted);
+    --vassist-inverse-text-primary: var(--vassist-desktop-light-text);
+    background: var(--vassist-desktop-light-surface-elevated);
+    border-color: var(--vassist-desktop-light-border-strong);
+    color: var(--vassist-desktop-light-text);
+  }
+
+  .vassist-theme-root[data-vassist-desktop-theme="adaptive"]
+    :is(
+      .glass-container-dark,
+      .glass-message-dark,
+      .glass-message-user-dark,
+      .glass-button-dark,
+      .glass-input-dark
+    ) {
+    --vassist-text-primary: rgba(255, 255, 255, 0.98);
+    --vassist-inverse-text-primary: rgba(255, 255, 255, 0.98);
+    color: var(--vassist-text-primary);
+  }
+
+  .vassist-theme-root[data-vassist-desktop-theme="adaptive"]
+    :is(.glass-button, .glass-button-dark)
+    .icon.text-gray-300 {
+    color: inherit;
+  }
+
   .glass-input {
     background: var(--vassist-surface-base);
     border-color: var(--vassist-border-color);

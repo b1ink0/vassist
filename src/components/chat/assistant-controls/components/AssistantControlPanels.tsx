@@ -1,4 +1,10 @@
+import {
+  useDockPanelTransition,
+  type DockPanelTransitionProps,
+} from "../hooks/useDockPanelTransition";
 import { canRenderStages } from "../../../../babylon/stages/stageAvailability";
+import { useXrRuntime } from "../../../../contexts/XrRuntimeContext";
+import { XrSurface } from "../../../xr/XrSurface";
 import { StageControlPanel } from "./StageControlPanel";
 import {
   panelClassName,
@@ -10,6 +16,8 @@ import { Button, Card } from "../../../../components/ui";
 import { Icon } from "../../../../components/icons";
 import EmotePlaybackBar from "../../EmotePlaybackBar";
 import { cn } from "../../../../utils/cn";
+import { isDesktopAttachedModeWindow } from "../../../../utils/PlatformUtils";
+import { ASSISTANT_CONTROL_ROW_HEIGHT } from "../positioning";
 import type {
   AssistantControlActions,
   AssistantControlLayout,
@@ -19,6 +27,7 @@ import type {
 } from "../types";
 
 interface AssistantControlPanelsProps {
+  transitionProps?: DockPanelTransitionProps;
   layout: AssistantControlLayout;
   isAndroid: boolean;
   isDesktop: boolean;
@@ -53,6 +62,7 @@ interface AssistantControlPanelsProps {
 }
 
 function EmotePanel({
+  transitionProps,
   layout,
   isAndroid,
   isDesktop,
@@ -66,6 +76,7 @@ function EmotePanel({
   actions,
 }: Pick<
   AssistantControlPanelsProps,
+  | "transitionProps"
   | "layout"
   | "isAndroid"
   | "isDesktop"
@@ -80,6 +91,7 @@ function EmotePanel({
 >) {
   return (
     <Card
+      {...transitionProps}
       padding="none"
       style={{
         left: `${layout.emote.left}px`,
@@ -90,7 +102,11 @@ function EmotePanel({
       variant="none"
       className={cn(
         panelClassName,
-        isDesktop && emotes.length > 7 && "vassist-scroll-panel-mask",
+        transitionProps?.className,
+        isDesktop &&
+          !isDesktopAttachedModeWindow &&
+          emotes.length > 7 &&
+          "vassist-scroll-panel-fade",
       )}
     >
       {emotes.length === 0 ? (
@@ -222,6 +238,7 @@ function EmotePanel({
 }
 
 function AvatarPanel({
+  transitionProps,
   layout,
   isAndroid,
   isDesktop,
@@ -231,6 +248,7 @@ function AvatarPanel({
   actions,
 }: Pick<
   AssistantControlPanelsProps,
+  | "transitionProps"
   | "layout"
   | "isAndroid"
   | "isDesktop"
@@ -254,6 +272,7 @@ function AvatarPanel({
 
   return (
     <Card
+      {...transitionProps}
       padding="none"
       style={{
         left: `${layout.avatar.left}px`,
@@ -264,7 +283,12 @@ function AvatarPanel({
       variant="none"
       className={cn(
         panelClassName,
-        isDesktop && options.length > 7 && "vassist-scroll-panel-mask",
+        transitionProps?.className,
+        isDesktop &&
+          !isDesktopAttachedModeWindow &&
+          options.length * ASSISTANT_CONTROL_ROW_HEIGHT >
+            (layout.avatarMaxHeight ?? 300) &&
+          "vassist-scroll-panel-fade",
       )}
     >
       {options.map((option) => (
@@ -289,6 +313,7 @@ function AvatarPanel({
 }
 
 function CameraControlsPanel({
+  transitionProps,
   layout,
   isAndroid,
   isLightBackground,
@@ -299,6 +324,7 @@ function CameraControlsPanel({
   actions,
 }: Pick<
   AssistantControlPanelsProps,
+  | "transitionProps"
   | "layout"
   | "isAndroid"
   | "isLightBackground"
@@ -313,6 +339,7 @@ function CameraControlsPanel({
 
   return (
     <Card
+      {...transitionProps}
       padding="none"
       style={{
         left: `${layout.camera.left}px`,
@@ -320,7 +347,10 @@ function CameraControlsPanel({
         zIndex: isAndroid ? 201 : 10001,
       }}
       variant="none"
-      className="fixed w-[135px] flex flex-col gap-1 p-1"
+      className={cn(
+        "fixed w-[135px] flex flex-col gap-1 p-1",
+        transitionProps?.className,
+      )}
     >
       <div className="flex w-[125px] gap-1 justify-between">
         <Button
@@ -406,7 +436,7 @@ function CameraControlsPanel({
 }
 
 export function AssistantControlPanels({
-  layout,
+  layout: domLayout,
   isAndroid,
   isDesktop,
   isNormalDesktop,
@@ -438,74 +468,111 @@ export function AssistantControlPanels({
   actions,
   onSeek,
 }: AssistantControlPanelsProps) {
-  const canShowPanels = !isChatOpen || isDesktop || isNormalDesktop;
+  const xr = useXrRuntime();
+  const canShowPanels =
+    xr.active || !isChatOpen || isDesktop || isNormalDesktop;
+  const layout = xr.active
+    ? {
+        ...domLayout,
+        emote: { left: 88, top: 48 },
+        avatar: { left: 88, top: 48 },
+        camera: { left: 237, top: 48 },
+        stage: { left: 88, top: 48 },
+        stageControls: { left: 237, top: 48 },
+        stageMaxHeight: 560,
+        avatarMaxHeight: 560,
+      }
+    : domLayout;
+
+  const panelsAvailable = canShowPanels && !modelDisabled;
+  const emoteMotion = useDockPanelTransition(
+    panelsAvailable && isEmotePanelOpen && !isAvatarPanelOpen,
+  );
+  const stageOpen =
+    panelsAvailable &&
+    isAvatarPanelOpen &&
+    !isEmotePanelOpen &&
+    panelMode === "stage" &&
+    (canRenderStages || xr.enabled);
+  const stageMotion = useDockPanelTransition(stageOpen);
+  const avatarMotion = useDockPanelTransition(
+    panelsAvailable && isAvatarPanelOpen && !isEmotePanelOpen && !stageOpen,
+  );
 
   return (
     <>
-      <EmotePlaybackBar
-        isVisible={showEmotePlaybackBar}
-        progress={emoteProgress}
-        currentTime={emoteCurrentTime}
-        duration={emoteDuration}
-        showTime={showEmotePlaybackTime}
-        onSeek={onSeek}
-      />
+      <XrSurface
+        id="emote-playback"
+        widthMeters={0.85}
+        heightMeters={0.09}
+        widthPixels={850}
+        heightPixels={90}
+        visible={showEmotePlaybackBar}
+        offsetMeters={[0, -0.65, -0.1]}
+      >
+        <EmotePlaybackBar
+          isVisible={showEmotePlaybackBar}
+          progress={emoteProgress}
+          currentTime={emoteCurrentTime}
+          duration={emoteDuration}
+          showTime={showEmotePlaybackTime}
+          onSeek={onSeek}
+        />
+      </XrSurface>
 
-      {isEmotePanelOpen &&
-        !isAvatarPanelOpen &&
-        canShowPanels &&
-        !modelDisabled && (
-          <EmotePanel
+      {emoteMotion.isMounted && (
+        <EmotePanel
+          transitionProps={emoteMotion.transitionProps}
+          layout={layout}
+          isAndroid={isAndroid}
+          isDesktop={isDesktop}
+          isLightBackground={isLightBackground}
+          emotes={emotes}
+          filteredEmotes={filteredEmotes}
+          selectedAutoPlayCategory={selectedAutoPlayCategory}
+          autoPlayCategoryOptions={autoPlayCategoryOptions}
+          isAutoPlayActive={isAutoPlayActive}
+          currentPlayingEmoteId={currentPlayingEmoteId}
+          actions={actions}
+        />
+      )}
+
+      {stageMotion.isMounted && (
+        <StageControlPanel
+          transitionProps={stageMotion.transitionProps}
+          key={selectedStageId ?? "none"}
+          layout={layout}
+          stages={stages}
+          selectedStageId={selectedStageId}
+          isLightBackground={isLightBackground}
+          actions={actions}
+        />
+      )}
+      {avatarMotion.isMounted && (
+        <>
+          <AvatarPanel
+            transitionProps={avatarMotion.transitionProps}
             layout={layout}
             isAndroid={isAndroid}
             isDesktop={isDesktop}
             isLightBackground={isLightBackground}
-            emotes={emotes}
-            filteredEmotes={filteredEmotes}
-            selectedAutoPlayCategory={selectedAutoPlayCategory}
-            autoPlayCategoryOptions={autoPlayCategoryOptions}
-            isAutoPlayActive={isAutoPlayActive}
-            currentPlayingEmoteId={currentPlayingEmoteId}
+            models={models}
+            selectedModelId={selectedModelId}
             actions={actions}
           />
-        )}
-
-      {isAvatarPanelOpen &&
-        !isEmotePanelOpen &&
-        canShowPanels &&
-        !modelDisabled &&
-        (panelMode === "stage" && canRenderStages ? (
-          <StageControlPanel
-            key={selectedStageId ?? "none"}
+          <CameraControlsPanel
+            transitionProps={avatarMotion.transitionProps}
             layout={layout}
-            stages={stages}
-            selectedStageId={selectedStageId}
+            isAndroid={isAndroid}
             isLightBackground={isLightBackground}
+            cameraMode={cameraMode}
+            cameraLocked={cameraLocked}
+            cameraSaveEnabled={cameraSaveEnabled}
+            stickerBorderEnabled={stickerBorderEnabled}
             actions={actions}
           />
-        ) : (
-          <>
-            <AvatarPanel
-              layout={layout}
-              isAndroid={isAndroid}
-              isDesktop={isDesktop}
-              isLightBackground={isLightBackground}
-              models={models}
-              selectedModelId={selectedModelId}
-              actions={actions}
-            />
-            <CameraControlsPanel
-              layout={layout}
-              isAndroid={isAndroid}
-              isLightBackground={isLightBackground}
-              cameraMode={cameraMode}
-              cameraLocked={cameraLocked}
-              cameraSaveEnabled={cameraSaveEnabled}
-              stickerBorderEnabled={stickerBorderEnabled}
-              actions={actions}
-            />
-          </>
-        ))}
+        </>
+      )}
     </>
   );
 }

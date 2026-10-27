@@ -324,6 +324,10 @@
 
 /* Respect user's motion preferences */
 @media (prefers-reduced-motion: reduce) {
+  [data-sd-animate],
+  .thinking-label-pulse {
+    animation: none !important;
+  }
   .streaming-container,
   .streaming-container-fast,
   .streaming-container-slow,

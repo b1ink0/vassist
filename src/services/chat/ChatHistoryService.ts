@@ -78,6 +78,7 @@ interface ChatHistoryServiceDependencies {
 }
 
 export class ChatHistoryService {
+  private readonly saves = new Map<string, Promise<string>>();
   private cache: {
     chats: Map<string, ChatRecord>;
     titles: Map<string, string>;
@@ -112,6 +113,33 @@ export class ChatHistoryService {
    * @returns {Promise<string>} chatId
    */
   async saveChat(chatData: SaveChatInput): Promise<string> {
+    const chatId = chatData.chatId ?? this.generateChatId();
+    const tree = chatData.chatService
+      ? structuredClone(chatData.chatService.exportTree())
+      : null;
+    const messages = structuredClone(
+      chatData.chatService?.getMessages() ?? chatData.messages ?? [],
+    );
+    const snapshot: SaveChatInput = {
+      ...chatData,
+      chatId,
+      messages,
+      chatService: tree
+        ? { exportTree: () => tree, getMessages: () => messages }
+        : null,
+    };
+    const task = (this.saves.get(chatId) ?? Promise.resolve(chatId))
+      .catch(() => chatId)
+      .then(() => this.saveChatSnapshot(snapshot));
+    this.saves.set(chatId, task);
+    try {
+      return await task;
+    } finally {
+      if (this.saves.get(chatId) === task) this.saves.delete(chatId);
+    }
+  }
+
+  private async saveChatSnapshot(chatData: SaveChatInput): Promise<string> {
     try {
       const {
         chatId = this.generateChatId(),
@@ -409,6 +437,7 @@ export class ChatHistoryService {
    * @returns {Promise<Object>} chat data with tree/messages and media restored
    */
   async loadChat(chatId: string): Promise<ChatRecord> {
+    await this.saves.get(chatId);
     try {
       // Check cache first
       if (this.cache.chats.has(chatId)) {

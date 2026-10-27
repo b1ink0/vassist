@@ -36,6 +36,7 @@ import type { AssistantHandle } from "../types/assistant";
 import { resolveSetStateAction } from "./storeUtils";
 import { useConfigStore } from "./useConfigStore";
 import { useDesktopStore } from "./useDesktopStore";
+import { getChatSession } from "../services/chat/ChatSessionRuntime";
 
 export interface ChatMessageItem {
   id: string;
@@ -734,8 +735,25 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
             dispatchWindowEvent("abortTTSGeneration");
           },
           clearChat: async () => {
+            getChatSession(store).cancel();
+            const selection = getChatSession(store).generation();
             const state = get();
             Logger.log("AppStore", "Clear chat");
+            AIServiceProxy.abortRequest();
+            TTSServiceProxy.stopPlayback();
+            dispatchWindowEvent("abortTTSGeneration");
+            if (!state.isTempChat && state.chatMessages.length > 0)
+              void persistCurrentChatState(
+                { ...state, isProcessing: false },
+                "new-chat",
+              ).catch((error: unknown) =>
+                Logger.error(
+                  "AppStore",
+                  "Failed to save previous chat:",
+                  error,
+                ),
+              );
+            if (!selection.isCurrent()) return;
 
             if (state.isTempChat && state.currentChatId) {
               try {
@@ -749,6 +767,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
                 Logger.error("AppStore", "Failed to delete temp chat:", error);
               }
             }
+            if (!selection.isCurrent()) return;
 
             AIServiceProxy.abortRequest();
             TTSServiceProxy.stopPlayback();
@@ -771,6 +790,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
             applyChatSchedule();
           },
           stopGeneration: () => {
+            getChatSession(store).cancel();
             Logger.log("AppStore", "Stop generation");
             AIServiceProxy.abortRequest();
             TTSServiceProxy.stopPlayback();
@@ -790,13 +810,30 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
             applyChatSchedule();
           },
           loadChatFromHistory: async ({ chatId }) => {
+            const session = getChatSession(store);
+            session.cancel();
+            const selection = session.generation();
             Logger.log("AppStore", "Loading chat from history:", chatId);
 
             try {
               AIServiceProxy.abortRequest();
               TTSServiceProxy.stopPlayback();
+              const previous = get();
+              if (!previous.isTempChat && previous.chatMessages.length > 0)
+                void persistCurrentChatState(
+                  { ...previous, isProcessing: false },
+                  "select-chat",
+                ).catch((error: unknown) =>
+                  Logger.error(
+                    "AppStore",
+                    "Failed to save previous chat:",
+                    error,
+                  ),
+                );
+              if (!selection.isCurrent()) return;
 
               const fullChat = await historyService.loadChat(chatId);
+              if (!selection.isCurrent()) return;
 
               if (fullChat.chatServiceData) {
                 chatService.importTree(fullChat.chatServiceData);
@@ -848,6 +885,9 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
             _newImages = null,
             _newAudios = null,
           ) => {
+            getChatSession(store).cancel();
+            AIServiceProxy.abortRequest();
+            const generation = getChatSession(store).generation();
             Logger.log("AppStore", "Editing user message:", messageId);
 
             try {
@@ -866,6 +906,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
 
               if (editWithStreamingRef.current) {
                 await editWithStreamingRef.current(newMessageId);
+                if (!generation.isCurrent()) return;
                 await persistCurrentChatState(store.getState(), "edit");
                 return;
               }
@@ -884,6 +925,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
               const aiResponse = await AIServiceProxy.sendMessage(
                 toAIConversation(conversationContext),
               );
+              if (!generation.isCurrent()) return;
 
               if (aiResponse?.success && aiResponse?.response) {
                 chatService.addMessage(
@@ -907,6 +949,9 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
             }
           },
           regenerateAIMessage: async (messageId) => {
+            getChatSession(store).cancel();
+            AIServiceProxy.abortRequest();
+            const generation = getChatSession(store).generation();
             Logger.log("AppStore", "Regenerating AI message:", messageId);
 
             try {
@@ -919,6 +964,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
 
               if (regenerateWithStreamingRef.current) {
                 await regenerateWithStreamingRef.current();
+                if (!generation.isCurrent()) return;
                 await persistCurrentChatState(store.getState(), "regenerate");
                 return;
               }
@@ -933,6 +979,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
               const aiResponse = await AIServiceProxy.sendMessage(
                 toAIConversation(updatedMessages),
               );
+              if (!generation.isCurrent()) return;
 
               if (aiResponse?.success && aiResponse?.response) {
                 chatService.addMessage(

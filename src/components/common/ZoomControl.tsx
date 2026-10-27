@@ -2,6 +2,7 @@
  * @fileoverview Zoom control component for model camera zoom
  */
 
+import { useDockPanelTransition } from "../chat/assistant-controls/hooks/useDockPanelTransition";
 import { useState } from "react";
 import { Icon } from "../icons";
 import { Button } from "../ui";
@@ -51,6 +52,7 @@ const ZoomControl = ({
 }: ZoomControlProps) => {
   const [internalExpanded, setInternalExpanded] = useState(false);
   const isExpanded = controlledExpanded ?? internalExpanded;
+  const motion = useDockPanelTransition(isExpanded);
 
   const handleToggle = () => {
     const nextExpanded = !isExpanded;
@@ -84,13 +86,16 @@ const ZoomControl = ({
       </Button>
 
       {/* Expanded Controls - positioned beside zoom button */}
-      {isExpanded && (
+      {motion.isMounted && (
         <div
-          className="absolute flex w-40 flex-col items-center gap-2"
+          {...motion.transitionProps}
+          className={cn(
+            "absolute flex w-40 flex-col items-center gap-2",
+            motion.transitionProps.className,
+          )}
           style={{
             top: 0,
-            [isLeftSide ? "right" : "left"]:
-              `-${ZOOM_CONTROL_PANEL_OFFSET}px`,
+            [isLeftSide ? "right" : "left"]: `-${ZOOM_CONTROL_PANEL_OFFSET}px`,
           }}
         >
           <div

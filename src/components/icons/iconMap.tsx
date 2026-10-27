@@ -7,12 +7,30 @@ import * as HeroIconsSolid from "@heroicons/react/24/solid";
 import * as HeroIconsOutline from "@heroicons/react/24/outline";
 import { FaGithub } from "react-icons/fa";
 import { AiFillBulb, AiOutlineLoading3Quarters } from "react-icons/ai";
-import { LuScreenShare, LuScreenShareOff } from "react-icons/lu";
+import {
+  LuAudioLines,
+  LuScreenShare,
+  LuScreenShareOff,
+  LuPanelLeftOpen,
+  LuPanelLeftClose,
+  LuEllipsis,
+  LuShield,
+  LuMonitor,
+} from "react-icons/lu";
 import { HiDotsHorizontal } from "react-icons/hi";
 
+import { BsHeadsetVr, BsIncognito } from "react-icons/bs";
 import { MdViewInAr } from "react-icons/md";
+import { PiSlidersHorizontal } from "react-icons/pi";
+import { TbLayoutSidebarFilled, TbLayoutSidebar } from "react-icons/tb";
 
 export const iconMap = {
+  "sidebar-open": TbLayoutSidebarFilled,
+  "sidebar-close": TbLayoutSidebar,
+  "more-horizontal": LuEllipsis,
+  "chat-controls": PiSlidersHorizontal,
+  "temporary-chat": BsIncognito,
+  "desktop-mode": LuMonitor,
   bulb: AiFillBulb,
   close: HeroIconsSolid.XMarkIcon,
   x: HeroIconsSolid.XMarkIcon,
@@ -145,6 +163,7 @@ export const iconMap = {
   casual: HeroIconsSolid.ChatBubbleLeftRightIcon,
   compress: HeroIconsSolid.ArrowsPointingInIcon,
   clarity: HeroIconsSolid.EyeIcon,
+  "chevron-up": HeroIconsSolid.ChevronUpIcon,
   "chevron-down": HeroIconsSolid.ChevronDownIcon,
   "chevron-right": HeroIconsSolid.ChevronRightIcon,
   "adjustments-horizontal": HeroIconsSolid.AdjustmentsHorizontalIcon,
@@ -161,6 +180,8 @@ export const iconMap = {
   unlock: HeroIconsSolid.LockOpenIcon,
   box: HeroIconsSolid.CubeIcon,
   "view-in-ar": MdViewInAr,
+  "vr-headset": BsHeadsetVr,
+  waveform: LuAudioLines,
   "sticker-border": HeroIconsSolid.Square2StackIcon,
   parallax: HeroIconsSolid.ArrowsRightLeftIcon,
   "avatar-shadow": HeroIconsSolid.Square3Stack3DIcon,

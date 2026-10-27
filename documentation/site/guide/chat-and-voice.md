@@ -21,51 +21,33 @@ The chat window is where full conversations happen: typed or spoken, with attach
 
 Each time you send your first message in a blank session, VAssist creates a new conversation and saves it automatically.
 
-To reopen an old conversation, click **Chat History** (<AppIcon name="history" />, bottom-left of the chat window) to browse saved chats. Select any entry to pick up where you left off.
+To reopen a conversation, open **Chat History** and select an entry. On Android and in desktop App or attached Wallpaper mode, use the sidebar button at the top left. In floating and detached desktop windows, choose **Chat history** from the chat controls menu. Web and extension layouts show a history button in the chat panel.
 
 [Saved chats and branches](/guide/chat-history-and-branches)
 
 ## Chat window controls
 
-The bottom bar of the chat window has three groups of buttons.
+Open the **Chat options** or **Chat controls** menu for **New chat**, **Temporary**, **Hide / Show character**, and **Settings**, where available. Temporary chat is not saved to history. Select the temporary chat indicator to turn it off. When a reply is generating, the composer also offers a stop control.
 
-**Left**
+Choose **Fade messages** in the chat menu to show recent messages at the bottom of the chat. Each message fades as the next arrives, and the latest fades after eight seconds of inactivity. The countdown waits until generation and speech finish, and pauses while you hover over or focus the message. Choose **Show full chat** to return to the complete conversation. Fading does not delete messages or change whether the chat is saved. You can also change this in **Settings → UI → Chat**. Fade mode is not used in XR.
 
-| Button       | Icon  | What it does             |
-| ------------ | ----- | ------------------------ |
-| Settings     | gear  | Opens settings inline.   |
-| Chat History | clock | Opens the history panel. |
+When the avatar is enabled, voice conversation automatically shows recent messages this way, even if the chat panel was closed. Use **Show full chat** to read the conversation during the call, then **Recent messages** to return to the overlay. Ending the call returns to your regular chat setting.
 
-**Center**
-
-| Button   | Icon                     | What it does                                                          |
-| -------- | ------------------------ | --------------------------------------------------------------------- |
-| Stop     | square (red when active) | Stops AI generation or TTS playback mid-stream.                       |
-| New Chat | plus                     | Starts a blank conversation. The current one is saved.                |
-| Close    | X                        | Closes the chat panel. Only shown when the Live Assistant is visible. |
-
-**Right**
-
-| Button                | Icon                                | What it does                                              |
-| --------------------- | ----------------------------------- | --------------------------------------------------------- |
-| Hide / Show character | eye-off / eye                       | Hides or shows the Live Assistant without closing chat.   |
-| Temp mode             | pin icon (star when active, yellow) | When active, the current session is not saved to history. |
+On Android and in desktop App or attached Wallpaper mode, history opens as a sidebar. Its bottom controls include **New chat** and **Settings**. In floating desktop mode, chat controls sit beside the chat button on the assistant dock. With separate windows, the avatar and detached chat each have access to the controls. The composer’s plus menu holds attachments and input options.
 
 ## Typing and attaching files
 
-Type in the text area. The toolbar sits below it:
+The composer stays compact when empty and expands for focused typing, longer messages, or attachments. The round action beside it changes with the conversation.
 
-| Button     | State                                               | What it does                                                      |
-| ---------- | --------------------------------------------------- | ----------------------------------------------------------------- |
-| Image      | Blue with count when attached                       | Opens a file picker to attach images.                             |
-| Audio      | Purple with count when attached                     | Opens a file picker to attach audio files.                        |
-| Mic        | Red pulse when recording, hourglass when processing | Records a voice clip and attaches it as audio. Tap again to stop. |
-| Thinking   | <AppIcon name="bulb" />, dimmed when off             | Requests reasoning from providers and models that support it.     |
-| Voice Mode | Phone icon                                          | Switches to hands-free voice conversation mode.                   |
-| Close      | X                                                   | Closes the input area.                                            |
-| Send       | Paper plane, disabled when nothing to send          | Sends the message.                                                |
+| Control               | What it does                                                                                                                                          |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Plus                  | Opens images, audio files, microphone selection, Thinking, Voice conversation, Quick Access, and Close chat.                                          |
+| Microphone            | Dictates text into the draft. A live waveform appears while recording. Recording continues until you choose the check mark to finish or X to discard. |
+| Voice waveform button | Starts a hands-free conversation when the draft is empty.                                                                                             |
+| Send arrow            | Sends text or attachments.                                                                                                                            |
+| Stop square           | Replaces Send while a reply is generating. Stops the same conversation in the floating desktop input window too.                                      |
 
-You can also **drag and drop** images or audio files directly onto the input area.
+Attachments appear inside the composer. Use their X buttons to remove them. Drag and drop and pasting images are also supported.
 
 When the model returns reasoning text, the message shows a collapsible **Thought process** panel above the answer. Click its header to expand or collapse it. **Auto-expand Thinking** in Settings → LLM controls whether the panel opens while reasoning is streaming.
 
@@ -73,14 +55,15 @@ When the model returns reasoning text, the message shows a collapsible **Thought
 
 Responses stream in as they are generated. While streaming:
 
-- The **Stop** button (center of the bottom bar) cancels generation or TTS at any point.
+- **Animate response text** gently reveals incoming words, including when a response arrives in large chunks. Turn it off in Settings → UI → Chat to display text immediately.
+- The composer’s **Stop** button cancels generation. The chat window’s Stop control also stops TTS playback.
 - If TTS is on, the reply is spoken as it streams.
 - You can keep typing while the reply comes in. Sending a new message will not interrupt the current one.
 - **Smooth Response Animation** (Settings and UI) controls whether the container height animates as text grows.
 
 ## Message actions
 
-Hover or tap a message to see its action menu:
+Hover over or focus a message to see its actions. On touch devices, tap a message to reveal or hide them:
 
 | Action                 | What it does                                                                       |
 | ---------------------- | ---------------------------------------------------------------------------------- |
@@ -92,22 +75,13 @@ Hover or tap a message to see its action menu:
 
 ## Voice mode
 
-Voice mode replaces the text input with a live conversation bar. Tap the <AppIcon name="phone" /> icon to start.
+Choose the waveform button beside an empty draft, or **Plus > Voice conversation**, to start. A flowing line responds to microphone and reply audio. The monochrome waveform stays within the compact input bar and returns to a quiet line in silence.
 
-When voice mode is active the bar shows:
-
-- A status label that changes as the conversation progresses: **Listening**, **Thinking**, **Speaking**.
-- **Interrupt** button (hand-stop icon, red) when the assistant is speaking. Tap it to cut the reply short.
-
-The right side of the voice mode bar has these controls:
-
-| Control                                              | What it does                                                                                                                                                |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mic selector (microphone + arrow)                    | Picks which microphone to use. Dropdown lists all detected devices.                                                                                         |
-| Image attach (image icon, blue when attached)        | Attaches an image to the next voice message.                                                                                                                |
-| Camera (camera icon, green + pulse when active)      | Starts a camera feed. A draggable preview floats alongside the chat. Select a specific camera from the arrow dropdown next to it. Not available on Android. |
-| Screen share (screen icon, blue + pulse when active) | Starts a screen share session. A draggable preview appears. Not available on Android.                                                                       |
-| Close (X)                                            | Exits voice mode and returns to typing.                                                                                                                     |
+| Control              | What it does                                                                                             |
+| -------------------- | -------------------------------------------------------------------------------------------------------- |
+| Stop inside the bar  | Interrupts the current reply.                                                                            |
+| Phone beside the bar | Ends voice mode and returns to the draft.                                                                |
+| Plus                 | Attaches an image, selects a microphone or camera, and toggles camera or screen sharing where available. |
 
 Speak naturally. VAssist transcribes what you say, sends it, gets a reply, and speaks it back. Then it returns to **Listening** and waits for you again.
 
@@ -127,13 +101,15 @@ The AI behavior is controlled by the active **system prompt profile** in Setting
 
 ## Quick access panel
 
-Click the <AppIcon name="tools" /> **Quick Access** button on the right side of the input bar to open a compact overlay panel without leaving the chat. Use it to change common settings.
+Choose **Plus > Quick Access** in the composer to open a compact overlay panel without leaving the chat. Use it to change common settings.
 
-| Section        | What you can change                                                                                   |
-| -------------- | ----------------------------------------------------------------------------------------------------- |
-| LLM Provider   | Switch AI provider, apply a saved backend profile, pick a model, change the active system prompt, and set Thinking and its effort when supported. |
-| Text-to-Speech | Toggle TTS on/off and switch provider.                                                                |
-| Speech-to-Text | Toggle STT on/off and switch provider.                                                                |
+| Section        | What you can change                                                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Enable Avatar  | Persistently enable the 3D avatar or switch to chat-only mode. Available when the host includes the Live Assistant.                                    |
+| XR (desktop)   | Open the paired XR browser. Enable Avatar first. More opens desktop XR configuration.                                                                  |
+| LLM Provider   | Switch AI provider, apply a saved backend profile, pick a model, change the active system prompt, and set Thinking and its effort when supported.      |
+| Text-to-Speech | Toggle TTS on/off and switch provider.                                                                                                                 |
+| Speech-to-Text | Toggle STT on/off and switch provider.                                                                                                                 |
 | Interface      | Change the assistant theme, enable or disable the AI toolbar, set Auto-expand Thinking, and toggle Temporary Chat (messages are not saved to history). |
 
 Each section has a **More** link that jumps straight to the corresponding settings tab if you need deeper configuration.

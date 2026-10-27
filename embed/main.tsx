@@ -26,6 +26,7 @@ import {
 } from "../src/embed/runtimeStore";
 import {
   dispatchEnqueueDropDataCommand,
+  dispatchEnterXrCommand,
   dispatchFocusInputCommand,
   dispatchOpenSettingsCommand,
   dispatchSubmitDraftCommand,
@@ -271,7 +272,7 @@ function attachIsolatedIframe(
   iframeElement.title = "VAssist Embed";
   iframeElement.setAttribute(
     "allow",
-    "microphone *; camera *; display-capture *",
+    "microphone *; camera *; display-capture *; xr-spatial-tracking *",
   );
 
   if (shadowMode === false) {
@@ -686,6 +687,16 @@ class VAssistEmbedElement
     return this.getConfig().mount.hostId;
   }
 
+  enterXR() {
+    if (!this.getConfig().features.xr)
+      throw new Error("Enable features.xr before entering VR.");
+    if (this.iframeState && !this.forceDirectMount) {
+      void this.runChildCommand((api) => api.enterXR());
+      return;
+    }
+    dispatchEnterXrCommand(this.getHostId());
+  }
+
   openChat() {
     if (this.iframeState && !this.forceDirectMount) {
       void this.runChildCommand((api) => {
@@ -922,6 +933,22 @@ class VAssistEmbedElement
         this.currentConfig,
         resolvedConfig,
       );
+      if (
+        resolvedConfig.features.xr &&
+        new URLSearchParams(location.hash.slice(1)).has("ticket")
+      ) {
+        childConfig.transport = {
+          ...childConfig.transport,
+          xrPairingUrl: location.href,
+        };
+        const fragment = new URLSearchParams(location.hash.slice(1));
+        fragment.delete("ticket");
+        history.replaceState(
+          null,
+          "",
+          `${location.pathname}${location.search}#${fragment}`,
+        );
+      }
       const updatedHost = childApi.updateConfig(
         childConfig,
         resolvedConfig.mount.hostId,
@@ -1047,6 +1074,11 @@ defineVAssistEmbedElement();
 
 if (typeof window !== "undefined") {
   window.VAssistEmbed = {
+    enterXR: () => {
+      if (isIframeRuntime())
+        dispatchEnterXrCommand(getEmbedConfig().mount.hostId);
+      else runGlobalHostCommand((hostElement) => hostElement.enterXR());
+    },
     inject: injectVAssistEmbed,
     remove: removeVAssistEmbed,
     updateConfig: updateVAssistEmbedConfig,

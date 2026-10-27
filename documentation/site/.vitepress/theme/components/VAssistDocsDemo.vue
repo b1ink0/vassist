@@ -7,9 +7,8 @@ let removeEmbed: ((hostId?: string) => void) | null = null;
 onMounted(() => {
   void (async () => {
     try {
-      const { injectFullVAssistEmbed, removeVAssistEmbed } = await import(
-        "@vassist/embed/full"
-      );
+      const { injectFullVAssistEmbed, removeVAssistEmbed } =
+        await import("@vassist/embed/full");
 
       removeEmbed = removeVAssistEmbed;
 
@@ -20,6 +19,7 @@ onMounted(() => {
         target: document.body,
         hostId,
         config: {
+          features: { xr: true },
           mount: {
             hostId,
             runtimeIsolation: "shadow-root",
@@ -30,6 +30,7 @@ onMounted(() => {
           },
           shell: {
             deferSetupUntilStarted: true,
+            controlDockInsets: { top: 72, bottom: 24, left: 12, right: 12 },
           },
           theme: {
             mode: "dark",

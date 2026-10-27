@@ -4,12 +4,12 @@ VAssist repository tree and file metrics.
 
 ## Totals
 
-- Directories: 202
-- Files: 746
-- Text files counted for metrics: 602
-- Total text lines: 186988
-- Code files counted for metrics: 470
-- Total code lines: 162410
+- Directories: 208
+- Files: 788
+- Text files counted for metrics: 644
+- Total text lines: 197407
+- Code files counted for metrics: 511
+- Total code lines: 172548
 
 ## Line Counts by File Type
 
@@ -17,19 +17,19 @@ VAssist repository tree and file metrics.
 | ------------ | ----------------------- | ----: | ----: |
 | Batch Script | .bat                    |     1 |    94 |
 | C and C++    | .c, .cc, .cpp, .h, .hpp |     7 |  2003 |
-| CSS          | .css, .scss, .less      |     7 |  2935 |
+| CSS          | .css, .scss, .less      |     7 |  3220 |
 | HTML         | .html                   |     5 |   191 |
 | Java         | .java                   |     4 |   215 |
 | JavaScript   | .js, .mjs, .cjs         |     1 |    32 |
-| Kotlin       | .kt                     |    21 | 11382 |
+| Kotlin       | .kt                     |    21 | 11403 |
 | Shell Script | (no extension)          |     5 |   654 |
-| TSX          | .tsx                    |   130 | 58230 |
-| TypeScript   | .ts, .mts, .cts         |   289 | 86674 |
+| TSX          | .tsx                    |   142 | 60672 |
+| TypeScript   | .ts, .mts, .cts         |   318 | 94064 |
 | Gradle       | .gradle                 |     7 |   579 |
-| JSON         | .json                   |    19 |   638 |
-| Markdown     | .md                     |    37 |  6793 |
-| Other Text   | mixed                   |    40 | 11716 |
-| Plain Text   | (no extension)          |    11 |  4051 |
+| JSON         | .json                   |    19 |   642 |
+| Markdown     | .md                     |    37 |  6856 |
+| Other Text   | mixed                   |    40 | 11717 |
+| Plain Text   | (no extension)          |    12 |  4264 |
 | Properties   | .properties             |     2 |    29 |
 | SVG          | .svg                    |     4 |   342 |
 | XML          | .xml                    |    12 |   430 |
@@ -40,12 +40,13 @@ VAssist repository tree and file metrics.
 - android/: 64 directories, 93 files
 - android-src/: 1 directories, 3 files
 - documentation/: 16 directories, 67 files
-- electron/: 19 directories, 72 files
+- electron/: 20 directories, 75 files
 - embed/: 1 directories, 1 files
 - extension/: 6 directories, 19 files
+- licenses/: 1 directories, 1 files
 - packages/: 5 directories, 16 files
 - public/: 14 directories, 74 files
-- src/: 62 directories, 304 files
+- src/: 66 directories, 341 files
 - tests/: 9 directories, 57 files
 - tools/: 4 directories, 13 files
 - .gitignore: file
@@ -74,6 +75,7 @@ VAssist repository tree and file metrics.
 - vite.config.desktop.ts: file
 - vite.config.extension.ts: file
 - vite.config.ts: file
+- vite.config.xr.ts: file
 
 ## Full Tree
 
@@ -375,11 +377,15 @@ vassist/
 │   │   ├── system/
 │   │   │   ├── devTools.ts
 │   │   │   └── permissionsProtocol.ts
-│   │   └── windows/
-│   │       ├── desktopMode.ts
-│   │       ├── liveWallpaperManager.ts
-│   │       ├── trayShortcutsManager.ts
-│   │       └── windowManager.ts
+│   │   ├── windows/
+│   │   │   ├── desktopMode.ts
+│   │   │   ├── liveWallpaperManager.ts
+│   │   │   ├── trayShortcutsManager.ts
+│   │   │   └── windowManager.ts
+│   │   └── xr/
+│   │       ├── browserLauncher.ts
+│   │       ├── registerXrHandlers.ts
+│   │       └── XrSessionHost.ts
 │   ├── native/
 │   │   └── desktop-host/
 │   │       ├── binding.gyp
@@ -443,6 +449,8 @@ vassist/
 │   │   ├── MessageBridge.ts
 │   │   └── MessageTypes.ts
 │   └── manifest.json
+├── licenses/
+│   └── livekit-aura.txt
 ├── packages/
 │   ├── embed/
 │   │   ├── src/
@@ -574,6 +582,7 @@ vassist/
 │   │   │   ├── ARTypes.ts
 │   │   │   └── NativeAndroidARProvider.ts
 │   │   ├── camera/
+│   │   │   ├── getAvatarScreenBounds.ts
 │   │   │   └── MmdCameraAutoFocus.ts
 │   │   ├── managers/
 │   │   │   ├── AnimationManager.ts
@@ -601,6 +610,13 @@ vassist/
 │   │   │   ├── stageSurfaceState.ts
 │   │   │   ├── StageTextures.ts
 │   │   │   └── types.ts
+│   │   ├── xr/
+│   │   │   ├── HtmlPanelHover.ts
+│   │   │   ├── HtmlPanelInput.ts
+│   │   │   ├── SpatialPanel.ts
+│   │   │   ├── XrCapabilities.ts
+│   │   │   ├── XrSceneEditor.ts
+│   │   │   └── XrSessionController.ts
 │   │   └── types.ts
 │   ├── components/
 │   │   ├── android/
@@ -624,19 +640,29 @@ vassist/
 │   │   │   │   │   └── StageControlPanel.tsx
 │   │   │   │   ├── hooks/
 │   │   │   │   │   ├── useAssistantControlDrag.ts
-│   │   │   │   │   └── useAssistantControlTheme.ts
+│   │   │   │   │   ├── useAssistantControlTheme.ts
+│   │   │   │   │   └── useDockPanelTransition.ts
 │   │   │   │   ├── panelStyles.ts
 │   │   │   │   ├── positioning.ts
 │   │   │   │   └── types.ts
+│   │   │   ├── voice/
+│   │   │   │   └── AuraRenderer.ts
 │   │   │   ├── AssistantControlDock.tsx
 │   │   │   ├── ChatBubble.tsx
 │   │   │   ├── ChatContainer.tsx
 │   │   │   ├── ChatController.tsx
+│   │   │   ├── ChatHistoryActions.tsx
 │   │   │   ├── ChatHistoryPanel.tsx
+│   │   │   ├── ChatHistorySidebar.tsx
 │   │   │   ├── ChatInput.tsx
 │   │   │   ├── ChatMessage.tsx
+│   │   │   ├── ComposerMenu.tsx
+│   │   │   ├── ComposerPrimaryAction.tsx
 │   │   │   ├── EmotePlaybackBar.tsx
-│   │   │   └── ThinkingPanel.tsx
+│   │   │   ├── floatingChatSize.ts
+│   │   │   ├── historyLayout.ts
+│   │   │   ├── ThinkingPanel.tsx
+│   │   │   └── VoiceWaveform.tsx
 │   │   ├── common/
 │   │   │   ├── AIFeaturesConfig.tsx
 │   │   │   ├── Dialog.tsx
@@ -713,7 +739,8 @@ vassist/
 │   │   │   ├── ThreeDSettings.tsx
 │   │   │   ├── TTSSettings.tsx
 │   │   │   ├── UISettings.tsx
-│   │   │   └── UISettingsTabs.tsx
+│   │   │   ├── UISettingsTabs.tsx
+│   │   │   └── XrSettings.tsx
 │   │   ├── setup/
 │   │   │   ├── shared/
 │   │   │   │   └── ProviderSelection.tsx
@@ -743,6 +770,14 @@ vassist/
 │   │   │   ├── SettingsRow.tsx
 │   │   │   ├── TabBar.tsx
 │   │   │   └── Tooltip.tsx
+│   │   ├── xr/
+│   │   │   ├── SpatialHtmlPanel.tsx
+│   │   │   ├── SpatialHtmlPanelContext.ts
+│   │   │   ├── XrControlPanel.tsx
+│   │   │   ├── XrKeyboard.tsx
+│   │   │   ├── XrRuntimeProvider.tsx
+│   │   │   ├── XrSceneEditControls.tsx
+│   │   │   └── XrSurface.tsx
 │   │   ├── AppContent.tsx
 │   │   ├── DemoSite.tsx
 │   │   ├── ModelLoadingOverlay.tsx
@@ -763,7 +798,8 @@ vassist/
 │   ├── contexts/
 │   │   ├── AnimationContext.tsx
 │   │   ├── AppRuntimeContext.tsx
-│   │   └── SetupContext.tsx
+│   │   ├── SetupContext.tsx
+│   │   └── XrRuntimeContext.ts
 │   ├── embed/
 │   │   ├── branding.ts
 │   │   ├── config.ts
@@ -795,7 +831,8 @@ vassist/
 │   │   ├── useAndroidStore.ts
 │   │   ├── useDesktopStore.ts
 │   │   ├── useDesktopWindowResize.ts
-│   │   └── useVisibilityUnmount.ts
+│   │   ├── useVisibilityUnmount.ts
+│   │   └── useWideDesktopHistory.ts
 │   ├── services/
 │   │   ├── ai/
 │   │   │   ├── AIService.ts
@@ -809,6 +846,7 @@ vassist/
 │   │   │   ├── TranslatorService.ts
 │   │   │   └── WriterService.ts
 │   │   ├── audio/
+│   │   │   ├── AudioVisualizationService.ts
 │   │   │   ├── LiveLipSyncService.ts
 │   │   │   ├── MicrophoneService.ts
 │   │   │   ├── STTService.ts
@@ -820,7 +858,10 @@ vassist/
 │   │   │   └── VoiceStorageService.ts
 │   │   ├── chat/
 │   │   │   ├── ChatHistoryService.ts
+│   │   │   ├── ChatResponseService.ts
 │   │   │   ├── ChatService.ts
+│   │   │   ├── ChatSessionRuntime.ts
+│   │   │   ├── ChatSpeechService.ts
 │   │   │   └── DocumentInteractionService.ts
 │   │   ├── common/
 │   │   │   ├── Logger.ts
@@ -849,19 +890,26 @@ vassist/
 │   │   │   ├── TranslatorServiceProxy.ts
 │   │   │   ├── TTSServiceProxy.ts
 │   │   │   └── WriterServiceProxy.ts
-│   │   └── storage/
-│   │       ├── AppDataBackupService.ts
-│   │       ├── BackgroundStorageService.ts
-│   │       ├── EmoteStorageService.ts
-│   │       ├── LLMModelStorageService.ts
-│   │       ├── ModelStorageService.ts
-│   │       ├── MotionStorageService.ts
-│   │       ├── StageImportService.ts
-│   │       └── StageStorageService.ts
+│   │   ├── storage/
+│   │   │   ├── AppDataBackupService.ts
+│   │   │   ├── BackgroundStorageService.ts
+│   │   │   ├── EmoteStorageService.ts
+│   │   │   ├── LLMModelStorageService.ts
+│   │   │   ├── ModelStorageService.ts
+│   │   │   ├── MotionStorageService.ts
+│   │   │   ├── StageImportService.ts
+│   │   │   └── StageStorageService.ts
+│   │   └── xr/
+│   │       ├── DesktopSessionBridge.ts
+│   │       ├── DesktopXrRepository.ts
+│   │       ├── wireCodec.ts
+│   │       ├── XrClientRuntime.ts
+│   │       └── XrConnection.ts
 │   ├── storage/
 │   │   ├── adapters/
 │   │   │   ├── DexieStorageAdapter.ts
 │   │   │   ├── MemoryStorageAdapter.ts
+│   │   │   ├── RemoteStorageAdapter.ts
 │   │   │   └── types.ts
 │   │   ├── DatabaseSchema.ts
 │   │   ├── index.ts
@@ -891,7 +939,8 @@ vassist/
 │   │   ├── electron.d.ts
 │   │   ├── env.d.ts
 │   │   ├── gpt-sovits-bootstrap.d.ts
-│   │   └── headaudio.d.ts
+│   │   ├── headaudio.d.ts
+│   │   └── xr.ts
 │   ├── utils/
 │   │   ├── resource-loader/
 │   │   │   └── types.ts
@@ -1026,5 +1075,6 @@ vassist/
 ├── vite.config.android.ts
 ├── vite.config.desktop.ts
 ├── vite.config.extension.ts
-└── vite.config.ts
+├── vite.config.ts
+└── vite.config.xr.ts
 ```

@@ -8,14 +8,10 @@ import {
   useCallback,
   useEffect,
   type ChangeEvent,
-  type Dispatch,
-  type MutableRefObject,
-  type SetStateAction,
 } from "react";
 import { cn } from "../../utils/cn";
 import { Icon } from "../icons";
 import { Button } from "../ui";
-import { TTSServiceProxy } from "../../services/proxies";
 import AudioPlayer from "../media/AudioPlayer";
 import MarkdownText from "../common/StreamdownMarkdown";
 import StreamingContainer from "../common/StreamingContainer";
@@ -50,9 +46,9 @@ interface ChatMessageProps {
   loadingMessageIndex: number | null;
   copiedMessageIndex: number | null;
   isStreamingMessage: boolean;
-  currentSessionRef: MutableRefObject<string | null>;
   smoothStreamingAnimation?: boolean;
   shouldAnimate?: boolean;
+  onRevealStateChange?: (messageId: string, active: boolean) => void;
   onCopyMessage: (
     messageIndex: number,
     content: string,
@@ -67,8 +63,6 @@ interface ChatMessageProps {
   onRewriteMessage: (message: ChatMessageModel) => void | Promise<void>;
   onPreviousBranch: (message: ChatMessageModel) => void;
   onNextBranch: (message: ChatMessageModel) => void;
-  setLoadingMessageIndex: Dispatch<SetStateAction<number | null>>;
-  setPlayingMessageIndex: Dispatch<SetStateAction<number | null>>;
 }
 
 /**
@@ -84,7 +78,6 @@ interface ChatMessageProps {
  * @param {number} props.loadingMessageIndex - Index of loading message
  * @param {number} props.copiedMessageIndex - Index of copied message
  * @param {boolean} props.isStreamingMessage - Whether this assistant message is currently streaming
- * @param {Object} props.currentSessionRef - Ref to current session
  * @param {boolean} props.smoothStreamingAnimation - Whether to use smooth streaming
  * @param {boolean} props.shouldAnimate - Whether message should animate
  * @param {Function} props.onCopyMessage - Callback to copy message
@@ -93,8 +86,6 @@ interface ChatMessageProps {
  * @param {Function} props.onRewriteMessage - Callback to rewrite message
  * @param {Function} props.onPreviousBranch - Callback for previous branch
  * @param {Function} props.onNextBranch - Callback for next branch
- * @param {Function} props.setLoadingMessageIndex - Setter for loading message index
- * @param {Function} props.setPlayingMessageIndex - Setter for playing message index
  * @returns {JSX.Element} Chat message component
  */
 const ChatMessage = ({
@@ -106,19 +97,19 @@ const ChatMessage = ({
   loadingMessageIndex,
   copiedMessageIndex,
   isStreamingMessage,
-  currentSessionRef,
   smoothStreamingAnimation = false,
   shouldAnimate = false, // Only animate if this is the latest message
+  onRevealStateChange,
   onCopyMessage,
   onPlayTTS,
   onEditUserMessage,
   onRewriteMessage,
   onPreviousBranch,
   onNextBranch,
-  setLoadingMessageIndex,
-  setPlayingMessageIndex,
 }: ChatMessageProps) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [touchActionsVisible, setTouchActionsVisible] = useState(false);
+  const touchPointerRef = useRef(false);
   const [editingContent, setEditingContent] = useState("");
   const [editingImages, setEditingImages] = useState<string[]>([]);
   const [editingAudios, setEditingAudios] = useState<string[]>([]);
@@ -131,6 +122,10 @@ const ChatMessage = ({
     typeof message.thinking === "string" &&
     message.thinking.trim().length > 0;
   const uiConfig = useUIConfig();
+  const handleRevealStateChange = useCallback(
+    (active: boolean) => onRevealStateChange?.(message.id, active),
+    [message.id, onRevealStateChange],
+  );
   const thinkingAutoExpand = uiConfig.thinkingPanelAutoExpand === true;
   const isPlaying = playingMessageIndex === messageIndex;
   const isLoading = loadingMessageIndex === messageIndex;
@@ -138,15 +133,16 @@ const ChatMessage = ({
   const branchTotal = message.branchInfo?.totalBranches ?? 0;
   const branchIndex =
     message.branchInfo?.currentIndex ?? message.branchInfo?.currentBranch ?? 0;
-  const streamingMarkdownAnimation = smoothStreamingAnimation
-    ? {
-        animation: "fadeIn" as const,
-        duration: 140,
-        easing: "ease-out",
-        sep: "word" as const,
-        stagger: 12,
-      }
-    : false;
+  const streamingMarkdownAnimation =
+    uiConfig.animateStreamingText !== false
+      ? {
+          animation: "fadeIn" as const,
+          duration: 160,
+          easing: "ease-out",
+          sep: "word" as const,
+          stagger: 4,
+        }
+      : false;
 
   const animationClass = shouldAnimate
     ? isUser
@@ -269,7 +265,25 @@ const ChatMessage = ({
   }, [isEditing, adjustEditTextareaHeight]);
 
   return (
-    <div className={cn("flex flex-col gap-3", animationClass)}>
+    <div
+      className={cn("chat-message-row flex flex-col gap-3", animationClass)}
+      data-touch-actions-visible={touchActionsVisible || undefined}
+      onPointerDown={(event) => {
+        touchPointerRef.current = event.pointerType === "touch";
+      }}
+      onClick={(event) => {
+        if (!touchPointerRef.current) return;
+        touchPointerRef.current = false;
+        const target = event.target;
+        if (
+          !(target instanceof Element) ||
+          target.closest("button, a, input, textarea, select, audio, video") ||
+          window.getSelection()?.toString()
+        )
+          return;
+        setTouchActionsVisible((visible) => !visible);
+      }}
+    >
       <div
         className={cn("flex flex-col", isUser ? "items-end" : "items-start")}
       >
@@ -281,7 +295,7 @@ const ChatMessage = ({
         >
           {/* Message bubble */}
           <div
-            className="flex flex-col gap-1.5"
+            className="flex flex-col"
             style={{ width: !isUser || isEditing ? "100%" : "auto" }}
           >
             <div
@@ -457,29 +471,26 @@ const ChatMessage = ({
                       isStreamingMessage={isStreamingMessage}
                       hasContent={message.content.length > 0}
                       autoExpand={thinkingAutoExpand}
+                      isLightBackground={isLightBackground}
                     />
                   )}
                   {!isUser && !isError ? (
-                    isStreamingMessage ? (
-                      <StreamingContainer
-                        autoActivate={true}
-                        speed="normal"
-                        disabled={false}
-                      >
-                        <div className="text-[15px] leading-relaxed max-w-full overflow-hidden">
-                          <MarkdownText
-                            text={message.content}
-                            isStreaming={true}
-                            emitProgressEvents={true}
-                            animated={streamingMarkdownAnimation}
-                          />
-                        </div>
-                      </StreamingContainer>
-                    ) : (
+                    <StreamingContainer
+                      autoActivate={true}
+                      speed="normal"
+                      disabled={!smoothStreamingAnimation}
+                    >
                       <div className="text-[15px] leading-relaxed max-w-full overflow-hidden">
-                        <MarkdownText text={message.content} />
+                        <MarkdownText
+                          text={message.content}
+                          isStreaming={isStreamingMessage}
+                          emitProgressEvents={true}
+                          animated={streamingMarkdownAnimation}
+                          smoothReveal={uiConfig.animateStreamingText !== false}
+                          onRevealStateChange={handleRevealStateChange}
+                        />
                       </div>
-                    )
+                    </StreamingContainer>
                   ) : (
                     <div className="text-[15px] leading-relaxed max-w-full overflow-hidden">
                       <MarkdownText text={message.content} />
@@ -491,10 +502,11 @@ const ChatMessage = ({
 
             <div
               className={cn(
-                "flex items-center gap-1",
+                "chat-message-actions flex items-center gap-1",
                 isUser ? "justify-end" : "justify-start",
                 "mt-1",
               )}
+              data-active={isPlaying || isLoading || isEditing || undefined}
             >
               {!isUser &&
                 message.branchInfo &&
@@ -505,8 +517,8 @@ const ChatMessage = ({
                       onClick={() => onPreviousBranch(message)}
                       data-testid={`chat-message-assistant-previous-branch-${messageIndex}`}
                       disabled={!message.branchInfo.canGoBack}
-                      variant={isLightBackground ? "dark" : "default"}
-                      className="w-6 h-6 p-2 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                      variant="ghost"
+                      className="w-6 h-6 p-0 rounded-lg flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity"
                       title="Previous variant"
                     >
                       <span
@@ -530,8 +542,8 @@ const ChatMessage = ({
                       onClick={() => onNextBranch(message)}
                       data-testid={`chat-message-assistant-next-branch-${messageIndex}`}
                       disabled={!message.branchInfo.canGoForward}
-                      variant={isLightBackground ? "dark" : "default"}
-                      className="w-6 h-6 p-2 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                      variant="ghost"
+                      className="w-6 h-6 p-0 rounded-lg flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity"
                       title="Next variant"
                     >
                       <span
@@ -549,22 +561,10 @@ const ChatMessage = ({
               {!isUser && !isError && ttsEnabled && (
                 <Button
                   onClick={() => {
-                    if (isLoading) {
-                      TTSServiceProxy.stopPlayback();
-                      setLoadingMessageIndex(null);
-                      setPlayingMessageIndex(null);
-                      currentSessionRef.current = null;
-
-                      // Dispatch event to abort TTS generation stream
-                      const event = new CustomEvent("abortTTSGeneration");
-                      window.dispatchEvent(event);
-                    } else {
-                      // Play or stop TTS
-                      onPlayTTS(messageIndex, message.content);
-                    }
+                    onPlayTTS(messageIndex, message.content);
                   }}
-                  variant={isLightBackground ? "dark" : "default"}
-                  className="w-6 h-6 p-2 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                  variant="ghost"
+                  className="w-6 h-6 p-0 rounded-lg flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity"
                   title={
                     isLoading
                       ? "Cancel TTS generation"
@@ -607,8 +607,8 @@ const ChatMessage = ({
               {!isEditing && (
                 <Button
                   onClick={() => onCopyMessage(messageIndex, message.content)}
-                  variant={isLightBackground ? "dark" : "default"}
-                  className="w-6 h-6 p-2 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                  variant="ghost"
+                  className="w-6 h-6 p-0 rounded-lg flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity"
                   title="Copy message"
                 >
                   <span
@@ -633,8 +633,8 @@ const ChatMessage = ({
                 <Button
                   onClick={handleStartEdit}
                   data-testid={`chat-message-edit-button-${messageIndex}`}
-                  variant={isLightBackground ? "dark" : "default"}
-                  className="w-6 h-6 p-2 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                  variant="ghost"
+                  className="w-6 h-6 p-0 rounded-lg flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity"
                   title="Edit message"
                 >
                   <span
@@ -657,8 +657,8 @@ const ChatMessage = ({
                       onClick={() => onPreviousBranch(message)}
                       data-testid={`chat-message-user-previous-branch-${messageIndex}`}
                       disabled={!message.branchInfo.canGoBack}
-                      variant={isLightBackground ? "dark" : "default"}
-                      className="w-6 h-6 p-2 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                      variant="ghost"
+                      className="w-6 h-6 p-0 rounded-lg flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity"
                       title="Previous variant"
                     >
                       <span
@@ -682,8 +682,8 @@ const ChatMessage = ({
                       onClick={() => onNextBranch(message)}
                       data-testid={`chat-message-user-next-branch-${messageIndex}`}
                       disabled={!message.branchInfo.canGoForward}
-                      variant={isLightBackground ? "dark" : "default"}
-                      className="w-6 h-6 p-2 rounded flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                      variant="ghost"
+                      className="w-6 h-6 p-0 rounded-lg flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity"
                       title="Next variant"
                     >
                       <span
@@ -702,8 +702,8 @@ const ChatMessage = ({
                 <Button
                   onClick={() => onRewriteMessage(message)}
                   data-testid={`chat-message-regenerate-button-${messageIndex}`}
-                  variant={isLightBackground ? "dark" : "default"}
-                  className="w-6 h-6 p-2 rounded-lg flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                  variant="ghost"
+                  className="w-6 h-6 p-0 rounded-lg flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity"
                   title="Regenerate response"
                 >
                   <span

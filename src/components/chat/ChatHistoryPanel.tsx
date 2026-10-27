@@ -10,8 +10,12 @@ import {
   memo,
   type ChangeEvent,
   type UIEvent,
-  type MouseEvent as ReactMouseEvent,
 } from "react";
+import { ScrollArea } from "@base-ui/react/scroll-area";
+import ChatHistoryActions from "./ChatHistoryActions";
+import { useEmbedHost } from "../../embed/EmbedHostContext";
+import { resolveConfiguredPortalContainer } from "../../embed/portalContainers";
+import { useSpatialHtmlPanelHost } from "../xr/SpatialHtmlPanelContext";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Icon } from "../icons";
 import { Button, Input } from "../ui";
@@ -19,11 +23,12 @@ import { cn } from "../../utils/cn";
 import { useAppRuntimeServices } from "../../contexts/AppRuntimeContext";
 import Logger from "../../services/common/LoggerService";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
+import { ANDROID_SYSTEM_INSET_BOTTOM } from "./historyLayout";
 
 const HISTORY_PAGE_SIZE = 30;
 const HISTORY_LOAD_SIZE = 20;
 const HISTORY_LOAD_THRESHOLD = 300;
-const HISTORY_ESTIMATED_ROW_HEIGHT = 96;
+const HISTORY_ESTIMATED_ROW_HEIGHT = 48;
 
 interface ChatHistoryMessage {
   role?: string;
@@ -48,6 +53,13 @@ interface ChatHistoryPanelProps {
   onRequestEditDialog?: ((chatId: string, title: string) => void) | null;
   onRequestDeleteDialog?: ((chatId: string) => void) | null;
   refreshTrigger?: number;
+  /** Render without the glass container/border, for embedding inside a sidebar host. */
+  embedded?: boolean;
+  /** Currently open chat id; its row gets an active highlight. */
+  currentChatId?: string | null;
+  /** Optional "New chat" action pinned below the list. */
+  onNewChat?: (() => void) | null;
+  onOpenSettings?: (() => void) | null;
 }
 
 /**
@@ -72,6 +84,10 @@ const ChatHistoryPanel = ({
   onRequestEditDialog = null,
   onRequestDeleteDialog = null,
   refreshTrigger = 0,
+  embedded = false,
+  currentChatId = null,
+  onNewChat = null,
+  onOpenSettings = null,
 }: ChatHistoryPanelProps) => {
   const { chatHistoryService } = useAppRuntimeServices();
   const [displayedChats, setDisplayedChats] = useState<ChatHistoryItem[]>([]);
@@ -80,7 +96,10 @@ const ChatHistoryPanel = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMoreBelow, setHasMoreBelow] = useState(true);
-  const [deletingChatId] = useState<string | null>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const { embedConfig } = useEmbedHost();
+  const spatialHost = useSpatialHtmlPanelHost();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -94,6 +113,17 @@ const ChatHistoryPanel = ({
     overscan: 8,
   });
 
+  useEffect(() => {
+    if (isSearchOpen) searchInputRef.current?.focus();
+  }, [isSearchOpen]);
+
+  const portalContainer =
+    spatialHost ??
+    resolveConfiguredPortalContainer(
+      embedConfig,
+      "popovers",
+      containerRef.current,
+    );
   const shouldShowSourceUrl = !(isDesktop || isAndroid);
 
   const virtualChatItems = historyVirtualizer.getVirtualItems();
@@ -297,10 +327,7 @@ const ChatHistoryPanel = ({
     yesterday.setDate(yesterday.getDate() - 1);
 
     if (date.toDateString() === today.toDateString()) {
-      return date.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      return "Today";
     } else if (date.toDateString() === yesterday.toDateString()) {
       return "Yesterday";
     } else {
@@ -311,260 +338,242 @@ const ChatHistoryPanel = ({
     }
   };
 
-  /**
-   * Gets preview text from first user message.
-   *
-   * @param {Object} chat - Chat object
-   * @returns {string} Preview text
-   */
-  const getChatPreview = (chat: ChatHistoryItem) => {
-    if (!chat.messages || chat.messages.length === 0) return "No messages";
-
-    const firstMsg = chat.messages.find((m) => m.role === "user");
-    if (firstMsg && firstMsg.content) {
-      return (
-        firstMsg.content.substring(0, 60) +
-        (firstMsg.content.length > 60 ? "..." : "")
-      );
-    }
-    return "Chat";
-  };
-
   return (
     <div
       ref={containerRef}
       data-testid="chat-history-panel"
       className={cn(
-        "flex flex-col h-full rounded-3xl overflow-hidden glass-container",
-        isLightBackground && "glass-container-dark",
+        "flex flex-col h-full overflow-hidden",
+        !embedded && "rounded-3xl glass-container",
+        !embedded && isLightBackground && "glass-container-dark",
         animationClass,
       )}
     >
-      {/* Header */}
-      <div
-        className={cn(
-          "px-6 py-2 md:py-4 border-b",
-          isLightBackground ? "border-white/30" : "border-white/20",
+      <div className="flex h-14 shrink-0 items-center gap-1 px-3">
+        {onClose && (
+          <Button
+            onClick={onClose}
+            variant="ghost"
+            size="icon"
+            aria-label="Close history"
+            title={embedded ? "Close sidebar" : "Close history"}
+          >
+            <Icon name={embedded ? "sidebar-close" : "close"} size={18} />
+          </Button>
         )}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Chat History</h2>
-          {onClose && (
+        {isSearchOpen ? (
+          <>
+            <Input
+              ref={searchInputRef}
+              variant={isLightBackground ? "dark" : "default"}
+              type="search"
+              data-testid="chat-history-search-input"
+              aria-label="Search chats"
+              placeholder="Search chats..."
+              value={searchQuery}
+              onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                setSearchQuery(event.target.value)
+              }
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setSearchQuery("");
+                  setIsSearchOpen(false);
+                }
+              }}
+              className="h-8 min-w-0 flex-1"
+            />
             <Button
-              onClick={onClose}
               variant="ghost"
-              className="w-8 h-8 flex items-center justify-center"
-              aria-label="Close history"
-            >
-              <Icon name="close" size={16} />
-            </Button>
-          )}
-        </div>
-
-        {/* Search Input */}
-        <div className="relative">
-          <Input
-            type="text"
-            data-testid="chat-history-search-input"
-            placeholder="Search chats..."
-            value={searchQuery}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              setSearchQuery(e.target.value)
-            }
-            className="w-full pr-8"
-          />
-          {searchQuery && (
-            <Button
+              size="icon"
+              aria-label="Close search"
               data-testid="chat-history-search-clear"
               onClick={() => {
                 setSearchQuery("");
+                setIsSearchOpen(false);
               }}
-              variant="default"
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 h-auto"
             >
               <Icon name="close" size={16} />
             </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Chats List */}
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto custom-scrollbar scroll-smooth"
-      >
-        {isLoading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center text-white/60">
-              <div className="animate-spin text-2xl mb-2">
-                <Icon name="hourglass" size={16} />
-              </div>
-              <div className="text-sm">Loading chats...</div>
-            </div>
-          </div>
-        ) : filteredChats.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center text-white/60">
-              <div className="text-3xl mb-2">
-                <Icon name="empty" size={16} />
-              </div>
-              <div className="text-sm">
-                {searchQuery
-                  ? "No chats match your search"
-                  : "No chat history yet"}
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {!isLoading && filteredChats.length > 0 && (
+          </>
+        ) : (
           <>
-            <div
-              style={{
-                height: `${historyVirtualizer.getTotalSize()}px`,
-                position: "relative",
-                width: "100%",
-              }}
+            <h2 className="min-w-0 flex-1 text-sm font-semibold text-white">
+              Chats
+            </h2>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Search chats"
+              title="Search chats"
+              data-testid="chat-history-search-toggle"
+              onClick={() => setIsSearchOpen(true)}
             >
-              {virtualChatItems.map((virtualItem) => {
-                const chat = filteredChats[virtualItem.index];
-
-                if (!chat) {
-                  return null;
-                }
-
-                return (
-                  <div
-                    key={virtualItem.key}
-                    ref={historyVirtualizer.measureElement}
-                    data-index={virtualItem.index}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      transform: `translateY(${virtualItem.start}px)`,
-                    }}
-                  >
-                    <div
-                      data-testid={`chat-history-item-${chat.chatId}`}
-                      className="px-2 md:px-4 py-2 md:py-3 border-b border-white/10 bg-white/5 hover:bg-white/10 cursor-pointer transition-all"
-                      onClick={() => onSelectChat && onSelectChat(chat)}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm truncate text-white">
-                            {chat.title || "Untitled Chat"}
-                          </div>
-
-                          <div className="text-xs truncate mt-1 text-white/50">
-                            {getChatPreview(chat)}
-                          </div>
-
-                          <div className="text-xs mt-1 flex flex-col gap-1 text-white/40">
-                            <div className="flex items-center gap-2">
-                              <span>{chat.messageCount || 0} messages</span>
-                              <span>•</span>
-                              <span>
-                                {formatDate(chat.updatedAt || chat.createdAt)}
-                              </span>
-                            </div>
-                            {shouldShowSourceUrl &&
-                              typeof chat.metadata?.sourceUrl === "string" && (
-                                <div className="flex items-center gap-1 text-xs truncate text-white/30">
-                                  <Icon name="location" size={12} />
-                                  <span>
-                                    {formatUrl(chat.metadata.sourceUrl)}
-                                  </span>
-                                </div>
-                              )}
-                          </div>
-                        </div>
-
-                        <div className="flex-shrink-0 flex gap-1">
-                          <Button
-                            onClick={(
-                              e: ReactMouseEvent<HTMLButtonElement>,
-                            ) => {
-                              e.stopPropagation();
-                              handleEditTitle(chat);
-                            }}
-                            data-testid={`chat-history-edit-${chat.chatId}`}
-                            variant="ghost"
-                            className="h-6 w-6 p-2 rounded-md"
-                            title="Edit title"
-                          >
-                            <span
-                              className={cn(
-                                isLightBackground
-                                  ? "glass-text"
-                                  : "glass-text-black",
-                                "text-xs leading-none",
-                              )}
-                            >
-                              <Icon name="pencil" size={16} />
-                            </span>
-                          </Button>
-
-                          <Button
-                            onClick={(
-                              e: ReactMouseEvent<HTMLButtonElement>,
-                            ) => {
-                              e.stopPropagation();
-                              handleDeleteClick(chat.chatId);
-                            }}
-                            data-testid={`chat-history-delete-${chat.chatId}`}
-                            disabled={deletingChatId === chat.chatId}
-                            variant="ghost"
-                            className={cn(
-                              "flex-shrink-0 h-6 w-6 p-2 rounded-md",
-                              deletingChatId === chat.chatId
-                                ? "opacity-50 cursor-not-allowed"
-                                : "hover:glass-error",
-                            )}
-                            title="Delete chat"
-                          >
-                            <span
-                              className={cn(
-                                isLightBackground
-                                  ? "glass-text"
-                                  : "glass-text-black",
-                                "text-xs leading-none",
-                              )}
-                            >
-                              <Icon
-                                name={
-                                  deletingChatId === chat.chatId
-                                    ? "hourglass"
-                                    : "delete"
-                                }
-                                size={14}
-                              />
-                            </span>
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {isLoadingMore && (
-              <div className="px-2 md:px-4 py-2 md:py-3 text-center text-xs text-white/50">
-                ⏳ Loading more chats...
-              </div>
-            )}
-
-            {searchQuery.trim() === "" && !hasMoreBelow && (
-              <div className="px-2 md:px-4 py-2 md:py-3 text-center text-xs text-white/50">
-                You've reached the end of your chat history
-              </div>
-            )}
+              <Icon name="search" size={18} />
+            </Button>
           </>
         )}
       </div>
+      <ScrollArea.Root className="relative min-h-0 flex-1">
+        <ScrollArea.Viewport
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="h-full outline-none"
+          data-testid="chat-history-scroll-viewport"
+        >
+          <ScrollArea.Content className="min-h-full pb-2">
+            {isLoading ? (
+              <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-white/60">
+                <Icon name="hourglass" size={16} />
+                Loading chats...
+              </div>
+            ) : filteredChats.length === 0 ? (
+              <div className="flex min-h-48 flex-col items-center justify-center gap-3 px-5 text-center text-sm text-white/60">
+                <Icon name="empty" size={20} />
+                <span>
+                  {searchQuery
+                    ? "No chats match your search"
+                    : "No chat history yet"}
+                </span>
+              </div>
+            ) : (
+              <div
+                style={{
+                  height: historyVirtualizer.getTotalSize(),
+                  position: "relative",
+                  width: "100%",
+                }}
+              >
+                {virtualChatItems.map((virtualItem) => {
+                  const chat = filteredChats[virtualItem.index];
+                  if (!chat) return null;
+                  const dateLabel = formatDate(
+                    chat.updatedAt || chat.createdAt,
+                  );
+                  const previous = filteredChats[virtualItem.index - 1];
+                  const showDate =
+                    !previous ||
+                    dateLabel !==
+                      formatDate(previous.updatedAt || previous.createdAt);
+                  const title = chat.title || "Untitled Chat";
+                  const count = chat.messageCount ?? chat.messages?.length ?? 0;
+                  return (
+                    <div
+                      key={virtualItem.key}
+                      ref={historyVirtualizer.measureElement}
+                      data-index={virtualItem.index}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        transform: `translateY(${virtualItem.start}px)`,
+                      }}
+                    >
+                      {showDate && dateLabel && (
+                        <div className="px-5 pb-1 pt-3 text-xs font-medium text-white/45">
+                          {dateLabel}
+                        </div>
+                      )}
+                      <div
+                        data-testid={`chat-history-item-${chat.chatId}`}
+                        className={cn(
+                          "mx-2 flex items-center gap-1 rounded-xl px-2 py-1 transition-colors hover:bg-white/10",
+                          currentChatId === chat.chatId && "bg-white/10",
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => onSelectChat?.(chat)}
+                          aria-current={
+                            currentChatId === chat.chatId ? "page" : undefined
+                          }
+                          className="min-w-0 flex-1 cursor-pointer rounded-lg px-1 py-2 text-left text-sm text-white outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-white/60"
+                        >
+                          <span
+                            className={cn(
+                              "block truncate",
+                              currentChatId === chat.chatId && "font-medium",
+                            )}
+                          >
+                            {title}
+                          </span>
+                        </button>
+                        <ChatHistoryActions
+                          chatId={chat.chatId}
+                          title={title}
+                          details={`${count} ${count === 1 ? "message" : "messages"} · ${formatDate(chat.updatedAt || chat.createdAt)}`}
+                          sourceUrl={
+                            shouldShowSourceUrl &&
+                            typeof chat.metadata?.sourceUrl === "string"
+                              ? formatUrl(chat.metadata.sourceUrl)
+                              : undefined
+                          }
+                          portalContainer={portalContainer}
+                          isLightBackground={isLightBackground}
+                          onRename={() => handleEditTitle(chat)}
+                          onDelete={() => handleDeleteClick(chat.chatId)}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {isLoadingMore && (
+              <div className="py-3 text-center text-xs text-white/50">
+                Loading more chats...
+              </div>
+            )}
+          </ScrollArea.Content>
+        </ScrollArea.Viewport>
+        <ScrollArea.Scrollbar
+          orientation="vertical"
+          data-testid="chat-history-scrollbar"
+          className="m-1 flex w-1 rounded-full opacity-0 transition-opacity duration-200 data-[scrolling]:opacity-100 data-[scrolling]:delay-0 motion-reduce:transition-none"
+        >
+          <ScrollArea.Thumb className="w-full rounded-full bg-white/30" />
+        </ScrollArea.Scrollbar>
+      </ScrollArea.Root>
+      {(onNewChat || onOpenSettings) && (
+        <div
+          className="flex shrink-0 items-center justify-between px-3 pt-2 pb-3"
+          style={
+            isAndroid
+              ? { paddingBottom: `calc(12px + ${ANDROID_SYSTEM_INSET_BOTTOM})` }
+              : undefined
+          }
+        >
+          {onNewChat && (
+            <Button
+              onClick={onNewChat}
+              variant="ghost"
+              size="sm"
+              data-testid="chat-history-new-chat"
+              aria-label="New chat"
+              className="h-9 rounded-lg px-2.5"
+            >
+              <Icon name="add" size={18} />
+              <span>New chat</span>
+            </Button>
+          )}
+          {onOpenSettings && (
+            <Button
+              onClick={onOpenSettings}
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 rounded-lg"
+              aria-label="Settings"
+              title="Settings"
+              tooltipVariant={isLightBackground ? "dark" : "default"}
+              data-testid="chat-history-settings"
+            >
+              <Icon name="settings" size={18} />
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 };

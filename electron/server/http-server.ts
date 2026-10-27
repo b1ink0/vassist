@@ -1120,13 +1120,22 @@ export class LocalAIServer {
     // Resolve model path using the same search rules as node-llama path
     const requestedModel =
       typeof req.body?.model === "string" ? req.body.model : "";
-    let modelPath = requestedModel ? "" : this.config.llm.modelPath || "";
+    const configuredPath = this.config.llm.modelPath || "";
+    let modelPath =
+      !requestedModel ||
+      requestedModel === configuredPath ||
+      requestedModel === path.basename(configuredPath)
+        ? configuredPath
+        : "";
+    const customModelsPath =
+      typeof req.body?.customModelsPath === "string"
+        ? req.body.customModelsPath.trim()
+        : "";
     const modelsDir =
-      this.config.llm.defaultModelsDir ||
-      (this.config.llm.modelPath
-        ? path.dirname(this.config.llm.modelPath)
-        : "");
-    if (requestedModel && modelsDir && fs.existsSync(modelsDir)) {
+      customModelsPath ||
+      (configuredPath ? path.dirname(configuredPath) : "") ||
+      this.config.llm.defaultModelsDir;
+    if (!modelPath && requestedModel && modelsDir && fs.existsSync(modelsDir)) {
       const exact = path.isAbsolute(requestedModel)
         ? requestedModel
         : path.join(modelsDir, requestedModel);

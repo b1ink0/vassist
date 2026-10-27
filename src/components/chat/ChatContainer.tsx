@@ -25,9 +25,15 @@ import type {
 } from "../../embed/config";
 import { getBrandedLabel } from "../../embed/branding";
 import { useEmbedHost } from "../../embed/EmbedHostContext";
+import { useXrRuntime } from "../../contexts/XrRuntimeContext";
+import { XrSurface } from "../xr/XrSurface";
 import { getHostCommandEventName } from "../../embed/hostCommands";
 import { useVAssistReactCustomizations } from "../../embed/reactHostCustomizations";
-import { useAppRuntimeServices } from "../../contexts/AppRuntimeContext";
+import {
+  useAppRuntimeServices,
+  useAppStoreApi,
+} from "../../contexts/AppRuntimeContext";
+import { getChatSession } from "../../services/chat/ChatSessionRuntime";
 import { Icon } from "../icons";
 import { Button } from "../ui";
 import { cn } from "../../utils/cn";
@@ -37,11 +43,15 @@ import BackgroundDetector from "../../utils/BackgroundDetector";
 import DragDropService from "../../services/media/DragDropService";
 import UtilService from "../../services/common/UtilService";
 import ChatMessage from "./ChatMessage";
+import { ComposerMenu } from "./ComposerMenu";
+import DesktopModeSettings from "../settings/DesktopModeSettings";
 import { modelStorageService } from "../../services/storage/ModelStorageService";
 import { motionStorageService } from "../../services/storage/MotionStorageService";
 import { stageStorageService } from "../../services/storage/StageStorageService";
 import emoteStorageService from "../../services/storage/EmoteStorageService";
-import { useDesktopWindowResize } from "../../hooks/useDesktopWindowResize";
+import { getFloatingChatSize, setFloatingChatSize } from "./floatingChatSize";
+import { Tooltip } from "../ui/Tooltip";
+import { useWideDesktopHistory } from "../../hooks/useWideDesktopHistory";
 import {
   useChatActions,
   useCurrentChatId,
@@ -83,9 +93,16 @@ import Logger from "../../services/common/LoggerService";
 import {
   isDesktop,
   isAndroid,
+  isAppModeWindow,
   isDesktopAttachedModeWindow,
+  isDetachedDesktopWindow,
   isDetachedChatWindow,
+  isLiveWallpaperWindow,
 } from "../../utils/PlatformUtils";
+import {
+  ANDROID_SYSTEM_INSET_TOP,
+  HISTORY_SIDEBAR_WIDTH,
+} from "./historyLayout";
 import type { PositionManagerLike } from "../../babylon/types";
 import type { ComponentType } from "react";
 import {
@@ -96,6 +113,7 @@ import {
 const SettingsPanel = lazy(() => import("../SettingsPanel"));
 const QuickAccessPanel = lazy(() => import("../QuickAccessPanel"));
 const ChatHistoryPanel = lazy(() => import("./ChatHistoryPanel"));
+const ChatHistorySidebar = lazy(() => import("./ChatHistorySidebar"));
 const Dialog = lazy(() => import("../common/Dialog"));
 
 interface ChatContainerProps {
@@ -152,6 +170,7 @@ type ChatRenderableItem =
       messageIndex: number;
       isLastAIMessage: boolean;
       isLastUserMessage: boolean;
+      isExiting?: boolean;
     }
   | {
       kind: "loading";
@@ -171,7 +190,11 @@ interface ChatHistoryPanelPropsLike {
   onRequestEditDialog: (chatId: string, title: string) => void;
   onRequestDeleteDialog: (chatId: string) => void;
   refreshTrigger: number;
-  animationClass: string;
+  animationClass?: string;
+  embedded?: boolean;
+  currentChatId?: string | null;
+  onNewChat?: () => void;
+  onOpenSettings?: (() => void) | undefined;
 }
 
 interface DialogPropsLike {
@@ -347,13 +370,18 @@ const ChatContainer = ({
   embedConfig,
   onDragDrop,
 }: ChatContainerProps) => {
+  const xr = useXrRuntime();
   const { hostId } = useEmbedHost();
   const reactCustomizations = useVAssistReactCustomizations(hostId);
   const { chatHistoryService } = useAppRuntimeServices();
   const positionManagerRef = usePositionManagerRef();
   const messages = useChatMessages();
   const currentChatId = useCurrentChatId();
-  const isVisible = useIsChatContainerVisible();
+  const chatContainerVisible = useIsChatContainerVisible();
+  const isVoiceMode = useIsVoiceMode();
+  const uiConfig = useUIConfig();
+  const voiceOverlay = isVoiceMode && uiConfig.enableModelLoading && !xr.active;
+  const isVisible = chatContainerVisible || voiceOverlay;
   const isGenerating = useIsProcessing();
   const isTempChat = useIsTempChat();
   const {
@@ -363,7 +391,6 @@ const ChatContainer = ({
     stopGeneration,
     closeChat,
   } = useChatActions();
-  const isVoiceMode = useIsVoiceMode();
   const isSpeaking = useIsSpeaking();
   const playingMessageIndex = usePlayingMessageIndex();
   const loadingMessageIndex = useLoadingMessageIndex();
@@ -373,7 +400,77 @@ const ChatContainer = ({
   const buttonPosition = useButtonPosition();
   const isDraggingButton = useIsDraggingButton();
   const isDraggingModel = useIsDraggingModel();
+  const showDragBounds =
+    !isAndroid &&
+    !normalDesktop &&
+    !isDetachedChatWindow &&
+    !isLiveWallpaperWindow &&
+    !xr.active;
   const [isResizingDetachedChat, setIsResizingDetachedChat] = useState(false);
+  const [messagesFaded, setMessagesFaded] = useState(false);
+  const [messagesHovered, setMessagesHovered] = useState(false);
+  const [messagesFocused, setMessagesFocused] = useState(false);
+  const [revealingMessageId, setRevealingMessageId] = useState<string | null>(
+    null,
+  );
+  const handleRevealStateChange = useCallback((id: string, active: boolean) => {
+    setRevealingMessageId((current) =>
+      active ? id : current === id ? null : current,
+    );
+  }, []);
+  const [showFullVoiceChat, setShowFullVoiceChat] = useState(false);
+  const [exitingMessage, setExitingMessage] =
+    useState<ChatRenderableItem | null>(null);
+  const previousLatestRef = useRef<{
+    message: ChatMessageLike;
+    index: number;
+    chatId: string | null;
+  } | null>(null);
+  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [voiceStartMessageId, setVoiceStartMessageId] = useState<string | null>(
+    null,
+  );
+  const [floatingSize, setFloatingSize] = useState(getFloatingChatSize);
+  const [resizingFloatingChat, setResizingFloatingChat] = useState(false);
+  const floatingResizeRef = useRef<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  useEffect(() => {
+    const updateSize = () => setFloatingSize(getFloatingChatSize());
+    const move = (event: PointerEvent) => {
+      const start = floatingResizeRef.current;
+      if (!start) return;
+      setFloatingChatSize({
+        width: start.width + event.screenX - start.x,
+        height: start.height + event.screenY - start.y,
+      });
+    };
+    const stop = () => {
+      if (!floatingResizeRef.current) return;
+      floatingResizeRef.current = null;
+      delete document.documentElement.dataset.electronResizeActive;
+      setResizingFloatingChat(false);
+    };
+    window.addEventListener("floatingChatSizeChange", updateSize);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+    window.addEventListener("blur", stop);
+    return () => {
+      window.removeEventListener("floatingChatSizeChange", updateSize);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      window.removeEventListener("blur", stop);
+      if (floatingResizeRef.current) {
+        floatingResizeRef.current = null;
+        delete document.documentElement.dataset.electronResizeActive;
+      }
+    };
+  }, []);
   const {
     setIsDragOverChat: setIsDragOver,
     startButtonDrag,
@@ -384,6 +481,7 @@ const ChatContainer = ({
   const isSettingsPanelOpen = useIsSettingsPanelOpen();
   const isQuickPanelOpen = useIsQuickPanelOpen();
   const isHistoryPanelOpen = useIsHistoryPanelOpen();
+  const isWideDesktopHistory = useWideDesktopHistory();
   const {
     setIsSettingsPanelOpen,
     setIsQuickPanelOpen,
@@ -394,8 +492,46 @@ const ChatContainer = ({
     nextBranch,
   } = useToolingActions();
 
-  const uiConfig = useUIConfig();
   const { updateUIConfig } = useConfigUIActions();
+  const fadeMessages =
+    !xr.active &&
+    !showFullVoiceChat &&
+    (uiConfig.fadeChatMessages === true || voiceOverlay);
+  useEffect(() => {
+    if (isVoiceMode) {
+      setVoiceStartMessageId(messages.at(-1)?.id ?? null);
+    } else {
+      setShowFullVoiceChat(false);
+      setVoiceStartMessageId(null);
+    }
+    // Capture the conversation when the voice session starts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVoiceMode]);
+  useEffect(() => {
+    setMessagesFaded(false);
+    if (
+      !fadeMessages ||
+      !isVisible ||
+      messages.length === 0 ||
+      isGenerating ||
+      isSpeaking ||
+      revealingMessageId === messages.at(-1)?.id ||
+      messagesHovered ||
+      messagesFocused
+    )
+      return;
+    const timer = window.setTimeout(() => setMessagesFaded(true), 8000);
+    return () => window.clearTimeout(timer);
+  }, [
+    fadeMessages,
+    isVisible,
+    messages,
+    isGenerating,
+    isSpeaking,
+    revealingMessageId,
+    messagesHovered,
+    messagesFocused,
+  ]);
   const { updateTTSConfig } = useConfigTTSActions();
   const aiConfig = useAIConfig();
   const api = useDesktopApi() as DesktopApiLike | null;
@@ -525,6 +661,18 @@ const ChatContainer = ({
   );
   const settingsEnabled = embedConfig.features.settings;
   const historyEnabled = embedConfig.features.history;
+  const attachedHistoryLayout = (isAndroid || normalDesktop) && !xr.active;
+  const floatingDockChatControls =
+    isDesktop &&
+    !normalDesktop &&
+    (!isDetachedDesktopWindow || isDetachedChatWindow) &&
+    !xr.active;
+  const resizableFloatingChat =
+    floatingDockChatControls && !isDetachedChatWindow;
+  const chatOnlyAttached = modelDisabled && attachedHistoryLayout;
+  const attachedChatTop =
+    attachedHistoryLayout && historyEnabled ? (isAppModeWindow ? 96 : 64) : 16;
+  const androidChatTop = historyEnabled ? 64 : ANDROID_CHAT_TOP_OFFSET;
   const liveAssistantEnabled = embedConfig.features.liveAssistant3d;
 
   const lastAnimatedMessageIdRef = useRef<string | null>(null);
@@ -532,6 +680,12 @@ const ChatContainer = ({
   const pendingHistoryScrollToEndRef = useRef(false);
   const wasAtChatEndRef = useRef(true);
   const pendingStreamingScrollFrameRef = useRef<number | null>(null);
+  const autoScrollFrameRef = useRef<number | null>(null);
+  const isAutoScrollingRef = useRef(false);
+  const isTouchScrollingRef = useRef(false);
+  const userPausedScrollRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
+  const lastUserScrollIdRef = useRef<string | null>(null);
 
   const lastUserMessageId = useMemo(() => {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -543,11 +697,58 @@ const ChatContainer = ({
     return null;
   }, [messages]);
 
+  useLayoutEffect(() => {
+    const latest = messages.at(-1);
+    const previous = previousLatestRef.current;
+    if (!fadeMessages || !latest) {
+      if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+      setExitingMessage(null);
+    } else if (
+      previous &&
+      previous.chatId === currentChatId &&
+      previous.message.id !== latest.id &&
+      !(voiceOverlay && previous.message.id === voiceStartMessageId)
+    ) {
+      if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+      setExitingMessage({
+        kind: "message",
+        key: previous.message.id,
+        message: previous.message,
+        messageIndex: previous.index,
+        isLastAIMessage: false,
+        isLastUserMessage: false,
+        isExiting: true,
+      });
+      exitTimerRef.current = setTimeout(() => setExitingMessage(null), 450);
+    }
+    previousLatestRef.current = latest
+      ? { message: latest, index: messages.length - 1, chatId: currentChatId }
+      : null;
+  }, [
+    currentChatId,
+    fadeMessages,
+    messages,
+    voiceOverlay,
+    voiceStartMessageId,
+  ]);
+
+  useEffect(
+    () => () => {
+      if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+    },
+    [],
+  );
+
   const chatItems = useMemo<ChatRenderableItem[]>(() => {
     const items: ChatRenderableItem[] = [];
 
+    if (fadeMessages && exitingMessage) items.push(exitingMessage);
+
     for (const [index, message] of messages.entries()) {
       const isLastMessage = index === messages.length - 1;
+      if (fadeMessages && !isLastMessage) continue;
+      if (fadeMessages && voiceOverlay && message.id === voiceStartMessageId)
+        continue;
 
       const isUser = message.role === "user";
       const isError = message.content.toLowerCase().startsWith("error:");
@@ -572,15 +773,23 @@ const ChatContainer = ({
     }
 
     return items;
-  }, [isGenerating, lastUserMessageId, messages]);
+  }, [
+    exitingMessage,
+    fadeMessages,
+    isGenerating,
+    lastUserMessageId,
+    messages,
+    voiceOverlay,
+    voiceStartMessageId,
+  ]);
 
   const chatVirtualizer = useVirtualizer({
     count: chatItems.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => CHAT_ESTIMATED_ROW_HEIGHT,
     getItemKey: (index) => chatItems[index]?.key ?? `chat-item-${index}`,
-    anchorTo: "end",
-    followOnAppend: true,
+    anchorTo: "start",
+    followOnAppend: false,
     scrollEndThreshold: CHAT_SCROLL_END_THRESHOLD,
     overscan: 8,
     paddingStart: CHAT_LIST_PADDING,
@@ -608,10 +817,10 @@ const ChatContainer = ({
   }, [isQuickPanelOpen, setIsQuickPanelOpen, settingsEnabled]);
 
   useEffect(() => {
-    if (!historyEnabled && isHistoryPanelOpen) {
+    if ((!historyEnabled || !isVisible) && isHistoryPanelOpen) {
       setIsHistoryPanelOpen(false);
     }
-  }, [historyEnabled, isHistoryPanelOpen, setIsHistoryPanelOpen]);
+  }, [historyEnabled, isHistoryPanelOpen, isVisible, setIsHistoryPanelOpen]);
 
   useEffect(() => {
     const handleOpenSettings = (event: Event) => {
@@ -646,8 +855,6 @@ const ChatContainer = ({
     settingsEnabled,
   ]);
 
-  useDesktopWindowResize();
-
   /**
    * Auto-focuses input when chat is cleared (new chat created).
    */
@@ -662,8 +869,9 @@ const ChatContainer = ({
    * Calculates container position based on button or model position.
    */
   const calculateContainerPosition = useCallback(() => {
-    const chatInputHeight =
-      chatInputRef?.current?.getBoundingClientRect().height || 140;
+    const chatInputHeight = resizableFloatingChat
+      ? 0
+      : chatInputRef?.current?.getBoundingClientRect().height || 140;
     const isSmallScreen = window.innerWidth <= 768;
 
     if (isAndroid) {
@@ -690,8 +898,15 @@ const ChatContainer = ({
     }
 
     if (isSmallScreen) {
-      const containerWidth = Math.min(400, window.innerWidth - 16);
-      const containerHeight = modelDisabled ? 400 : 500;
+      const containerWidth = Math.min(
+        resizableFloatingChat ? floatingSize.width : 400,
+        window.innerWidth - 16,
+      );
+      const containerHeight = resizableFloatingChat
+        ? floatingSize.height
+        : modelDisabled
+          ? 400
+          : 500;
       const availableHeight = window.innerHeight - chatInputHeight;
 
       const containerX = Math.max(
@@ -714,8 +929,11 @@ const ChatContainer = ({
 
     if (modelDisabled) {
       const buttonPos = buttonPosRef.current;
-      const containerWidth = Math.min(400, window.innerWidth - 16);
-      const containerHeight = 400;
+      const containerWidth = Math.min(
+        resizableFloatingChat ? floatingSize.width : 400,
+        window.innerWidth - 16,
+      );
+      const containerHeight = resizableFloatingChat ? floatingSize.height : 400;
       const offsetY = 5;
       const buttonSize = 48;
 
@@ -731,14 +949,19 @@ const ChatContainer = ({
       containerY = Math.max(10, containerY);
       const maxY =
         window.innerHeight - containerHeight - chatInputHeight - offsetY;
-      containerY = Math.min(containerY, maxY);
+      containerY = Math.max(10, Math.min(containerY, maxY));
 
       return { x: containerX, y: containerY };
     } else if (positionManagerRef?.current) {
       try {
         const modelPos = positionManagerRef.current.getPositionPixels();
-        const containerWidth = Math.min(400, window.innerWidth - 16);
-        const containerHeight = 500;
+        const containerWidth = Math.min(
+          resizableFloatingChat ? floatingSize.width : 400,
+          window.innerWidth - 16,
+        );
+        const containerHeight = resizableFloatingChat
+          ? floatingSize.height
+          : 500;
         const offsetX = 15 + (isDesktop ? ASSISTANT_CONTROL_CHAT_GUTTER : 0);
         const windowWidth = window.innerWidth;
         const windowHeight = window.innerHeight;
@@ -790,6 +1013,8 @@ const ChatContainer = ({
   }, [
     modelDisabled,
     normalDesktop,
+    resizableFloatingChat,
+    floatingSize,
     isDetachedChatWindow,
     uiConfig.desktopMode.appMode.chatSplitPercent,
   ]);
@@ -841,6 +1066,10 @@ const ChatContainer = ({
     if (normalDesktop) return;
 
     const handleModelPosition = () => {
+      if (resizableFloatingChat) {
+        setContainerPos(calculateContainerPosition());
+        return;
+      }
       if (isAndroid) {
         setContainerPos(calculateContainerPosition());
         return;
@@ -933,7 +1162,13 @@ const ChatContainer = ({
         window.removeEventListener("modelPositionChange", handleModelPosition);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isVisible, modelDisabled, normalDesktop]);
+  }, [
+    isVisible,
+    modelDisabled,
+    normalDesktop,
+    resizableFloatingChat,
+    calculateContainerPosition,
+  ]);
 
   useEffect(() => {
     if (!isVisible) return;
@@ -1027,25 +1262,33 @@ const ChatContainer = ({
   ]);
 
   const handleHistoryClose = useCallback(() => {
+    if (attachedHistoryLayout) {
+      setIsHistoryPanelOpen(false);
+      return;
+    }
     setIsHistoryPanelClosing(true);
     setTimeout(() => {
       setIsHistoryPanelOpen(false);
       setIsHistoryPanelClosing(false);
     }, 200);
-  }, [setIsHistoryPanelOpen]);
+  }, [attachedHistoryLayout, setIsHistoryPanelOpen]);
 
   const handleSelectChat = useCallback(
     (chat: ChatHistorySelection) => {
       pendingHistoryScrollToEndRef.current = true;
 
       loadChatFromHistory(chat);
+      if (attachedHistoryLayout) {
+        setIsHistoryPanelOpen(false);
+        return;
+      }
       setIsHistoryPanelClosing(true);
       setTimeout(() => {
         setIsHistoryPanelOpen(false);
         setIsHistoryPanelClosing(false);
       }, 200);
     },
-    [loadChatFromHistory, setIsHistoryPanelOpen],
+    [attachedHistoryLayout, loadChatFromHistory, setIsHistoryPanelOpen],
   );
 
   const handleRequestEditDialog = useCallback(
@@ -1881,6 +2124,12 @@ const ChatContainer = ({
    * Used for: chat open, user sends message.
    */
   const scrollToBottomImmediate = useCallback(() => {
+    if (autoScrollFrameRef.current !== null) {
+      cancelAnimationFrame(autoScrollFrameRef.current);
+      autoScrollFrameRef.current = null;
+    }
+    isAutoScrollingRef.current = false;
+    userPausedScrollRef.current = false;
     wasAtChatEndRef.current = true;
     chatVirtualizer.scrollToEnd({ behavior: "instant" });
   }, [chatVirtualizer]);
@@ -1889,12 +2138,47 @@ const ChatContainer = ({
    * Keeps the chat pinned to the bottom only when the user was already near the end.
    */
   const scrollToBottomIfPinned = useCallback(() => {
-    if (!isVisible || chatItems.length === 0 || !wasAtChatEndRef.current) {
+    const element = scrollRef.current;
+    if (
+      !isVisible ||
+      !element ||
+      chatItems.length === 0 ||
+      !wasAtChatEndRef.current ||
+      isTouchScrollingRef.current
+    ) {
       return;
     }
-
-    chatVirtualizer.scrollToEnd({ behavior: "instant" });
-    wasAtChatEndRef.current = true;
+    if (autoScrollFrameRef.current !== null) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      chatVirtualizer.scrollToEnd({ behavior: "instant" });
+      return;
+    }
+    isAutoScrollingRef.current = true;
+    let previousTime: number | null = null;
+    const follow = (time: number) => {
+      autoScrollFrameRef.current = null;
+      if (
+        !wasAtChatEndRef.current ||
+        isTouchScrollingRef.current ||
+        !scrollRef.current
+      ) {
+        isAutoScrollingRef.current = false;
+        return;
+      }
+      const target = Math.max(0, element.scrollHeight - element.clientHeight);
+      const distance = target - element.scrollTop;
+      if (Math.abs(distance) < 0.75) {
+        element.scrollTop = target;
+        isAutoScrollingRef.current = false;
+        return;
+      }
+      const elapsed =
+        previousTime === null ? 16 : Math.min(50, time - previousTime);
+      previousTime = time;
+      element.scrollTop += distance * (1 - Math.exp(-elapsed / 160));
+      autoScrollFrameRef.current = requestAnimationFrame(follow);
+    };
+    autoScrollFrameRef.current = requestAnimationFrame(follow);
   }, [chatItems.length, chatVirtualizer, isVisible]);
 
   useEffect(() => {
@@ -1905,18 +2189,94 @@ const ChatContainer = ({
     }
 
     const updatePinnedState = () => {
+      if (isAutoScrollingRef.current) return;
+      const movedDown = scrollElement.scrollTop > lastScrollTopRef.current;
+      lastScrollTopRef.current = scrollElement.scrollTop;
+      if (userPausedScrollRef.current) {
+        const distance =
+          scrollElement.scrollHeight -
+          scrollElement.clientHeight -
+          scrollElement.scrollTop;
+        if (!movedDown || distance > 2) {
+          wasAtChatEndRef.current = false;
+          return;
+        }
+        userPausedScrollRef.current = false;
+      }
       wasAtChatEndRef.current = chatVirtualizer.isAtEnd(
         CHAT_SCROLL_END_THRESHOLD,
       );
+    };
+
+    const cancelFollowing = () => {
+      if (autoScrollFrameRef.current !== null)
+        cancelAnimationFrame(autoScrollFrameRef.current);
+      autoScrollFrameRef.current = null;
+      isAutoScrollingRef.current = false;
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (event.deltaY < 0) {
+        cancelFollowing();
+        userPausedScrollRef.current = true;
+        wasAtChatEndRef.current = false;
+      } else if (
+        event.deltaY > 0 &&
+        scrollElement.scrollHeight -
+          scrollElement.clientHeight -
+          scrollElement.scrollTop <=
+          2
+      ) {
+        userPausedScrollRef.current = false;
+        wasAtChatEndRef.current = true;
+      }
+    };
+    const onTouchStart = () => {
+      isTouchScrollingRef.current = true;
+      cancelFollowing();
+      userPausedScrollRef.current = true;
+    };
+    const onTouchEnd = () => {
+      isTouchScrollingRef.current = false;
+      if (
+        scrollElement.scrollHeight -
+          scrollElement.clientHeight -
+          scrollElement.scrollTop <=
+        2
+      )
+        userPausedScrollRef.current = false;
+      updatePinnedState();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (["ArrowUp", "PageUp", "Home"].includes(event.key)) {
+        cancelFollowing();
+        userPausedScrollRef.current = true;
+        wasAtChatEndRef.current = false;
+      }
     };
 
     updatePinnedState();
     scrollElement.addEventListener("scroll", updatePinnedState, {
       passive: true,
     });
+    scrollElement.addEventListener("wheel", onWheel, { passive: true });
+    scrollElement.addEventListener("touchstart", onTouchStart, {
+      passive: true,
+    });
+    scrollElement.addEventListener("touchend", onTouchEnd, { passive: true });
+    scrollElement.addEventListener("touchcancel", onTouchEnd, {
+      passive: true,
+    });
+    scrollElement.addEventListener("keydown", onKeyDown);
 
     return () => {
       scrollElement.removeEventListener("scroll", updatePinnedState);
+      scrollElement.removeEventListener("wheel", onWheel);
+      scrollElement.removeEventListener("touchstart", onTouchStart);
+      scrollElement.removeEventListener("touchend", onTouchEnd);
+      scrollElement.removeEventListener("touchcancel", onTouchEnd);
+      scrollElement.removeEventListener("keydown", onKeyDown);
+      cancelFollowing();
+      isTouchScrollingRef.current = false;
     };
   }, [chatVirtualizer, currentChatId, isVisible]);
 
@@ -1997,6 +2357,14 @@ const ChatContainer = ({
     };
   }, [isVisible, scrollToBottomIfPinned]);
 
+  useEffect(() => {
+    const content = scrollRef.current?.firstElementChild;
+    if (!isVisible || !content || chatItems.length === 0) return;
+    const observer = new ResizeObserver(() => scrollToBottomIfPinned());
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [isVisible, chatItems.length, scrollToBottomIfPinned]);
+
   /**
    * Force scroll to bottom when user sends a message
    * Tracks last message to detect when user adds new message
@@ -2006,12 +2374,18 @@ const ChatContainer = ({
 
     const lastMessage = messages[messages.length - 1];
 
-    if (lastMessage?.role === "user") {
+    if (
+      lastMessage?.role === "user" &&
+      lastUserScrollIdRef.current !== lastMessage.id
+    ) {
+      lastUserScrollIdRef.current = lastMessage.id;
       setTimeout(() => {
-        scrollToBottomImmediate();
+        userPausedScrollRef.current = false;
+        wasAtChatEndRef.current = true;
+        scrollToBottomIfPinned();
       }, 0);
     }
-  }, [messages, isVisible, scrollToBottomImmediate]);
+  }, [messages, isVisible, scrollToBottomIfPinned]);
 
   /**
    * Handles copying message content to clipboard.
@@ -2088,71 +2462,18 @@ const ChatContainer = ({
   /**
    * Handles playing TTS for a message.
    */
-  const handlePlayTTS = useCallback(
-    async (messageIndex: number, messageContent: string) => {
-      let ttsConfig;
-      try {
-        ttsConfig = await storageService.configLoad(
-          "ttsConfig",
-          DefaultTTSConfig as TTSConfigLike,
-        );
-        if (!ttsConfig.enabled || !ttsService.isConfigured()) {
-          Logger.warn("ChatContainer", "TTS not enabled or configured");
-          return;
-        }
-      } catch (error) {
-        Logger.error("ChatContainer", "Failed to load TTS config:", error);
-        return;
-      }
-
-      if (playingMessageIndex === messageIndex) {
-        ttsService.stopPlayback();
-        setPlayingMessageIndex(null);
-        setLoadingMessageIndex(null);
-        currentSessionRef.current = null;
-        return;
-      }
-
-      const sessionId = `manual_${messageIndex}_${Date.now()}`;
-
-      setPlayingMessageIndex(null);
-      setLoadingMessageIndex(messageIndex);
-
-      ttsService.resumePlayback();
-
-      try {
-        const audioUrls = await ttsService.generateChunkedSpeech(
-          messageContent,
-          null,
-          ttsConfig.chunkSize,
-          ttsConfig.minChunkSize,
-          sessionId,
-        );
-
-        if (audioUrls.length === 0) {
-          Logger.warn("ChatContainer", "No audio generated");
-          setLoadingMessageIndex(null);
-          return;
-        }
-
-        await ttsService.playAudioSequence(audioUrls, sessionId);
-
-        ttsService.cleanupBlobUrls(audioUrls);
-      } catch (error) {
-        Logger.error("ChatContainer", "TTS playback failed:", error);
-        setLoadingMessageIndex(null);
-        setPlayingMessageIndex(null);
-        currentSessionRef.current = null;
-      }
-    },
-    [playingMessageIndex, setPlayingMessageIndex, setLoadingMessageIndex],
-  );
-
+  const chatSession = getChatSession(useAppStoreApi());
+  const handlePlayTTS = (index: number, _content: string) => {
+    const message = messages[index];
+    if (message)
+      return chatSession.execute({ type: "speak", messageId: message.id });
+  };
   if (!isVisible) return null;
 
   if (modelDisabled && !buttonInitializedRef.current) return null;
 
   if (
+    !xr.active &&
     !normalDesktop &&
     !modelDisabled &&
     containerPos.x === 0 &&
@@ -2224,11 +2545,65 @@ const ChatContainer = ({
     chatInputRef?.current?.getBoundingClientRect().height || 140;
   const androidContainerHeight = Math.max(
     320,
-    window.innerHeight - ANDROID_CHAT_TOP_OFFSET - androidChatInputHeight + 40,
+    window.innerHeight - androidChatTop - androidChatInputHeight + 40,
+  );
+  const historyDialogs = (
+    <Suspense fallback={null}>
+      {editingChatId && (
+        <div className="absolute inset-0 z-30">
+          <TypedDialog
+            type="edit"
+            title="Edit Chat Title"
+            message=""
+            itemId={editingChatId}
+            initialValue={editingChatTitle}
+            inputPlaceholder="Enter new title..."
+            inputMaxLength={100}
+            isLightBackground={isLightBackground}
+            animationClass={
+              isEditDialogClosing
+                ? "animate-fade-out"
+                : "animate-slide-up-fade-in"
+            }
+            confirmLabel="Save"
+            onConfirm={handleEditDialogSave}
+            onCancel={handleEditDialogCancel}
+          />
+        </div>
+      )}
+
+      {deletingChatId && (
+        <div className="absolute inset-0 z-30">
+          <TypedDialog
+            type="delete"
+            title="Delete Chat?"
+            message="This will permanently delete this chat and all associated messages, images, and audio files. This cannot be undone."
+            itemId={deletingChatId}
+            isLightBackground={isLightBackground}
+            animationClass={
+              isDeleteDialogClosing
+                ? "animate-fade-out"
+                : "animate-slide-up-fade-in"
+            }
+            confirmLabel="Delete"
+            confirmStyle="error"
+            onConfirm={handleDeleteDialogConfirm}
+            onCancel={handleDeleteDialogCancel}
+          />
+        </div>
+      )}
+    </Suspense>
   );
 
   return (
-    <>
+    <XrSurface
+      id="chat"
+      widthMeters={0.65}
+      heightMeters={0.85}
+      widthPixels={520}
+      heightPixels={700}
+      offsetMeters={[0.7, 0, 0]}
+    >
       {/* Debug markers for background detection */}
       {debugMarkers.map((marker, index) => (
         <div
@@ -2259,58 +2634,144 @@ const ChatContainer = ({
         </div>
       ))}
 
+      {attachedHistoryLayout && historyEnabled && (
+        <Suspense fallback={null}>
+          <ChatHistorySidebar
+            open={isHistoryPanelOpen}
+            isWide={isWideDesktopHistory}
+            isLightBackground={isLightBackground}
+            onOpenChange={(open) => {
+              setIsHistoryPanelOpen(open);
+              if (!open) {
+                setEditingChatId(null);
+                setDeletingChatId(null);
+              }
+            }}
+            dialogs={historyDialogs}
+          >
+            <TypedChatHistoryPanel
+              embedded
+              isLightBackground={isLightBackground}
+              currentChatId={currentChatId}
+              onClose={handleHistoryClose}
+              onSelectChat={handleSelectChat}
+              onNewChat={() => {
+                clearChat();
+                handleHistoryClose();
+              }}
+              onOpenSettings={
+                settingsEnabled
+                  ? () => {
+                      setIsQuickPanelOpen(false);
+                      setIsHistoryPanelOpen(false);
+                      setEditingChatId(null);
+                      setDeletingChatId(null);
+                      setIsSettingsPanelOpen(true);
+                    }
+                  : undefined
+              }
+              onRequestEditDialog={handleRequestEditDialog}
+              onRequestDeleteDialog={handleRequestDeleteDialog}
+              refreshTrigger={historyRefreshTrigger}
+            />
+          </ChatHistorySidebar>
+        </Suspense>
+      )}
+
       <div
         ref={containerRef}
+        data-testid="chat-container"
         data-electron-interactive="true"
         style={{
           position: "fixed",
-          left: normalDesktop
-            ? "auto"
-            : isDetachedChatWindow
-              ? "16px"
-              : `${containerPos.x}px`,
-          right: normalDesktop ? "16px" : undefined,
-          top: isAndroid
-            ? `${ANDROID_CHAT_TOP_OFFSET}px`
+          left: chatOnlyAttached
+            ? "50%"
             : normalDesktop
-              ? "16px"
+              ? "auto"
+              : isDetachedChatWindow
+                ? "16px"
+                : `${containerPos.x}px`,
+          right: normalDesktop && !chatOnlyAttached ? "16px" : undefined,
+          top: isAndroid
+            ? `calc(${androidChatTop}px + ${ANDROID_SYSTEM_INSET_TOP})`
+            : normalDesktop
+              ? `${attachedChatTop}px`
               : isDetachedChatWindow
                 ? "16px"
                 : `${containerPos.y}px`,
           height: isAndroid
-            ? `${androidContainerHeight}px`
+            ? `max(320px, calc(${androidContainerHeight}px - ${ANDROID_SYSTEM_INSET_TOP}))`
             : normalDesktop
-              ? `calc(100vh - ${normalChatInputHeight + 32}px)`
+              ? `calc(100vh - ${normalChatInputHeight + attachedChatTop + 16}px)`
               : isDetachedChatWindow
                 ? `calc(100vh - ${DETACHED_CHAT_BOTTOM_CLEARANCE}px)`
-                : undefined,
+                : resizableFloatingChat
+                  ? `${floatingSize.height}px`
+                  : undefined,
           maxHeight: isAndroid
-            ? `${androidContainerHeight}px`
+            ? `max(320px, calc(${androidContainerHeight}px - ${ANDROID_SYSTEM_INSET_TOP}))`
             : normalDesktop
-              ? `calc(100vh - ${normalChatInputHeight + 32}px)`
+              ? `calc(100vh - ${normalChatInputHeight + attachedChatTop + 16}px)`
               : isDetachedChatWindow
                 ? `calc(100vh - ${DETACHED_CHAT_BOTTOM_CLEARANCE}px)`
+                : resizableFloatingChat
+                  ? `${floatingSize.height}px`
+                  : undefined,
+          width: chatOnlyAttached
+            ? "calc(100% - 32px)"
+            : normalDesktop
+              ? `calc(${Math.min(
+                  60,
+                  Math.max(28, uiConfig.desktopMode.appMode.chatSplitPercent),
+                )}% - 24px)`
+              : isDetachedChatWindow
+                ? "calc(100vw - 32px)"
+                : resizableFloatingChat
+                  ? `${floatingSize.width}px`
+                  : undefined,
+          maxWidth: chatOnlyAttached
+            ? "768px"
+            : normalDesktop || isDetachedChatWindow
+              ? "none"
+              : resizableFloatingChat
+                ? "none"
                 : undefined,
-          width: normalDesktop
-            ? `calc(${Math.min(
-                60,
-                Math.max(28, uiConfig.desktopMode.appMode.chatSplitPercent),
-              )}vw - 24px)`
-            : isDetachedChatWindow
-              ? "calc(100vw - 32px)"
-              : undefined,
-          maxWidth: normalDesktop || isDetachedChatWindow ? "none" : undefined,
+          transform: chatOnlyAttached ? "translateX(-50%)" : undefined,
           zIndex: 9999,
+          pointerEvents:
+            floatingDockChatControls &&
+            (messages.length === 0 || (fadeMessages && messagesFaded)) &&
+            !isGenerating &&
+            !isSettingsPanelOpen &&
+            !isHistoryPanelOpen &&
+            !isQuickPanelOpen &&
+            !customHeaderActions &&
+            !customFooterContent &&
+            !customEmptyState
+              ? "none"
+              : undefined,
           borderColor: isDragOver
             ? "rgba(59, 130, 246, 0.6)"
-            : isDraggingButton || isDraggingModel || isResizingDetachedChat
+            : (showDragBounds && (isDraggingButton || isDraggingModel)) ||
+                isResizingDetachedChat
               ? "rgba(255, 255, 255, 0.4)"
               : undefined,
           boxShadow: isDragOver
             ? "0 4px 20px rgba(59, 130, 246, 0.3)"
-            : isDraggingButton || isDraggingModel || isResizingDetachedChat
+            : (showDragBounds && (isDraggingButton || isDraggingModel)) ||
+                isResizingDetachedChat
               ? "0 4px 20px rgba(255, 255, 255, 0.2)"
               : undefined,
+          ...(xr.active
+            ? {
+                position: "absolute",
+                inset: "0",
+                width: "100%",
+                maxWidth: "none",
+                height: "100%",
+                maxHeight: "100%",
+              }
+            : {}),
         }}
         className={cn(
           "flex flex-col-reverse gap-3 rounded-[10px] border-2 border-transparent p-[5px]",
@@ -2321,9 +2782,45 @@ const ChatContainer = ({
               : "w-[calc(100vw-16px)] max-w-[400px]",
           !normalDesktop &&
             !isDetachedChatWindow &&
+            !resizableFloatingChat &&
             (modelDisabled ? "h-[450px]" : "h-[500px]"),
         )}
       >
+        {resizableFloatingChat && (
+          <Tooltip
+            content="Resize chat"
+            variant={isLightBackground ? "dark" : "default"}
+          >
+            <div
+              data-electron-interactive="true"
+              role="separator"
+              aria-label="Resize chat panel"
+              onPointerDown={(event) => {
+                if (event.button !== 0) return;
+                event.preventDefault();
+                event.stopPropagation();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                floatingResizeRef.current = {
+                  x: event.screenX,
+                  y: event.screenY,
+                  ...floatingSize,
+                };
+                document.documentElement.dataset.electronResizeActive = "true";
+                setResizingFloatingChat(true);
+              }}
+              className={cn(
+                "absolute -bottom-6 right-0 z-30 flex h-6 w-6 cursor-nwse-resize items-end justify-end rounded-sm p-1 pointer-events-auto transition-opacity hover:opacity-100",
+                isLightBackground ? "text-white" : "text-black",
+                resizingFloatingChat ? "opacity-100" : "opacity-50",
+              )}
+            >
+              <span
+                aria-hidden="true"
+                className="h-3 w-3 rounded-br border-b-2 border-r-2 border-current drop-shadow-[0_0_2px_rgba(128,128,128,0.9)]"
+              />
+            </div>
+          </Tooltip>
+        )}
         {/* Drag overlay indicator - always rendered, visibility controlled by opacity */}
         <div
           className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center rounded-3xl"
@@ -2365,182 +2862,254 @@ const ChatContainer = ({
           </div>
         ) : null}
 
-        {/* Action buttons at BOTTOM - reorganized: left/center/right layout */}
-        <div className="relative flex items-center justify-between gap-2 pb-1">
-          {/* LEFT: Settings + History */}
-          <div className="flex items-center gap-2">
-            {settingsEnabled ? (
-              <Button
-                onClick={() => {
-                  setIsQuickPanelOpen(false);
-                  setIsHistoryPanelOpen(false);
-                  setIsSettingsPanelOpen(!isSettingsPanelOpen);
-                }}
-                size="icon"
-                variant={isLightBackground ? "dark" : "default"}
-                className={isClosing ? "animate-fade-out" : "animate-fade-in"}
-                title={settingsLabel}
-                aria-label="Settings"
-                data-testid="settings-toggle-button"
-              >
-                <span
-                  className={cn(
-                    isLightBackground ? "glass-text" : "glass-text-black",
-                    "text-base leading-none flex items-center justify-center",
-                  )}
-                >
-                  <Icon name="settings" size={16} />
-                </span>
-              </Button>
-            ) : null}
-
-            {historyEnabled ? (
-              <Button
-                onClick={() => {
-                  setIsQuickPanelOpen(false);
-                  setIsSettingsPanelOpen(false);
-                  setIsHistoryPanelOpen(!isHistoryPanelOpen);
-                }}
-                size="icon"
-                variant={isLightBackground ? "dark" : "default"}
-                className={isClosing ? "animate-fade-out" : "animate-fade-in"}
-                title={historyLabel}
-                aria-label="Chat history"
-              >
-                <span
-                  className={cn(
-                    isLightBackground ? "glass-text" : "glass-text-black",
-                    "text-lg leading-none flex items-center justify-center",
-                  )}
-                >
-                  <Icon name="history" size={16} />
-                </span>
-              </Button>
-            ) : null}
-          </div>
-
-          {/* CENTER: Stop + Add Chat + Close (grouped) */}
-          <div className="flex items-center gap-2">
+        {voiceOverlay && !customHeaderActions && (
+          <div className="absolute right-2 top-2 z-30 pointer-events-auto">
             <Button
-              onClick={handleStopGeneration}
-              disabled={
-                !isGenerating && !isSpeaking && loadingMessageIndex === null
-              }
-              size="icon"
-              variant={
-                isGenerating || isSpeaking || loadingMessageIndex !== null
-                  ? "error"
-                  : isLightBackground
-                    ? "dark"
-                    : "default"
-              }
-              className={isClosing ? "animate-fade-out" : "animate-fade-in"}
-              title={
-                isGenerating
-                  ? stopLabel
-                  : isSpeaking || loadingMessageIndex !== null
-                    ? "Stop TTS"
-                    : "Nothing to stop"
-              }
-            >
-              <span
-                className={cn(
-                  isLightBackground ? "glass-text" : "glass-text-black",
-                  "text-lg leading-none flex items-center justify-center",
-                )}
-              >
-                <Icon name="stop" size={16} />
-              </span>
-            </Button>
-
-            <Button
-              onClick={clearChat}
-              size="icon"
               variant={isLightBackground ? "dark" : "default"}
-              className={isClosing ? "animate-fade-out" : "animate-fade-in"}
-              title={newChatLabel}
+              size="sm"
+              className="rounded-full"
+              onClick={() => setShowFullVoiceChat((current) => !current)}
             >
-              <span
-                className={cn(
-                  isLightBackground ? "glass-text" : "glass-text-black",
-                  "text-lg leading-none flex items-center justify-center",
-                )}
-              >
-                <Icon name="add" size={18} />
-              </span>
+              {showFullVoiceChat ? "Recent messages" : "Show full chat"}
             </Button>
-
-            {!modelDisabled && (
-              <Button
-                onClick={handleClose}
-                size="icon"
-                variant={isLightBackground ? "dark" : "default"}
-                className={isClosing ? "animate-fade-out" : "animate-fade-in"}
-                title={closeLabel}
-              >
-                <span
-                  className={cn(
-                    isLightBackground ? "glass-text" : "glass-text-black",
-                    "text-sm leading-none flex items-center justify-center",
-                  )}
-                >
-                  <Icon name="close" size={16} />
-                </span>
-              </Button>
-            )}
           </div>
+        )}
 
-          <div className="flex items-center gap-2">
-            {liveAssistantEnabled ? (
-              <Button
-                onClick={() =>
-                  updateUIConfig(
-                    "enableModelLoading",
-                    !uiConfig.enableModelLoading,
-                  )
-                }
-                size="icon"
-                variant={isLightBackground ? "dark" : "default"}
-                className={isClosing ? "animate-fade-out" : "animate-fade-in"}
-                title={
-                  uiConfig.enableModelLoading
-                    ? hideCharacterLabel
-                    : showCharacterLabel
-                }
-              >
-                <span
+        {!xr.active &&
+          !floatingDockChatControls &&
+          (attachedHistoryLayout ||
+            (!isHistoryPanelOpen &&
+              !isSettingsPanelOpen &&
+              !isQuickPanelOpen)) && (
+            <div
+              className={cn(
+                "absolute z-20 flex items-center gap-1",
+                !attachedHistoryLayout && "glass-container rounded-full p-1",
+                !attachedHistoryLayout &&
+                  isLightBackground &&
+                  "glass-container-dark",
+              )}
+              style={{
+                top: attachedHistoryLayout
+                  ? historyEnabled
+                    ? -54
+                    : 0
+                  : undefined,
+                bottom: attachedHistoryLayout ? undefined : 8,
+                right: chatOnlyAttached
+                  ? `calc(10px - (100vw - ${isWideDesktopHistory && isHistoryPanelOpen ? HISTORY_SIDEBAR_WIDTH : 0}px - min(768px, 100vw - ${isWideDesktopHistory && isHistoryPanelOpen ? HISTORY_SIDEBAR_WIDTH + 32 : 32}px)) / 2)`
+                  : attachedHistoryLayout
+                    ? -4
+                    : 8,
+              }}
+            >
+              {!attachedHistoryLayout && historyEnabled && (
+                <Button
+                  onClick={() => {
+                    setIsQuickPanelOpen(false);
+                    setIsSettingsPanelOpen(false);
+                    setIsHistoryPanelOpen(true);
+                  }}
+                  variant="ghost"
+                  className="h-9 w-9 rounded-full"
+                  aria-label="Chat history"
+                  title={historyLabel}
+                >
+                  <Icon name="history" size={18} />
+                </Button>
+              )}
+              {isTempChat && (
+                <Button
+                  onClick={() => setIsTempChat(false)}
+                  variant={isLightBackground ? "dark" : "default"}
                   className={cn(
-                    isLightBackground ? "glass-text" : "glass-text-black",
-                    "text-lg leading-none flex items-center justify-center",
+                    "rounded-full",
+                    attachedHistoryLayout ? "h-12 w-12" : "h-9 w-9",
                   )}
+                  title="Disable temporary chat"
+                  aria-label="Disable temporary chat"
+                  aria-pressed="true"
                 >
                   <Icon
-                    name={uiConfig.enableModelLoading ? "eye-off" : "eye"}
-                    size={18}
+                    name="temporary-chat"
+                    size={attachedHistoryLayout ? 22 : 18}
                   />
-                </span>
-              </Button>
-            ) : null}
+                </Button>
+              )}
+              <ComposerMenu
+                isLightBackground={isLightBackground}
+                triggerIcon="chat-controls"
+                triggerLabel="Chat options"
+                triggerTestId="chat-panel-options"
+                triggerClassName={cn(
+                  "flex items-center justify-center rounded-full",
+                  attachedHistoryLayout
+                    ? "glass-button h-12 w-12"
+                    : "composer-icon h-9 w-9",
+                  attachedHistoryLayout &&
+                    isLightBackground &&
+                    "glass-button-dark",
+                )}
+                side={attachedHistoryLayout ? "bottom" : "top"}
+                align="end"
+                compact
+                items={[
+                  { label: "New chat", icon: "add", onClick: clearChat },
+                  {
+                    label: fadeMessages ? "Show full chat" : "Fade messages",
+                    icon: "chat",
+                    onClick: () => {
+                      if (voiceOverlay)
+                        setShowFullVoiceChat(!showFullVoiceChat);
+                      else updateUIConfig("fadeChatMessages", !fadeMessages);
+                    },
+                  },
+                  ...(isGenerating || isSpeaking || loadingMessageIndex !== null
+                    ? [
+                        {
+                          label: isGenerating ? stopLabel : "Stop speech",
+                          icon: "stop",
+                          onClick: handleStopGeneration,
+                        },
+                      ]
+                    : []),
+                  ...(historyEnabled
+                    ? [
+                        {
+                          label: "Temporary",
+                          icon: "temporary-chat",
+                          onClick: () => setIsTempChat(!isTempChat),
+                          active: isTempChat,
+                        },
+                      ]
+                    : []),
+                  ...(liveAssistantEnabled
+                    ? [
+                        {
+                          label: uiConfig.enableModelLoading
+                            ? hideCharacterLabel
+                            : showCharacterLabel,
+                          icon: uiConfig.enableModelLoading ? "eye-off" : "eye",
+                          onClick: () =>
+                            updateUIConfig(
+                              "enableModelLoading",
+                              !uiConfig.enableModelLoading,
+                            ),
+                        },
+                      ]
+                    : []),
+                  ...(settingsEnabled
+                    ? [
+                        {
+                          label: settingsLabel,
+                          icon: "settings",
+                          onClick: () => {
+                            setIsQuickPanelOpen(false);
+                            setIsHistoryPanelOpen(false);
+                            setIsSettingsPanelOpen(true);
+                          },
+                          testId: "settings-toggle-button",
+                        },
+                      ]
+                    : []),
+                  ...(!modelDisabled
+                    ? [
+                        {
+                          label: closeLabel,
+                          icon: "close",
+                          onClick: handleClose,
+                        },
+                      ]
+                    : []),
+                ]}
+              >
+                {isDesktop && (
+                  <DesktopModeSettings
+                    isLightBackground={isLightBackground}
+                    menu
+                  />
+                )}
+              </ComposerMenu>
+            </div>
+          )}
 
-            {historyEnabled ? (
+        {xr.active && (
+          <div className="relative flex items-center justify-between gap-2 pb-1">
+            {/* LEFT: Settings + History */}
+            <div className="flex items-center gap-2">
+              {settingsEnabled ? (
+                <Button
+                  onClick={() => {
+                    setIsQuickPanelOpen(false);
+                    setIsHistoryPanelOpen(false);
+                    setIsSettingsPanelOpen(!isSettingsPanelOpen);
+                  }}
+                  size="icon"
+                  variant={isLightBackground ? "dark" : "default"}
+                  className={isClosing ? "animate-fade-out" : "animate-fade-in"}
+                  title={settingsLabel}
+                  aria-label="Settings"
+                  data-testid="settings-toggle-button"
+                >
+                  <span
+                    className={cn(
+                      isLightBackground ? "glass-text" : "glass-text-black",
+                      "text-base leading-none flex items-center justify-center",
+                    )}
+                  >
+                    <Icon name="settings" size={16} />
+                  </span>
+                </Button>
+              ) : null}
+
+              {historyEnabled && !attachedHistoryLayout ? (
+                <Button
+                  onClick={() => {
+                    setIsQuickPanelOpen(false);
+                    setIsSettingsPanelOpen(false);
+                    setIsHistoryPanelOpen(!isHistoryPanelOpen);
+                  }}
+                  size="icon"
+                  variant={isLightBackground ? "dark" : "default"}
+                  className={isClosing ? "animate-fade-out" : "animate-fade-in"}
+                  title={historyLabel}
+                  aria-label="Chat history"
+                >
+                  <span
+                    className={cn(
+                      isLightBackground ? "glass-text" : "glass-text-black",
+                      "text-lg leading-none flex items-center justify-center",
+                    )}
+                  >
+                    <Icon name="history" size={16} />
+                  </span>
+                </Button>
+              ) : null}
+            </div>
+
+            {/* CENTER: Stop + Add Chat + Close (grouped) */}
+            <div className="flex items-center gap-2">
               <Button
-                onClick={() => setIsTempChat(!isTempChat)}
+                onClick={handleStopGeneration}
+                disabled={
+                  !isGenerating && !isSpeaking && loadingMessageIndex === null
+                }
                 size="icon"
                 variant={
-                  isTempChat
-                    ? "default"
+                  isGenerating || isSpeaking || loadingMessageIndex !== null
+                    ? "error"
                     : isLightBackground
                       ? "dark"
                       : "default"
                 }
-                className={cn(
-                  isTempChat &&
-                    (isLightBackground
-                      ? "bg-yellow-300/40 border-yellow-400/60"
-                      : "bg-yellow-500/40 border-yellow-500/60"),
-                  isClosing ? "animate-fade-out" : "animate-fade-in",
-                )}
-                title={isTempChat ? tempDisabledLabel : tempEnabledLabel}
+                className={isClosing ? "animate-fade-out" : "animate-fade-in"}
+                title={
+                  isGenerating
+                    ? stopLabel
+                    : isSpeaking || loadingMessageIndex !== null
+                      ? "Stop TTS"
+                      : "Nothing to stop"
+                }
               >
                 <span
                   className={cn(
@@ -2548,12 +3117,112 @@ const ChatContainer = ({
                     "text-lg leading-none flex items-center justify-center",
                   )}
                 >
-                  <Icon name={isTempChat ? "star" : "pin"} size={18} />
+                  <Icon name="stop" size={16} />
                 </span>
               </Button>
-            ) : null}
+
+              <Button
+                onClick={clearChat}
+                size="icon"
+                variant={isLightBackground ? "dark" : "default"}
+                className={isClosing ? "animate-fade-out" : "animate-fade-in"}
+                title={newChatLabel}
+              >
+                <span
+                  className={cn(
+                    isLightBackground ? "glass-text" : "glass-text-black",
+                    "text-lg leading-none flex items-center justify-center",
+                  )}
+                >
+                  <Icon name="add" size={18} />
+                </span>
+              </Button>
+
+              {!modelDisabled && (
+                <Button
+                  onClick={handleClose}
+                  size="icon"
+                  variant={isLightBackground ? "dark" : "default"}
+                  className={isClosing ? "animate-fade-out" : "animate-fade-in"}
+                  title={closeLabel}
+                >
+                  <span
+                    className={cn(
+                      isLightBackground ? "glass-text" : "glass-text-black",
+                      "text-sm leading-none flex items-center justify-center",
+                    )}
+                  >
+                    <Icon name="close" size={16} />
+                  </span>
+                </Button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {liveAssistantEnabled ? (
+                <Button
+                  onClick={() =>
+                    updateUIConfig(
+                      "enableModelLoading",
+                      !uiConfig.enableModelLoading,
+                    )
+                  }
+                  size="icon"
+                  variant={isLightBackground ? "dark" : "default"}
+                  className={isClosing ? "animate-fade-out" : "animate-fade-in"}
+                  title={
+                    uiConfig.enableModelLoading
+                      ? hideCharacterLabel
+                      : showCharacterLabel
+                  }
+                >
+                  <span
+                    className={cn(
+                      isLightBackground ? "glass-text" : "glass-text-black",
+                      "text-lg leading-none flex items-center justify-center",
+                    )}
+                  >
+                    <Icon
+                      name={uiConfig.enableModelLoading ? "eye-off" : "eye"}
+                      size={18}
+                    />
+                  </span>
+                </Button>
+              ) : null}
+
+              {historyEnabled ? (
+                <Button
+                  onClick={() => setIsTempChat(!isTempChat)}
+                  size="icon"
+                  variant={
+                    isTempChat
+                      ? "default"
+                      : isLightBackground
+                        ? "dark"
+                        : "default"
+                  }
+                  className={cn(
+                    isTempChat &&
+                      (isLightBackground
+                        ? "bg-yellow-300/40 border-yellow-400/60"
+                        : "bg-yellow-500/40 border-yellow-500/60"),
+                    isClosing ? "animate-fade-out" : "animate-fade-in",
+                  )}
+                  title={isTempChat ? tempDisabledLabel : tempEnabledLabel}
+                >
+                  <span
+                    className={cn(
+                      isLightBackground ? "glass-text" : "glass-text-black",
+                      "text-lg leading-none flex items-center justify-center",
+                    )}
+                  >
+                    <Icon name={isTempChat ? "star" : "pin"} size={18} />
+                  </span>
+                </Button>
+              ) : null}
+            </div>
           </div>
-        </div>
+        )}
 
         {customFooterContent ? (
           <div className="relative z-10 px-1">{customFooterContent}</div>
@@ -2562,17 +3231,32 @@ const ChatContainer = ({
         {/* Messages container */}
         <div
           ref={messagesContainerRef}
-          className="flex-1 relative overflow-hidden"
-          style={
-            isDesktop
+          aria-hidden={fadeMessages && messagesFaded ? true : undefined}
+          inert={fadeMessages && messagesFaded}
+          onMouseEnter={() => setMessagesHovered(true)}
+          onMouseLeave={() => setMessagesHovered(false)}
+          onFocusCapture={() => setMessagesFocused(true)}
+          onBlurCapture={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget))
+              setMessagesFocused(false);
+          }}
+          className={cn(
+            "flex-1 relative overflow-hidden",
+            !attachedHistoryLayout && isHistoryPanelOpen && "invisible",
+          )}
+          style={{
+            opacity: fadeMessages && messagesFaded ? 0 : 1,
+            pointerEvents: fadeMessages && messagesFaded ? "none" : undefined,
+            transition: "opacity 500ms ease",
+            ...(isDesktop && !normalDesktop && !xr.active
               ? {
                   maskImage:
                     "linear-gradient(to bottom, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)",
                   WebkitMaskImage:
                     "linear-gradient(to bottom, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)",
                 }
-              : undefined
-          }
+              : {}),
+          }}
         >
           {!(isDesktop || isAndroid) && (
             <div
@@ -2598,8 +3282,9 @@ const ChatContainer = ({
           <div
             ref={scrollRef}
             className={cn(
-              "absolute inset-0 overflow-y-auto scrollbar-glass hover-scrollbar scroll-smooth",
+              "absolute inset-0 overflow-y-auto [overflow-anchor:none] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
               isDesktop && "p-3",
+              !xr.active && !attachedHistoryLayout && "pb-14",
             )}
           >
             {messages.length === 0 ? (
@@ -2607,19 +3292,17 @@ const ChatContainer = ({
                 <div className="flex flex-col items-center justify-center h-full gap-6">
                   {customEmptyState}
                 </div>
-              ) : (
+              ) : !xr.active ? null : (
                 <div className="flex flex-col items-center justify-center h-full gap-6">
                   <div
                     className={cn(
                       "glass-container",
                       isLightBackground && "glass-container-dark",
-                      "px-10 py-8 rounded-3xl max-w-md flex flex-col justify-center items-center text-center",
+                      "px-10 py-8 rounded-3xl max-w-md flex flex-col justify-center items-center gap-3 text-center",
                       isClosing ? "animate-fade-out" : "animate-fade-in",
                     )}
                   >
-                    <div className="w-full flex justify-center items-center text-6xl mb-4">
-                      <Icon name="chat" size={18} />
-                    </div>
+                    <Icon name="chat" size={24} className="self-center" />
                     <p
                       className={cn(
                         isLightBackground ? "glass-text" : "glass-text-black",
@@ -2634,7 +3317,9 @@ const ChatContainer = ({
             ) : (
               <div
                 style={{
-                  height: `${chatVirtualizer.getTotalSize()}px`,
+                  height: fadeMessages
+                    ? `max(100%, ${chatVirtualizer.getTotalSize()}px)`
+                    : `${chatVirtualizer.getTotalSize()}px`,
                   position: "relative",
                   width: "100%",
                 }}
@@ -2654,10 +3339,14 @@ const ChatContainer = ({
                         data-index={virtualItem.index}
                         style={{
                           position: "absolute",
-                          top: 0,
+                          top: fadeMessages
+                            ? `calc(max(0px, 100% - ${chatVirtualizer.getTotalSize()}px) + ${virtualItem.start}px)`
+                            : 0,
                           left: 0,
                           width: "100%",
-                          transform: `translateY(${virtualItem.start}px)`,
+                          transform: fadeMessages
+                            ? undefined
+                            : `translateY(${virtualItem.start}px)`,
                         }}
                       >
                         <div className="flex flex-col gap-3 animate-slide-left-up">
@@ -2698,12 +3387,23 @@ const ChatContainer = ({
                       key={virtualItem.key}
                       ref={chatVirtualizer.measureElement}
                       data-index={virtualItem.index}
+                      data-chat-recent-exiting={item.isExiting || undefined}
+                      aria-hidden={item.isExiting || undefined}
+                      inert={item.isExiting || undefined}
                       style={{
                         position: "absolute",
-                        top: 0,
+                        top: fadeMessages
+                          ? `calc(max(0px, 100% - ${chatVirtualizer.getTotalSize()}px) + ${virtualItem.start}px)`
+                          : 0,
                         left: 0,
                         width: "100%",
-                        transform: `translateY(${virtualItem.start}px)`,
+                        transform: fadeMessages
+                          ? undefined
+                          : `translateY(${virtualItem.start}px)`,
+                        animation: item.isExiting
+                          ? "chat-recent-exit 450ms ease forwards"
+                          : undefined,
+                        pointerEvents: item.isExiting ? "none" : undefined,
                       }}
                     >
                       <ChatMessage
@@ -2717,19 +3417,17 @@ const ChatContainer = ({
                         isStreamingMessage={
                           isGenerating && item.isLastAIMessage
                         }
-                        currentSessionRef={currentSessionRef}
                         smoothStreamingAnimation={
                           uiConfig?.smoothStreamingAnimation || false
                         }
                         shouldAnimate={shouldAnimateThis}
+                        onRevealStateChange={handleRevealStateChange}
                         onCopyMessage={handleCopyMessage}
                         onPlayTTS={handlePlayTTS}
                         onEditUserMessage={editUserMessage}
                         onRewriteMessage={handleRewriteMessage}
                         onPreviousBranch={handlePreviousBranch}
                         onNextBranch={handleNextBranch}
-                        setLoadingMessageIndex={setLoadingMessageIndex}
-                        setPlayingMessageIndex={setPlayingMessageIndex}
                       />
                     </div>
                   );
@@ -2765,43 +3463,55 @@ const ChatContainer = ({
 
         {/* Settings Panel - renders inside ChatContainer */}
         {settingsEnabled && isSettingsPanelOpen && (
-          <div className="absolute inset-0 z-10">
-            <Suspense fallback={null}>
-              <SettingsPanel
-                onClose={handleSettingsPanelClose}
-                isLightBackground={isLightBackground}
-                embedConfig={embedConfig}
-                requestedView={requestedSettingsView}
-                onActiveTargetChange={setActiveSettingsTarget}
-                animationClass={
-                  isSettingsPanelClosing
-                    ? "animate-fade-out"
-                    : "animate-slide-up-fade-in"
-                }
-                onRequestDeleteModelDialog={handleRequestDeleteModelDialog}
-                onRequestDeleteMotionDialog={handleRequestDeleteMotionDialog}
-                onRequestDeleteStageDialog={handleRequestDeleteStageDialog}
-                onRequestDeleteEmoteDialog={handleRequestDeleteEmoteDialog}
-                onRequestDeleteVoiceDialog={handleRequestDeleteVoiceDialog}
-                onRequestDeleteLLMModel={handleRequestDeleteLLMModel}
-                onRequestDeleteSttModel={handleRequestDeleteSttModel}
-                onRequestDeleteTtsPack={handleRequestDeleteTtsPack}
-                sttExternalDeleteTick={sttExternalDeleteTick}
-                ttsExternalDeleteTick={ttsExternalDeleteTick}
-                onRequestResetSetupDialog={handleRequestResetSetupDialog}
-                onRequestSettingsErrorDialog={handleRequestSettingsErrorDialog}
-                refreshTrigger={settingsRefreshTrigger}
-              />
-            </Suspense>
-          </div>
+          <XrSurface
+            id="settings"
+            widthMeters={0.85}
+            heightMeters={0.95}
+            widthPixels={680}
+            heightPixels={760}
+            offsetMeters={[0.95, 0, 0.15]}
+          >
+            <div className="absolute inset-0 z-10">
+              <Suspense fallback={null}>
+                <SettingsPanel
+                  onClose={handleSettingsPanelClose}
+                  isLightBackground={isLightBackground}
+                  embedConfig={embedConfig}
+                  requestedView={requestedSettingsView}
+                  onActiveTargetChange={setActiveSettingsTarget}
+                  animationClass={
+                    isSettingsPanelClosing
+                      ? "animate-fade-out"
+                      : "animate-slide-up-fade-in"
+                  }
+                  onRequestDeleteModelDialog={handleRequestDeleteModelDialog}
+                  onRequestDeleteMotionDialog={handleRequestDeleteMotionDialog}
+                  onRequestDeleteStageDialog={handleRequestDeleteStageDialog}
+                  onRequestDeleteEmoteDialog={handleRequestDeleteEmoteDialog}
+                  onRequestDeleteVoiceDialog={handleRequestDeleteVoiceDialog}
+                  onRequestDeleteLLMModel={handleRequestDeleteLLMModel}
+                  onRequestDeleteSttModel={handleRequestDeleteSttModel}
+                  onRequestDeleteTtsPack={handleRequestDeleteTtsPack}
+                  sttExternalDeleteTick={sttExternalDeleteTick}
+                  ttsExternalDeleteTick={ttsExternalDeleteTick}
+                  onRequestResetSetupDialog={handleRequestResetSetupDialog}
+                  onRequestSettingsErrorDialog={
+                    handleRequestSettingsErrorDialog
+                  }
+                  refreshTrigger={settingsRefreshTrigger}
+                />
+              </Suspense>
+            </div>
+          </XrSurface>
         )}
 
         {/* Chat History Panel - renders inside ChatContainer */}
-        {historyEnabled && isHistoryPanelOpen && (
+        {!attachedHistoryLayout && historyEnabled && isHistoryPanelOpen && (
           <div className="absolute inset-0 z-10">
             <Suspense fallback={null}>
               <TypedChatHistoryPanel
                 isLightBackground={isLightBackground}
+                currentChatId={currentChatId}
                 onClose={handleHistoryClose}
                 onSelectChat={handleSelectChat}
                 onRequestEditDialog={handleRequestEditDialog}
@@ -2817,53 +3527,9 @@ const ChatContainer = ({
           </div>
         )}
 
+        {!attachedHistoryLayout && historyDialogs}
+
         <Suspense fallback={null}>
-          {/* Edit Dialog - renders outside ChatHistoryPanel to avoid backdrop-filter issues */}
-          {editingChatId && (
-            <div className="absolute inset-0 z-20">
-              <TypedDialog
-                type="edit"
-                title="Edit Chat Title"
-                message=""
-                itemId={editingChatId}
-                initialValue={editingChatTitle}
-                inputPlaceholder="Enter new title..."
-                inputMaxLength={100}
-                isLightBackground={isLightBackground}
-                animationClass={
-                  isEditDialogClosing
-                    ? "animate-fade-out"
-                    : "animate-slide-up-fade-in"
-                }
-                confirmLabel="Save"
-                onConfirm={handleEditDialogSave}
-                onCancel={handleEditDialogCancel}
-              />
-            </div>
-          )}
-
-          {/* Delete Dialog - renders outside ChatHistoryPanel to avoid backdrop-filter issues */}
-          {deletingChatId && (
-            <div className="absolute inset-0 z-20">
-              <TypedDialog
-                type="delete"
-                title="Delete Chat?"
-                message="This will permanently delete this chat and all associated messages, images, and audio files. This cannot be undone."
-                itemId={deletingChatId}
-                isLightBackground={isLightBackground}
-                animationClass={
-                  isDeleteDialogClosing
-                    ? "animate-fade-out"
-                    : "animate-slide-up-fade-in"
-                }
-                confirmLabel="Delete"
-                confirmStyle="error"
-                onConfirm={handleDeleteDialogConfirm}
-                onCancel={handleDeleteDialogCancel}
-              />
-            </div>
-          )}
-
           {/* Model Delete Dialog - renders outside SettingsPanel */}
           {deletingModelId && (
             <div className="absolute inset-0 z-20">
@@ -3092,7 +3758,7 @@ const ChatContainer = ({
           )}
         </Suspense>
       </div>
-    </>
+    </XrSurface>
   );
 };
 

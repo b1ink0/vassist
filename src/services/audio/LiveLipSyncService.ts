@@ -74,6 +74,10 @@ class LiveLipSyncService {
     this.legacyLipSyncEnabled = enabled;
   }
 
+  getAudioAnalyser(audio: HTMLAudioElement): AnalyserNode | null {
+    return this.graph?.audio === audio ? this.graph.meter : null;
+  }
+
   isAccurateLipSyncEnabled(): boolean {
     return this.accurateLipSyncEnabled;
   }

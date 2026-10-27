@@ -54,7 +54,12 @@ import { pmxConverterService } from "../../services/mmd/PMXConverterService";
 import { modelStorageService } from "../../services/storage/ModelStorageService";
 import { loadStage } from "../stages/StageManager";
 import type { StageRuntime } from "../stages/types";
-import type { StageOptions } from "../../config/stageConfig";
+import {
+  DefaultStageCalibration,
+  type StageOptions,
+  type StageSettings,
+} from "../../config/stageConfig";
+import { getAvatarBounds } from "../stages/StagePlacement";
 import {
   isAndroid,
   isDesktop,
@@ -193,7 +198,9 @@ export const buildMmdModelScene = async (
   const isDedicatedARScene = isAndroid && isARModeRequested();
 
   // Check if Portrait Mode is enabled (used in multiple places)
-  const isPortraitMode = finalConfig.uiConfig?.enablePortraitMode || false;
+  const isPortraitMode =
+    finalConfig.presentation !== "xr" &&
+    (finalConfig.uiConfig?.enablePortraitMode || false);
 
   SdefInjector.OverrideEngineCreateEffect(engine);
 
@@ -288,7 +295,8 @@ export const buildMmdModelScene = async (
   let cameraSaveEnabled = finalConfig.uiConfig?.camera?.savePosition ?? false;
 
   const isARActive = (): boolean =>
-    scene.metadata?.arController?.isActive() ?? false;
+    scene.metadata?.xrActive === true ||
+    (scene.metadata?.arController?.isActive() ?? false);
 
   // Helper functions for camera controls
   const applyZoom = (delta: number): void => {
@@ -1044,7 +1052,7 @@ export const buildMmdModelScene = async (
     // EXTRACT AND SAVE TEXTURE/MESH METADATA
     // ========================================
     // Check if we need to populate texture/mesh metadata for this model
-    if (finalConfig.modelId) {
+    if (finalConfig.modelId && finalConfig.presentation !== "xr") {
       try {
         Logger.log(
           "MmdModelScene",
@@ -1117,6 +1125,23 @@ export const buildMmdModelScene = async (
   if (!isDedicatedARScene) {
     const metadata = modelMesh.metadata as MeshMetadataState | undefined;
     const avatarMeshes = metadata?.meshes ?? [modelMesh];
+    if (finalConfig.presentation === "xr") {
+      const calibration =
+        finalConfig.uiConfig?.stage?.calibration[
+          finalConfig.modelId ?? "builtin_default_model"
+        ] ?? DefaultStageCalibration;
+      scene.metadata.xrWorldUnitsPerMeter =
+        getAvatarBounds(avatarMeshes).height /
+        Math.min(4, Math.max(0.25, calibration.heightMeters));
+      const bounds = getAvatarBounds(avatarMeshes);
+      scene.metadata.xrSpawnPosition = [
+        (bounds.min.x + bounds.max.x) / 2,
+        bounds.min.y +
+          calibration.floorOffset * scene.metadata.xrWorldUnitsPerMeter,
+        (bounds.min.z + bounds.max.z) / 2 -
+          scene.metadata.xrWorldUnitsPerMeter * 2.2,
+      ];
+    }
     try {
       stageRuntime = await loadStage(
         scene,
@@ -1134,10 +1159,12 @@ export const buildMmdModelScene = async (
       );
     }
   }
-  const stageMesh = stageRuntime?.root ?? null;
+  let stageMesh = stageRuntime?.root ?? null;
   scene.metadata.stageMesh = stageMesh;
+  scene.metadata.xrFloorMeshes = stageRuntime?.floorMeshes ?? [];
   if (stageMesh) ground.setEnabled(false);
   const handleStageParallax = (event: Event) => {
+    if (scene.metadata?.xrActive) return;
     const { x, y } = (event as CustomEvent<{ x: number; y: number }>).detail;
     stageRuntime?.setParallax(x, y);
   };
@@ -1216,7 +1243,12 @@ export const buildMmdModelScene = async (
 
   // Cast the avatar's shadow onto a camera-facing plane behind it. Keeping this
   // receiver in the 3D scene makes the shadow follow pose and camera movement.
-  if (shadowGenerator && !isDedicatedARScene && !stageMesh) {
+  if (
+    shadowGenerator &&
+    !isDedicatedARScene &&
+    !stageMesh &&
+    finalConfig.presentation !== "xr"
+  ) {
     const modelMetadata = modelMesh.metadata as MeshMetadataState | undefined;
     const shadowMeshes = Array.isArray(modelMetadata?.meshes)
       ? modelMetadata.meshes
@@ -1413,9 +1445,9 @@ export const buildMmdModelScene = async (
     try {
       Logger.log("MmdModelScene", "Applying saved texture and mesh states...");
 
-      const currentModel = await modelStorageService.getModel(
-        finalConfig.modelId,
-      );
+      const currentModel = finalConfig.modelVisibility
+        ? { metadata: finalConfig.modelVisibility }
+        : await modelStorageService.getModel(finalConfig.modelId);
 
       if (
         currentModel?.metadata?.textures ||
@@ -1926,6 +1958,58 @@ export const buildMmdModelScene = async (
     defaultPipeline.imageProcessing.exposure =
       (quality.exposure || 1.05) * (stageRuntime?.brightness ?? 1);
   };
+  if (finalConfig.presentation === "xr") {
+    let stageUpdate = Promise.resolve();
+    scene.metadata.replaceXrStage = (settings: StageSettings) => {
+      const replace = async () => {
+        if (scene.isDisposed) return;
+        const config = {
+          ...finalConfig,
+          uiConfig: { ...finalConfig.uiConfig, stage: settings },
+        };
+        // Resolve the new selection through the library, not an old bootstrap object URL.
+        delete config.stageUrl;
+        delete config.stageFormat;
+        const calibration =
+          settings.calibration[
+            finalConfig.modelId ?? "builtin_default_model"
+          ] ?? DefaultStageCalibration;
+        const bounds = getAvatarBounds(modelMeshes);
+        scene.metadata!.xrWorldUnitsPerMeter =
+          bounds.height / Math.min(4, Math.max(0.25, calibration.heightMeters));
+        scene.metadata!.xrSpawnPosition = [
+          (bounds.min.x + bounds.max.x) / 2,
+          bounds.min.y +
+            calibration.floorOffset * scene.metadata!.xrWorldUnitsPerMeter,
+          (bounds.min.z + bounds.max.z) / 2 -
+            scene.metadata!.xrWorldUnitsPerMeter * 2.2,
+        ];
+        stageRuntime?.dispose();
+        stageRuntime = null;
+        stageMesh = null;
+        scene.metadata!.stageMesh = null;
+        scene.metadata!.xrFloorMeshes = [];
+        ground.setEnabled(true);
+        stageRuntime = await loadStage(
+          scene,
+          config,
+          modelMeshes,
+          mmdRoot,
+          materialBuilder,
+        );
+        stageMesh = stageRuntime?.root ?? null;
+        scene.metadata!.stageMesh = stageMesh;
+        scene.metadata!.xrFloorMeshes = stageRuntime?.floorMeshes ?? [];
+        ground.setEnabled(!stageMesh);
+        stageRuntime?.setAvatarShadows(config.enableShadows !== false);
+        defaultPipeline.imageProcessing.exposure =
+          (quality.exposure || 1.05) * (stageRuntime?.brightness ?? 1);
+      };
+      const next = stageUpdate.then(replace);
+      stageUpdate = next.catch(() => {});
+      return next;
+    };
+  }
 
   defaultPipeline.imageProcessing.colorCurvesEnabled = true;
   const colorCurves = new ColorCurves();
@@ -2054,6 +2138,31 @@ export const buildMmdModelScene = async (
   scene.metadata.mmdCamera = mmdCamera;
   scene.metadata.renderPipeline = defaultPipeline;
   scene.metadata.setStickerBorderSettings = stickerBorderController.setSettings;
+  let savedClipPlane = scene.clipPlane;
+  let xrOwnsCamera = false;
+  let savedApplyByPostProcess =
+    scene.imageProcessingConfiguration.applyByPostProcess;
+  scene.metadata.setXrActive = (active: boolean) => {
+    if (active === xrOwnsCamera) return;
+    xrOwnsCamera = active;
+    scene.metadata.xrActive = active;
+    if (active) {
+      savedClipPlane = scene.clipPlane;
+      savedApplyByPostProcess =
+        scene.imageProcessingConfiguration.applyByPostProcess;
+      scene.clipPlane = null;
+      stageRuntime?.setParallax(0, 0);
+      detachCameraControls();
+      defaultPipeline.depthOfFieldEnabled = false;
+      // Apply exposure in world materials. Desktop postprocesses do not own stereo cameras.
+      scene.imageProcessingConfiguration.applyByPostProcess = false;
+    } else {
+      scene.imageProcessingConfiguration.applyByPostProcess =
+        savedApplyByPostProcess;
+      scene.clipPlane = savedClipPlane;
+      if (!isCameraLocked) attachCameraControls();
+    }
+  };
 
   // ========================================
   // AR SESSION INITIALIZATION

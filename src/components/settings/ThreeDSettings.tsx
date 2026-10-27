@@ -40,6 +40,7 @@ import { vmdConverterService } from "../../services/mmd/VMDConverterService";
 import { modelStorageService } from "../../services/storage/ModelStorageService";
 import StageSettings from "./StageSettings";
 import { canConfigureStages } from "../../babylon/stages/stageAvailability";
+import { useXrRuntime } from "../../contexts/XrRuntimeContext";
 import { motionStorageService } from "../../services/storage/MotionStorageService";
 import emoteStorageService from "../../services/storage/EmoteStorageService";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
@@ -211,6 +212,7 @@ const ThreeDSettings = ({
   onRequestSettingsErrorDialog,
   refreshTrigger,
 }: ThreeDSettingsProps) => {
+  const xr = useXrRuntime();
   const uiConfig = useUIConfig();
   const { updateUIConfig } = useConfigUIActions();
   const { reloadScene } = useSceneActions();
@@ -229,11 +231,12 @@ const ThreeDSettings = ({
   const [activeAssetTab, setActiveAssetTab] = useState<AssetTabId>("avatars");
   useEffect(() => {
     if (
+      !xr.enabled &&
       !canConfigureStages(uiConfig.desktopMode.mode) &&
       activeAssetTab === "stages"
     )
       setActiveAssetTab("avatars");
-  }, [activeAssetTab, uiConfig.desktopMode.mode]);
+  }, [activeAssetTab, uiConfig.desktopMode.mode, xr.enabled]);
   const [subTabIndicatorStyle, setSubTabIndicatorStyle] = useState({
     left: 0,
     width: 0,
@@ -2802,7 +2805,8 @@ const ThreeDSettings = ({
                         <TabBar
                           tabs={[
                             { id: "avatars", label: "Avatars" },
-                            ...(canConfigureStages(uiConfig.desktopMode.mode)
+                            ...(xr.enabled ||
+                            canConfigureStages(uiConfig.desktopMode.mode)
                               ? [{ id: "stages", label: "Stages" }]
                               : []),
                           ]}

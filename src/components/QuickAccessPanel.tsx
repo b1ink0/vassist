@@ -31,6 +31,7 @@ import { Icon } from "./icons";
 import { Select, SettingsRow } from "./ui";
 import RemoteModelPicker from "./settings/shared/RemoteModelPicker";
 import DesktopModeSettings from "./settings/DesktopModeSettings";
+import { XrSettings } from "./settings/XrSettings";
 
 type ProviderValue =
   | "openai"
@@ -380,7 +381,7 @@ const QuickAccessPanel = ({
           <div className="space-y-4">
             <SectionHeader
               label="Mode"
-              onMore={() => onOpenSettings?.({ tab: "ui" })}
+              onMore={() => onOpenSettings?.({ tab: "ui", subTab: "ui.mode" })}
             />
             <DesktopModeSettings
               isLightBackground={isLightBackground}
@@ -388,6 +389,33 @@ const QuickAccessPanel = ({
             />
           </div>
         ) : null}
+
+        {embedConfig.features.liveAssistant3d && (
+          <SectionHeader
+            label="Enable Avatar"
+            onMore={() => onOpenSettings?.({ tab: "3d" })}
+            toggle={
+              <Toggle
+                aria-label="Enable Avatar"
+                data-testid="quick-enable-avatar-toggle"
+                checked={uiConfig.enableModelLoading}
+                onChange={(enabled) =>
+                  updateUIConfig("enableModelLoading", enabled)
+                }
+              />
+            }
+          />
+        )}
+
+        {isDesktop && desktopAPI?.xr && (
+          <div className="space-y-3">
+            <SectionHeader
+              label="XR"
+              onMore={() => onOpenSettings?.({ tab: "ui", subTab: "ui.mode" })}
+            />
+            <XrSettings isLightBackground={isLightBackground} compact />
+          </div>
+        )}
 
         {/* LLM Provider */}
         <div className="flex flex-col gap-4">

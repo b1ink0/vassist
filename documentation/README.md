@@ -6,6 +6,7 @@ This folder contains the VitePress product documentation for VAssist.
 
 - Keep the docs user-first, with install, setup, and usage guides separate from technical reference pages.
 - Document platform differences for desktop, Android, and the browser extension.
+- Keep chat, history, assistant controls, and appearance guides aligned with the current layouts on each platform.
 - Document the browser-facing package surfaces for plain ESM and React hosts.
 - Generate repository inventory pages from the current workspace instead of hand-maintaining file counts.
 

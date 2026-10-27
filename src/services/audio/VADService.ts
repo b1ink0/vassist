@@ -23,6 +23,7 @@ type VADStartOptions = {
   onSpeechEnd?: ((audio: Float32Array) => void) | null;
   onError?: ((error: unknown) => void) | null;
   stream?: MediaStream;
+  onAudioFrame?: (frame: Float32Array) => void;
 };
 
 class VADService {
@@ -132,6 +133,13 @@ class VADService {
           return this.mediaStream;
         },
 
+        resumeStream: async () => {
+          if (!this.mediaStream) throw new Error("Media stream unavailable");
+          return this.mediaStream;
+        },
+        onFrameProcessed: (_probabilities, frame) =>
+          options.onAudioFrame?.(frame),
+
         // Explicitly specify v5 model (required!)
         model: "v5",
 
@@ -189,7 +197,7 @@ class VADService {
       this.isListening = true;
 
       // Start the VAD
-      this.vad.start();
+      await this.vad.start();
     } catch (error) {
       Logger.error("VAD", "Failed to start:", error);
       if (this.onError) {
@@ -203,32 +211,34 @@ class VADService {
    * Stop the VAD and cleanup resources
    */
   async stop() {
-    if (!this.isListening) {
-      return;
-    }
+    if (!this.isListening && !this.vad && !this.mediaStream) return;
 
     Logger.log("VAD", "Stopping...");
 
     try {
-      if (this.vad) {
-        this.vad.pause();
-        this.vad.destroy();
-        this.vad = null;
-      }
-
-      if (this.mediaStream) {
+      const vad = this.vad;
+      this.vad = null;
+      this.isListening = false;
+      try {
+        if (vad) await vad.destroy();
+      } finally {
         this.mediaStream
-          .getTracks()
+          ?.getTracks()
           .forEach((track: MediaStreamTrack) => track.stop());
         this.mediaStream = null;
       }
-
-      this.isListening = false;
       Logger.log("VAD", "Stopped successfully");
     } catch (error) {
       Logger.error("VAD", "Error during stop:", error);
       throw error;
     }
+  }
+
+  async replaceStream(stream: MediaStream): Promise<void> {
+    if (!this.vad || !this.isListening) throw new Error("VAD is not listening");
+    await this.vad.pause();
+    this.mediaStream = stream;
+    await this.vad.start();
   }
 
   /**

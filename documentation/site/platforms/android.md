@@ -17,7 +17,7 @@ Do setup in the full Android app first. The wallpaper reads those saved choices 
 
 The setup wizard starts with Blue Milky Way selected. In **Settings > UI > Display**, choose bundled wallpapers, import images, or use a solid color or customizable gradient for the app and live wallpaper. Android stores imported images in VAssist. See [Android backgrounds](/settings/ui#android-backgrounds) for slideshow, parallax, image effects, and background color controls.
 
-In the full app and live wallpaper, you can also enable a 3D stage from **Settings > UI > Display**, **Settings > 3D > Models > Stages**, or the Live Assistant stage button. A fresh setup starts without a built-in stage; a previously saved custom default may load. The same saved stage settings are used in the app and wallpaper. AR is the exception: while the camera view is active, VAssist hides the selected background and stage so the camera view shows through; both return when you exit AR.
+In the full app and live wallpaper, you can also enable a 3D stage from **Settings > UI > Display**, **Settings > 3D > Models > Stages**, or the Live Assistant stage button. A fresh setup starts without a built-in stage. A previously saved custom default may load. The same saved stage settings are used in the app and wallpaper. AR is the exception: while the camera view is active, VAssist hides the selected background and stage so the camera view shows through. Both return when you exit AR.
 
 ## Android Local AI
 

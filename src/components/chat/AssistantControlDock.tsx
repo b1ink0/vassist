@@ -2,8 +2,17 @@
  * @fileoverview Floating assistant control dock with positioning logic.
  */
 
+import { useDockPanelTransition } from "./assistant-controls/hooks/useDockPanelTransition";
+import { useIsAssistantReady } from "../../hooks/app/useAssistant";
+import { useEmbedHost } from "../../embed/EmbedHostContext";
+import { getAvatarScreenBounds } from "../../babylon/camera/getAvatarScreenBounds";
+import { XrControlPanel } from "../xr/XrControlPanel";
 import { canRenderStages } from "../../babylon/stages/stageAvailability";
+import { useXrRuntime } from "../../contexts/XrRuntimeContext";
+import { XrSurface } from "../xr/XrSurface";
+import { getXrClientRuntime } from "../../services/xr/XrClientRuntime";
 import { BUILT_IN_STAGES, getBuiltInStage } from "../../config/stageConfig";
+import type { StageSelection } from "../../config/stageConfig";
 import {
   lazy,
   Suspense,
@@ -15,12 +24,20 @@ import {
   type SetStateAction,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { useChatActions } from "../../hooks/app/useChat";
+import { useChatActions, useIsTempChat } from "../../hooks/app/useChat";
+import { useToolingActions } from "../../hooks/app/useTooling";
+import { ComposerMenu } from "./ComposerMenu";
+import { getFloatingWindowSize } from "./floatingChatSize";
+import DesktopModeSettings from "../settings/DesktopModeSettings";
+import { Icon } from "../icons";
+import { Button } from "../ui";
+import { cn } from "../../utils/cn";
 import { useButtonPosition, useDragActions } from "../../hooks/app/useDrag";
 import {
   usePositionManagerRef,
   useSceneActions,
   useSceneRef,
+  useSceneKey,
 } from "../../hooks/app/useScene";
 import {
   useConfigUIActions,
@@ -40,6 +57,8 @@ import {
   isAndroid,
   isDesktop,
   isDesktopAttachedModeWindow,
+  isDetachedDesktopWindow,
+  isDetachedAvatarWindow,
   isDetachedChatWindow,
 } from "../../utils/PlatformUtils";
 import {
@@ -132,6 +151,31 @@ const AssistantControlDock = ({
 }: AssistantControlDockProps) => {
   const positionManagerRef = usePositionManagerRef();
   const sceneRef = useSceneRef();
+  const sceneKey = useSceneKey();
+  const assistantReady = useIsAssistantReady();
+  const { embedConfig } = useEmbedHost();
+  const [viewport, setViewport] = useState(() => ({
+    width: window.innerWidth,
+    height: window.visualViewport?.height ?? window.innerHeight,
+  }));
+  useEffect(() => {
+    const resize = () =>
+      setViewport({
+        width: window.innerWidth,
+        height: Math.min(
+          window.innerHeight,
+          window.visualViewport?.height ?? window.innerHeight,
+        ),
+      });
+    window.addEventListener("resize", resize);
+    window.visualViewport?.addEventListener("resize", resize);
+    return () => {
+      window.removeEventListener("resize", resize);
+      window.visualViewport?.removeEventListener("resize", resize);
+    };
+  }, []);
+  const xr = useXrRuntime();
+  const stagesAvailable = canRenderStages || xr.enabled;
   const { reloadScene, recreateScene } = useSceneActions();
   const buttonPos = useButtonPosition();
   const {
@@ -139,13 +183,35 @@ const AssistantControlDock = ({
     startButtonDrag,
     endButtonDrag,
   } = useDragActions();
-  const { setPendingDropData } = useChatActions();
+  const {
+    setPendingDropData,
+    setIsChatContainerVisible,
+    setIsChatInputVisible,
+    setIsTempChat,
+    clearChat,
+  } = useChatActions();
+  const { setIsHistoryPanelOpen, setIsSettingsPanelOpen, setIsQuickPanelOpen } =
+    useToolingActions();
+  const isTempChat = useIsTempChat();
   const uiConfig = useUIConfig();
   const { updateUIConfig } = useConfigUIActions();
-  const desktopAPI = useDesktopApi() as DesktopApiForAssistantControls | null;
+  const desktopApi = useDesktopApi();
+  const desktopAPI = desktopApi as DesktopApiForAssistantControls | null;
+  const xrAvailable = xr.enabled || (isDesktop && Boolean(desktopApi?.xr));
+  const showXrButton = xrAvailable && !modelDisabled;
+  const controlsCollapsed = uiConfig.assistantControlsCollapsed === true;
+  const allowFloatingDockDrag =
+    isDesktop &&
+    !isDesktopAttachedModeWindow &&
+    !isDetachedDesktopWindow &&
+    !xr.active;
 
   const lastSetPosition = useRef<ButtonPosition>({ x: -100, y: -100 });
   const [isDragOverButton, setIsDragOverButton] = useState(false);
+  const [isXrPanelOpen, setIsXrPanelOpen] = useState(false);
+  const xrPanelMotion = useDockPanelTransition(
+    !controlsCollapsed && xrAvailable && isXrPanelOpen,
+  );
   const [isEmotePanelOpen, setIsEmotePanelOpen] = useState(false);
   const [emotes, setEmotes] = useState<EmoteListItem[]>([]);
   const [isAutoPlayActive, setIsAutoPlayActive] = useState(false);
@@ -193,6 +259,7 @@ const AssistantControlDock = ({
     handleMouseDown,
   } = useAssistantControlDrag({
     modelDisabled,
+    allowWindowDrag: allowFloatingDockDrag,
     isChatOpen,
     desktopAPI,
     buttonPos,
@@ -305,12 +372,12 @@ const AssistantControlDock = ({
   }, [isAvatarPanelOpen, panelMode, uiConfig.stage?.selection]);
 
   useEffect(() => {
-    if ((isChatOpen && !isDesktop) || modelDisabled) {
+    if ((isChatOpen && !isDesktop && !xr.active) || modelDisabled) {
       setIsEmotePanelOpen(false);
       setIsAvatarPanelOpen(false);
       setIsZoomExpanded(false);
     }
-  }, [isChatOpen, modelDisabled]);
+  }, [isChatOpen, modelDisabled, xr.active]);
 
   // Track emote playing state
   useEffect(() => {
@@ -330,7 +397,9 @@ const AssistantControlDock = ({
       setEmoteProgress(progress);
 
       // Update auto-play active state
-      const autoPlayActive = emotePlayerService.isAutoPlayActive();
+      const autoPlayActive =
+        getXrClientRuntime()?.getPlaybackState().autoPlay ??
+        emotePlayerService.isAutoPlayActive();
       setIsAutoPlayActive(autoPlayActive);
     }, 100);
 
@@ -522,6 +591,15 @@ const AssistantControlDock = ({
         }
       } else return;
 
+      const scene = sceneRef.current;
+      if (
+        !isDesktop &&
+        !xr.active &&
+        scene?.metadata?.getCameraMode?.() === "3D"
+      ) {
+        modelPos = getAvatarScreenBounds(scene) ?? modelPos;
+      }
+
       // Attached app/live-wallpaper windows use the fixed full-window dock.
       // Do not move the dock with the avatar in those layouts.
       if (isDesktopAttachedModeWindow) return;
@@ -607,24 +685,45 @@ const AssistantControlDock = ({
       }
     };
 
+    void updateFromModel();
+    let lastProjection = 0;
+    const scene = sceneRef.current;
+    const observer =
+      !isDesktop &&
+      scene?.onAfterRenderObservable.add(() => {
+        if (performance.now() - lastProjection > 250) {
+          lastProjection = performance.now();
+          void updateFromModel();
+        }
+      });
     window.addEventListener("modelPositionChange", updateFromModel);
     window.addEventListener("resize", updateFromModel);
     return () => {
+      if (observer) scene?.onAfterRenderObservable.remove(observer);
       window.removeEventListener("modelPositionChange", updateFromModel);
       window.removeEventListener("resize", updateFromModel);
     };
-  }, [modelDisabled, positionManagerRef, setButtonPos, desktopAPI]);
+  }, [
+    modelDisabled,
+    positionManagerRef,
+    setButtonPos,
+    desktopAPI,
+    sceneRef,
+    sceneKey,
+    assistantReady,
+    xr.active,
+  ]);
 
   const handleClick = useCallback(
     (e?: ReactMouseEvent<HTMLElement>) => {
-      if (modelDisabled && hasDragged) {
+      if ((modelDisabled || allowFloatingDockDrag) && hasDragged) {
         e?.preventDefault();
         e?.stopPropagation();
         return;
       }
       if (typeof onClick === "function") onClick(e);
     },
-    [modelDisabled, hasDragged, onClick],
+    [modelDisabled, allowFloatingDockDrag, hasDragged, onClick],
   );
 
   // Attach drag-drop service to button so drops set pending data in AppContext
@@ -819,6 +918,20 @@ const AssistantControlDock = ({
             });
             window.dispatchEvent(event);
 
+            if (
+              !isDesktopAttachedModeWindow &&
+              !isDetachedDesktopWindow &&
+              isChatOpen &&
+              desktopApi?.window?.setSize
+            ) {
+              const size = getFloatingWindowSize(
+                windowSize.width,
+                windowSize.height,
+                true,
+              );
+              void desktopApi.window.setSize(size.width, size.height);
+            }
+
             setTimeout(() => {
               if (!positionManager) return;
 
@@ -904,6 +1017,8 @@ const AssistantControlDock = ({
       positionManagerRef,
       updateUIConfig,
       desktopAPI,
+      desktopApi,
+      isChatOpen,
       uiConfig.position,
     ],
   );
@@ -944,7 +1059,9 @@ const AssistantControlDock = ({
   const handleAutoPlayToggle = useCallback(async () => {
     try {
       if (isAutoPlayActive) {
-        emotePlayerService.stopAutoPlay();
+        const connected = getXrClientRuntime();
+        if (connected) await connected.action("emote.autoplay.stop", []);
+        else emotePlayerService.stopAutoPlay();
         setIsAutoPlayActive(false);
         autoPlaySyncSignatureRef.current = "";
         Logger.log("AssistantControlDock", "Auto-play stopped");
@@ -972,7 +1089,10 @@ const AssistantControlDock = ({
         }
 
         autoPlaySyncSignatureRef.current = emoteIds.join("|");
-        await emotePlayerService.startAutoPlay(emoteIds);
+        const connected = getXrClientRuntime();
+        if (connected)
+          await connected.action("emote.autoplay.start", [emoteIds]);
+        else await emotePlayerService.startAutoPlay(emoteIds);
         setIsAutoPlayActive(true);
         setIsEmotePanelOpen(false);
         Logger.log("AssistantControlDock", "Auto-play started");
@@ -985,11 +1105,22 @@ const AssistantControlDock = ({
 
   const handleEmoteSeek = useCallback((nextProgress: number) => {
     emotePlayerService.seekToProgress(nextProgress);
+    void getXrClientRuntime()
+      ?.action("emote.seek", [nextProgress])
+      .catch((error: unknown) => Logger.error("XR", "Seek failed", error));
   }, []);
 
   const handleModelSelect = useCallback(
     async (modelId: string | null) => {
       try {
+        if (xr.active) await xr.controller?.exit();
+        const connected = getXrClientRuntime();
+        if (connected) {
+          await connected.action("model.select", [modelId]);
+          setSelectedModelId(modelId);
+          setIsAvatarPanelOpen(false);
+          return;
+        }
         if (modelId === null) {
           await modelStorageService.clearAllDefaults();
         } else {
@@ -1006,37 +1137,48 @@ const AssistantControlDock = ({
         Logger.error("AssistantControlDock", "Failed to select model:", err);
       }
     },
-    [reloadScene],
+    [reloadScene, xr.active, xr.controller],
   );
 
   const handleStageSelect = useCallback(
     async (stageId: string | null) => {
       try {
-        if (!canRenderStages) return;
+        if (!stagesAvailable) return;
         const builtin = stageId?.startsWith("builtin:")
           ? getBuiltInStage(stageId.slice(8))
           : undefined;
         if (stageId && !builtin)
           await stageStorageService.setDefaultStage(stageId);
-        updateUIConfig(
-          "stage.selection",
-          builtin
-            ? { kind: "builtin", id: builtin.id }
-            : stageId
-              ? { kind: "custom", id: stageId }
-              : { kind: "none" },
-        );
+        const selection: StageSelection = builtin
+          ? { kind: "builtin", id: builtin.id }
+          : stageId
+            ? { kind: "custom", id: stageId }
+            : { kind: "none" };
+        updateUIConfig("stage.selection", selection);
         setSelectedStageId(stageId);
         Logger.log(
           "AssistantControlDock",
           `Stage ${stageId || "none"} selected, reloading scene...`,
         );
-        requestAnimationFrame(recreateScene);
+        const replace = sceneRef.current?.metadata?.replaceXrStage;
+        if (xr.enabled && replace) {
+          await replace({
+            ...uiConfig.stage,
+            selection,
+          });
+        } else requestAnimationFrame(recreateScene);
       } catch (err) {
         Logger.error("AssistantControlDock", "Failed to select stage:", err);
       }
     },
-    [recreateScene, updateUIConfig],
+    [
+      recreateScene,
+      sceneRef,
+      uiConfig.stage,
+      updateUIConfig,
+      stagesAvailable,
+      xr.enabled,
+    ],
   );
 
   const [_forceUpdate, setForceUpdate] = useState(0);
@@ -1199,6 +1341,8 @@ const AssistantControlDock = ({
       autoPlaySyncSignatureRef.current = "";
       return;
     }
+    // Paired views observe the owner's queue. They must not restart it on snapshot updates.
+    if (getXrClientRuntime()) return;
 
     if (autoPlayEmoteIds.length === 0) {
       emotePlayerService.stopAutoPlay();
@@ -1217,17 +1361,51 @@ const AssistantControlDock = ({
     }
 
     autoPlaySyncSignatureRef.current = nextSignature;
-    emotePlayerService.startAutoPlay(autoPlayEmoteIds).catch((err) => {
-      autoPlaySyncSignatureRef.current = "";
-      Logger.error(
-        "AssistantControlDock",
-        "Failed to resync auto-play queue after category change:",
-        err,
-      );
-    });
+    emotePlayerService.updateAutoPlayQueue(autoPlayEmoteIds);
   }, [isAutoPlayActive, autoPlayEmoteIds]);
 
-  if (!shouldRender) return null;
+  const dockBoundaryRef = useRef<HTMLDivElement>(null);
+  const pointerInsideDock = useRef(false);
+  useEffect(() => {
+    if (
+      !isXrPanelOpen &&
+      !isEmotePanelOpen &&
+      !isAvatarPanelOpen &&
+      !isZoomExpanded
+    )
+      return;
+    const boundary = dockBoundaryRef.current;
+    if (!boundary) return;
+    const document = boundary.ownerDocument;
+    const closePanels = () => {
+      setIsXrPanelOpen(false);
+      setIsEmotePanelOpen(false);
+      setIsAvatarPanelOpen(false);
+      setIsZoomExpanded(false);
+    };
+    let dismissTimer: ReturnType<typeof setTimeout> | undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      clearTimeout(dismissTimer);
+      pointerInsideDock.current = event.composedPath().includes(boundary);
+      // React capture also includes controls rendered in child portals.
+      dismissTimer = setTimeout(() => {
+        if (!pointerInsideDock.current) closePanels();
+        pointerInsideDock.current = false;
+      }, 0);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) closePanels();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      clearTimeout(dismissTimer);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isXrPanelOpen, isEmotePanelOpen, isAvatarPanelOpen, isZoomExpanded]);
+
+  if (!shouldRender && !xrAvailable) return null;
 
   const renderedButtonPos = dragVisualPos ?? buttonPos;
   const emotePanelHeight = Math.min(
@@ -1253,10 +1431,14 @@ const AssistantControlDock = ({
   const stageControlsHeight =
     8 + (selectedStageId ? 39 : 0) + Math.ceil(stageControlCount / 3) * 39 - 4;
   const showUtilityButtons =
-    (!isChatOpen || isDesktopAttachedModeWindow || isDesktop) && !modelDisabled;
-  const canOpenControlPanels = !isChatOpen || isDesktop;
+    (xr.active || !isChatOpen || isDesktopAttachedModeWindow || isDesktop) &&
+    !modelDisabled;
+  const canOpenControlPanels = xr.active || !isChatOpen || isDesktop;
   const layout = getAssistantControlLayout({
-    viewport: { width: window.innerWidth, height: window.innerHeight },
+    viewport,
+    insets: xr.active
+      ? { top: 0, right: 0, bottom: 0, left: 0 }
+      : embedConfig.shell.controlDockInsets,
     buttonPosition: renderedButtonPos,
     emoteHeight: emotePanelHeight,
     avatarHeight: avatarPanelHeight,
@@ -1268,9 +1450,12 @@ const AssistantControlDock = ({
     stageControlsHeight,
     isAndroid,
     isDesktop,
-    isNormalDesktop: isDesktopAttachedModeWindow,
+    isNormalDesktop:
+      isDesktopAttachedModeWindow || (xr.enabled && !xr.active && !isAndroid),
     showUtilityButtons,
-    showStageButton: canRenderStages && !isARMode,
+    showStageButton: stagesAvailable && !isARMode,
+    showXrButton,
+    showCollapseButton: !modelDisabled,
     forcePanelToLeft:
       isChatOpen && isDesktop && !isAndroid && !isDesktopAttachedModeWindow,
   });
@@ -1294,7 +1479,9 @@ const AssistantControlDock = ({
           emotePlayerService.stopAutoPlay();
           setIsAutoPlayActive(false);
         }
-        await emotePlayerService.playEmote(emoteId);
+        const connected = getXrClientRuntime();
+        if (connected) await connected.action("emote.play", [emoteId]);
+        else await emotePlayerService.playEmote(emoteId);
         setIsEmotePanelOpen(false);
       } catch (error) {
         Logger.error("AssistantControlDock", "Failed to play emote:", error);
@@ -1312,6 +1499,7 @@ const AssistantControlDock = ({
     onToggleStagePanel: () => {
       setIsZoomExpanded(false);
       if (isEmotePanelOpen) setIsEmotePanelOpen(false);
+      setIsXrPanelOpen(false);
       if (!canOpenControlPanels) return;
       setIsAvatarPanelOpen(!(isAvatarPanelOpen && panelMode === "stage"));
       setPanelMode("stage");
@@ -1326,95 +1514,343 @@ const AssistantControlDock = ({
         </Suspense>
       )}
 
-      <AssistantControlPanels
-        layout={layout}
-        isAndroid={isAndroid}
-        isDesktop={isDesktop}
-        isNormalDesktop={isDesktopAttachedModeWindow}
-        isLightBackground={isLightBackground}
-        isChatOpen={isChatOpen}
-        modelDisabled={modelDisabled}
-        isEmotePanelOpen={isEmotePanelOpen}
-        isAvatarPanelOpen={isAvatarPanelOpen}
-        panelMode={panelMode as "avatar" | "stage"}
-        emotes={emotes}
-        filteredEmotes={filteredEmotes}
-        models={models}
-        stages={stages}
-        selectedModelId={selectedModelId}
-        selectedStageId={selectedStageId}
-        selectedAutoPlayCategory={selectedAutoPlayCategory}
-        autoPlayCategoryOptions={autoPlayCategoryOptions}
-        isAutoPlayActive={isAutoPlayActive}
-        currentPlayingEmoteId={currentPlayingEmoteId}
-        emoteProgress={emoteProgress}
-        emoteCurrentTime={emoteCurrentTime}
-        emoteDuration={emoteDuration}
-        showEmotePlaybackTime={showEmotePlaybackTime}
-        showEmotePlaybackBar={showEmotePlaybackBar}
-        cameraMode={sceneRef.current?.metadata?.getCameraMode?.() ?? "2D"}
-        cameraLocked={sceneRef.current?.metadata?.isCameraLocked?.() ?? false}
-        cameraSaveEnabled={
-          sceneRef.current?.metadata?.isCameraSaveEnabled?.() ?? false
+      <XrSurface
+        id="tool-dock"
+        widthMeters={
+          isXrPanelOpen ||
+          isEmotePanelOpen ||
+          isAvatarPanelOpen ||
+          isZoomExpanded
+            ? 0.65
+            : 0.15
         }
-        stickerBorderEnabled={uiConfig.stickerBorder?.enabled === true}
-        actions={assistantControlActions}
-        onSeek={handleEmoteSeek}
-      />
-
-      <AssistantControlStack
-        layout={layout}
-        buttonRef={buttonRef}
-        isAndroid={isAndroid}
-        isLightBackground={isLightBackground}
-        isChatOpen={isChatOpen}
-        modelDisabled={modelDisabled}
-        isVisible={isVisible}
-        isAppearing={isAppearing}
-        isDragging={isDragging}
-        isDragOverButton={isDragOverButton}
-        showUtilityButtons={showUtilityButtons}
-        isZoomExpanded={isZoomExpanded}
-        isEmotePlaying={isEmotePlaying}
-        emoteProgress={emoteProgress}
-        emoteButtonProgressMode={emoteButtonProgressMode}
-        isAvatarPanelOpen={isAvatarPanelOpen}
-        panelMode={panelMode as "avatar" | "stage"}
-        isARMode={isARMode}
-        isARToggling={isARToggling}
-        isZoomOutDisabled={isAtDefaultSize()}
-        onReload={reloadScene}
-        onToggleEmotes={() => {
-          if (!canOpenControlPanels) return;
-          setIsZoomExpanded(false);
-          if (isAvatarPanelOpen) setIsAvatarPanelOpen(false);
-          setIsEmotePanelOpen((open) => !open);
-        }}
-        onToggleAvatar={() => {
-          if (!canOpenControlPanels) return;
-          setIsZoomExpanded(false);
-          if (isEmotePanelOpen) setIsEmotePanelOpen(false);
-          setIsAvatarPanelOpen(!(isAvatarPanelOpen && panelMode === "avatar"));
-          setPanelMode("avatar");
-        }}
-        showStageButton={canRenderStages && !isARMode}
-        onToggleStage={assistantControlActions.onToggleStagePanel}
-        onToggleAR={handleARToggle}
-        onZoomIn={handleZoomIn}
-        onZoomOut={handleZoomOut}
-        onZoomReset={handleZoomReset}
-        onZoomExpandedChange={(expanded) => {
-          if (expanded) {
-            setIsEmotePanelOpen(false);
-            setIsAvatarPanelOpen(false);
-          }
-          setIsZoomExpanded(expanded);
-        }}
-        onRotateLeft={handleRotateLeft}
-        onRotateRight={handleRotateRight}
-        onClick={handleClick}
-        onMouseDown={handleMouseDown}
-      />
+        heightMeters={0.8}
+        widthPixels={
+          isXrPanelOpen ||
+          isEmotePanelOpen ||
+          isAvatarPanelOpen ||
+          isZoomExpanded
+            ? 520
+            : 120
+        }
+        heightPixels={640}
+        offsetMeters={[
+          isXrPanelOpen ||
+          isEmotePanelOpen ||
+          isAvatarPanelOpen ||
+          isZoomExpanded
+            ? -0.5
+            : -0.75,
+          -0.45,
+          0,
+        ]}
+      >
+        <div
+          ref={dockBoundaryRef}
+          className="contents"
+          onPointerDownCapture={() => {
+            pointerInsideDock.current = true;
+          }}
+        >
+          <AssistantControlPanels
+            layout={layout}
+            isAndroid={isAndroid}
+            isDesktop={isDesktop}
+            isNormalDesktop={isDesktopAttachedModeWindow}
+            isLightBackground={isLightBackground}
+            isChatOpen={isChatOpen}
+            modelDisabled={modelDisabled}
+            isEmotePanelOpen={!controlsCollapsed && isEmotePanelOpen}
+            isAvatarPanelOpen={!controlsCollapsed && isAvatarPanelOpen}
+            panelMode={panelMode as "avatar" | "stage"}
+            emotes={emotes}
+            filteredEmotes={filteredEmotes}
+            models={models}
+            stages={stages}
+            selectedModelId={selectedModelId}
+            selectedStageId={selectedStageId}
+            selectedAutoPlayCategory={selectedAutoPlayCategory}
+            autoPlayCategoryOptions={autoPlayCategoryOptions}
+            isAutoPlayActive={isAutoPlayActive}
+            currentPlayingEmoteId={currentPlayingEmoteId}
+            emoteProgress={emoteProgress}
+            emoteCurrentTime={emoteCurrentTime}
+            emoteDuration={emoteDuration}
+            showEmotePlaybackTime={showEmotePlaybackTime}
+            showEmotePlaybackBar={showEmotePlaybackBar}
+            cameraMode={sceneRef.current?.metadata?.getCameraMode?.() ?? "2D"}
+            cameraLocked={
+              sceneRef.current?.metadata?.isCameraLocked?.() ?? false
+            }
+            cameraSaveEnabled={
+              sceneRef.current?.metadata?.isCameraSaveEnabled?.() ?? false
+            }
+            stickerBorderEnabled={uiConfig.stickerBorder?.enabled === true}
+            actions={assistantControlActions}
+            onSeek={handleEmoteSeek}
+          />
+          {xrPanelMotion.isMounted && (
+            <XrControlPanel
+              transitionProps={xrPanelMotion.transitionProps}
+              position={
+                xr.active
+                  ? {
+                      left: 88,
+                      top:
+                        48 +
+                        (showUtilityButtons
+                          ? 4 +
+                            Number(stagesAvailable && !isARMode) +
+                            Number(isAndroid)
+                          : 0) *
+                          56,
+                    }
+                  : layout.xr
+              }
+              isLightBackground={isLightBackground}
+            />
+          )}
+          <AssistantControlStack
+            layout={
+              xr.active
+                ? {
+                    ...layout,
+                    button: { left: "16px", top: "48px" },
+                    dockScale: 1,
+                  }
+                : layout
+            }
+            buttonRef={buttonRef}
+            isAndroid={isAndroid}
+            isLightBackground={isLightBackground}
+            isChatOpen={isChatOpen}
+            modelDisabled={modelDisabled}
+            isVisible={xrAvailable || isVisible}
+            isAppearing={isAppearing}
+            isDragging={isDragging}
+            isDragOverButton={isDragOverButton}
+            showXrButton={showXrButton}
+            controlsCollapsed={controlsCollapsed}
+            onToggleControls={() => {
+              updateUIConfig("assistantControlsCollapsed", !controlsCollapsed);
+              setIsXrPanelOpen(false);
+              setIsEmotePanelOpen(false);
+              setIsAvatarPanelOpen(false);
+              setIsZoomExpanded(false);
+            }}
+            isXrPanelOpen={isXrPanelOpen}
+            onToggleXr={() => {
+              setIsEmotePanelOpen(false);
+              setIsAvatarPanelOpen(false);
+              setIsZoomExpanded(false);
+              setIsXrPanelOpen((open) => !open);
+            }}
+            showUtilityButtons={showUtilityButtons}
+            isZoomExpanded={!controlsCollapsed && isZoomExpanded}
+            isEmotePlaying={isEmotePlaying}
+            emoteProgress={emoteProgress}
+            emoteButtonProgressMode={emoteButtonProgressMode}
+            isAvatarPanelOpen={isAvatarPanelOpen}
+            panelMode={panelMode as "avatar" | "stage"}
+            isARMode={isARMode}
+            isARToggling={isARToggling}
+            isZoomOutDisabled={isAtDefaultSize()}
+            onReload={xr.active ? () => xr.controller?.recenter() : reloadScene}
+            reloadTitle={xr.active ? "Recenter view" : "Reload Avatar"}
+            onToggleEmotes={() => {
+              setIsXrPanelOpen(false);
+              if (!canOpenControlPanels) return;
+              setIsZoomExpanded(false);
+              if (isAvatarPanelOpen) setIsAvatarPanelOpen(false);
+              setIsEmotePanelOpen((open) => !open);
+            }}
+            onToggleAvatar={() => {
+              setIsXrPanelOpen(false);
+              if (!canOpenControlPanels) return;
+              setIsZoomExpanded(false);
+              if (isEmotePanelOpen) setIsEmotePanelOpen(false);
+              setIsAvatarPanelOpen(
+                !(isAvatarPanelOpen && panelMode === "avatar"),
+              );
+              setPanelMode("avatar");
+            }}
+            showStageButton={stagesAvailable && !isARMode}
+            onToggleStage={assistantControlActions.onToggleStagePanel}
+            onToggleAR={handleARToggle}
+            onZoomIn={handleZoomIn}
+            onZoomOut={handleZoomOut}
+            onZoomReset={handleZoomReset}
+            onZoomExpandedChange={(expanded) => {
+              if (expanded) {
+                setIsXrPanelOpen(false);
+                setIsEmotePanelOpen(false);
+                setIsAvatarPanelOpen(false);
+              }
+              setIsZoomExpanded(expanded);
+            }}
+            onRotateLeft={handleRotateLeft}
+            onRotateRight={handleRotateRight}
+            onClick={handleClick}
+            onMouseDown={handleMouseDown}
+            hasDragged={hasDragged}
+            draggable={modelDisabled || allowFloatingDockDrag}
+            chatControlsWidth={isTempChat ? 100 : 48}
+            chatControls={
+              isDesktop && !isDesktopAttachedModeWindow && !xr.active ? (
+                <div className="flex items-center gap-1">
+                  {isTempChat && (
+                    <Button
+                      variant="unstyled"
+                      className={cn(
+                        "h-12 w-12 rounded-full hover:bg-white/10",
+                        isLightBackground ? "glass-text" : "glass-text-black",
+                      )}
+                      onClick={() => {
+                        if (isDetachedAvatarWindow)
+                          desktopApi?.ipc?.send(
+                            "desktop:chat-command",
+                            "temporary",
+                          );
+                        else setIsTempChat(false);
+                      }}
+                      title="Disable temporary chat"
+                      aria-label="Disable temporary chat"
+                      aria-pressed="true"
+                    >
+                      <Icon name="temporary-chat" size={20} />
+                    </Button>
+                  )}
+                  <ComposerMenu
+                    isLightBackground={isLightBackground}
+                    triggerIcon="chat-controls"
+                    triggerLabel="Chat controls"
+                    triggerTestId="dock-chat-controls"
+                    triggerClassName={cn(
+                      "flex h-12 w-12 items-center justify-center rounded-full hover:bg-white/10",
+                      isLightBackground ? "glass-text" : "glass-text-black",
+                      modelDisabled &&
+                        (isDragging ? "cursor-grabbing" : "cursor-grab"),
+                    )}
+                    side="top"
+                    align="end"
+                    compact
+                    items={[
+                      {
+                        label: "New chat",
+                        icon: "add",
+                        onClick: () => {
+                          if (isDetachedAvatarWindow) {
+                            desktopApi?.ipc?.send(
+                              "desktop:chat-command",
+                              "new",
+                            );
+                            return;
+                          }
+                          void clearChat();
+                          setIsHistoryPanelOpen(false);
+                          setIsSettingsPanelOpen(false);
+                          setIsQuickPanelOpen(false);
+                          setIsChatContainerVisible(true);
+                          setIsChatInputVisible(true);
+                        },
+                      },
+                      {
+                        label: uiConfig.fadeChatMessages
+                          ? "Show full chat"
+                          : "Fade messages",
+                        icon: "chat",
+                        onClick: () =>
+                          updateUIConfig(
+                            "fadeChatMessages",
+                            !uiConfig.fadeChatMessages,
+                          ),
+                      },
+                      ...(embedConfig.features.history
+                        ? [
+                            {
+                              label: "Chat history",
+                              icon: "history",
+                              onClick: () => {
+                                if (isDetachedAvatarWindow) {
+                                  desktopApi?.ipc?.send(
+                                    "desktop:chat-command",
+                                    "history",
+                                  );
+                                  return;
+                                }
+                                setIsChatContainerVisible(true);
+                                setIsChatInputVisible(true);
+                                setIsSettingsPanelOpen(false);
+                                setIsQuickPanelOpen(false);
+                                setIsHistoryPanelOpen(true);
+                              },
+                            },
+                            {
+                              label: "Temporary",
+                              icon: "temporary-chat",
+                              active: isTempChat,
+                              onClick: () => {
+                                if (isDetachedAvatarWindow)
+                                  desktopApi?.ipc?.send(
+                                    "desktop:chat-command",
+                                    "temporary",
+                                  );
+                                else setIsTempChat(!isTempChat);
+                              },
+                            },
+                          ]
+                        : []),
+                      ...(embedConfig.features.liveAssistant3d
+                        ? [
+                            {
+                              label: uiConfig.enableModelLoading
+                                ? "Hide character"
+                                : "Show character",
+                              icon: uiConfig.enableModelLoading
+                                ? "eye-off"
+                                : "eye",
+                              onClick: () =>
+                                updateUIConfig(
+                                  "enableModelLoading",
+                                  !uiConfig.enableModelLoading,
+                                ),
+                            },
+                          ]
+                        : []),
+                      ...(embedConfig.features.settings
+                        ? [
+                            {
+                              label: "Settings",
+                              icon: "settings",
+                              onClick: () => {
+                                if (isDetachedAvatarWindow) {
+                                  desktopApi?.ipc?.send(
+                                    "desktop:chat-command",
+                                    "settings",
+                                  );
+                                  return;
+                                }
+                                setIsChatContainerVisible(true);
+                                setIsHistoryPanelOpen(false);
+                                setIsQuickPanelOpen(false);
+                                setIsSettingsPanelOpen(true);
+                              },
+                            },
+                          ]
+                        : []),
+                    ]}
+                  >
+                    <DesktopModeSettings
+                      isLightBackground={isLightBackground}
+                      menu
+                    />
+                  </ComposerMenu>
+                </div>
+              ) : undefined
+            }
+          />
+        </div>
+      </XrSurface>
     </>
   );
 };

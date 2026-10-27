@@ -98,6 +98,7 @@ export interface AssistantControlLayout {
   camera: { left: number; top: number };
   stage: { left: number; top: number };
   stageControls: { left: number; top: number };
+  xr: { left: number; top: number };
   stageMaxHeight: number;
   button: { left: string; top?: string; bottom?: string };
   isLeftSide: boolean;

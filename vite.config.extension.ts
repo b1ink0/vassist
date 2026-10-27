@@ -18,6 +18,7 @@ import { excludeBackgroundAssetsPlugin } from "./tools/vite-plugins/background-a
 import {
   createAppAliases,
   createReactPlugin,
+  thirdPartyLicensesPlugin,
   createViteDefines,
 } from "./tools/vite/shared-config";
 
@@ -32,6 +33,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       createReactPlugin(),
+      thirdPartyLicensesPlugin(),
       tailwindcss(),
       wrapContentScriptPlugin(), // Wrap content script as IIFE
       copyAssetsPlugin(shouldZip), // Copy assets and manifest to dist-extension

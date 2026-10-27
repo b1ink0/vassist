@@ -366,7 +366,7 @@ const normalizeAIConfig = (
   };
 };
 
-const normalizeUIConfig = (
+export const normalizeUIConfig = (
   savedConfig: Partial<UIConfig> | null | undefined,
 ): UIConfig => {
   const savedAndroidBackground = savedConfig?.androidBackground;
@@ -908,7 +908,8 @@ const buildConfigsFromSetupData = (setupData: SetupData) => {
       preset: setupData.ui?.position || "bottom-right",
       lastLocation: null,
     },
-    enableAIToolbar: setupData.ui?.enableAIToolbar ?? true,
+    enableAIToolbar:
+      setupData.ui?.enableAIToolbar ?? DefaultUIConfig.enableAIToolbar,
     emotePlayback: {
       ...DefaultUIConfig.emotePlayback,
       showDurationBar: true,

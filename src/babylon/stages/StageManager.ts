@@ -33,7 +33,7 @@ export async function loadStage(
   parent: TransformNode,
   materialBuilder: MmdStandardMaterialBuilder,
 ): Promise<StageRuntime | null> {
-  if (!canRenderStages) return null;
+  if (!canRenderStages && config.presentation !== "xr") return null;
   if (
     config.stageUrl === null ||
     (!config.stageUrl && config.uiConfig?.stage?.selection?.kind === "none")
@@ -147,7 +147,8 @@ export async function loadStage(
     seasonalEffects.setEnabled(customSettings.seasonalEffects);
     for (const mesh of meshes) {
       mesh.receiveShadows = true;
-      mesh.isPickable = false;
+      mesh.isPickable =
+        config.presentation === "xr" && mesh.metadata?.xrWalkable === true;
     }
     const generator = scene.metadata.shadowGenerator as ShadowGenerator | null;
     for (const mesh of meshes) generator?.addShadowCaster(mesh, false);
@@ -157,6 +158,10 @@ export async function loadStage(
     return {
       root,
       meshes,
+      floorMeshes:
+        config.presentation === "xr"
+          ? meshes.filter((mesh) => mesh.metadata?.xrWalkable === true)
+          : [],
       isEnvironment: format !== "bpmx",
       get brightness() {
         return Math.min(1.5, Math.max(0.35, customSettings.brightness ?? 1));
@@ -314,6 +319,8 @@ async function loadEnvironment(
     .getChildMeshes()
     .filter((mesh): mesh is Mesh => mesh instanceof Mesh);
   for (const mesh of meshes) mesh.isPickable = false;
+  if (config.presentation === "xr")
+    for (const mesh of stage.floorMeshes ?? []) mesh.isPickable = true;
   const contact = meshes.find((mesh) => mesh.name === "quiet contact");
   const pointLights = lights.filter(
     (light): light is PointLight => light instanceof PointLight,
@@ -447,7 +454,12 @@ async function loadEnvironment(
   updateAvatarLamps();
   scaleIntensities();
   const observer = scene.onBeforeRenderObservable.add(() => {
-    if (typeof document !== "undefined" && document.hidden) return;
+    if (
+      typeof document !== "undefined" &&
+      document.hidden &&
+      !scene.metadata?.xrActive
+    )
+      return;
     const timestamp = Date.now();
     const updateLighting =
       (settings.animate && stage.animatedLighting) ||
@@ -472,6 +484,7 @@ async function loadEnvironment(
   return {
     root,
     meshes,
+    floorMeshes: stage.floorMeshes ?? [],
     isEnvironment: true,
     get brightness() {
       return Math.min(1.5, Math.max(0.35, settings.brightness ?? 1));

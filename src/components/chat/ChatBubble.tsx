@@ -25,6 +25,8 @@ interface ChatBubbleProps {
   type?: "user" | "assistant";
   isVisible?: boolean;
   onHide?: () => void;
+  position?: { x: number; y: number };
+  immediate?: boolean;
 }
 
 /**
@@ -44,6 +46,8 @@ const ChatBubble = ({
   type = "assistant",
   isVisible = false,
   onHide,
+  position,
+  immediate = false,
 }: ChatBubbleProps) => {
   const [bubblePos, setBubblePos] = useState({ x: 0, y: 0 });
   const [isOnLeft, setIsOnLeft] = useState(false);
@@ -102,6 +106,11 @@ const ChatBubble = ({
   }, [positionManagerRef, isVisible]);
 
   useEffect(() => {
+    if (immediate) {
+      setDisplayText(message);
+      setIsTyping(false);
+      return;
+    }
     if (!isVisible || !message) {
       setDisplayText("");
       setIsTyping(false);
@@ -135,10 +144,16 @@ const ChatBubble = ({
         clearInterval(typingIntervalRef.current);
       }
     };
-  }, [message, isVisible, displayText]);
+  }, [message, isVisible, displayText, immediate]);
 
   useEffect(() => {
-    if (isVisible && !isTyping && displayText && type === "assistant") {
+    if (
+      onHide &&
+      isVisible &&
+      !isTyping &&
+      displayText &&
+      type === "assistant"
+    ) {
       if (hideTimeoutRef.current) {
         clearTimeout(hideTimeoutRef.current);
       }
@@ -177,8 +192,8 @@ const ChatBubble = ({
     <div
       style={{
         position: "fixed",
-        left: `${bubblePos.x}px`,
-        top: `${bubblePos.y}px`,
+        left: `${position?.x ?? bubblePos.x}px`,
+        top: `${position?.y ?? bubblePos.y}px`,
         zIndex: 998,
         maxWidth: "350px",
         minWidth: "200px",
@@ -205,7 +220,7 @@ const ChatBubble = ({
         }}
       />
 
-      {type === "assistant" && (
+      {type === "assistant" && onHide && (
         <Button
           onClick={onHide}
           variant="default"

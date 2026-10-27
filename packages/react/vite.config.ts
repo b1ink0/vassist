@@ -8,6 +8,7 @@ import { vadAssetsPlugin } from "../../tools/vite-plugins/vad-assets-plugin";
 import { excludeBackgroundAssetsPlugin } from "../../tools/vite-plugins/background-assets-scope-plugin";
 import {
   createReactPlugin,
+  thirdPartyLicensesPlugin,
   createViteDefines,
 } from "../../tools/vite/shared-config";
 
@@ -17,6 +18,7 @@ export default defineConfig({
   root: repoRoot,
   plugins: [
     createReactPlugin(true),
+    thirdPartyLicensesPlugin(),
     tailwindcss(),
     vadAssetsPlugin("packages/react/dist"),
     packageRuntimeAssetsPlugin("packages/react/dist"),

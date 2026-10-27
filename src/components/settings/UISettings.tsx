@@ -50,6 +50,7 @@ const MoreTab = lazy(() =>
 );
 
 interface UISettingsProps {
+  requestedSubTab?: import("../../embed/config").VAssistSettingsSubTabId | null;
   isLightBackground?: boolean;
   onRequestResetSetupDialog?: (onConfirm: () => Promise<void> | void) => void;
   onRequestSettingsErrorDialog?: (message: string) => void;
@@ -73,6 +74,7 @@ type UITab = "display" | "chat" | "mode" | "tools";
 
 const UISettings = ({
   isLightBackground = false,
+  requestedSubTab,
   onRequestResetSetupDialog,
   onRequestSettingsErrorDialog,
 }: UISettingsProps) => {
@@ -81,6 +83,14 @@ const UISettings = ({
   const desktopAPI = useDesktopApi();
   const { resetSetup } = useSetup();
   const [activeSubTab, setActiveSubTab] = useState<UITab>("display");
+  useEffect(() => {
+    if (
+      requestedSubTab === "ui.mode" &&
+      isDesktop &&
+      desktopAPI?.window?.setDesktopMode
+    )
+      setActiveSubTab("mode");
+  }, [requestedSubTab, desktopAPI]);
   const [isResetting, setIsResetting] = useState(false);
   const [useSelectiveBackup, setUseSelectiveBackup] = useState(false);
   const [backupSelection, setBackupSelection] = useState<BackupSelection>(

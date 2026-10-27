@@ -4,6 +4,8 @@
 
 import { useEffect, useRef, type RefObject } from "react";
 import { useIsChatContainerVisible } from "./app/useChat";
+import { useIsVoiceMode } from "./app/usePlayback";
+import { useUIConfig } from "./config/useConfigUI";
 import { usePositionManagerRef } from "./app/useScene";
 import { useDesktopApi } from "./useDesktopStore";
 import {
@@ -12,7 +14,10 @@ import {
   isInputWindow,
   isDesktopAttachedModeWindow,
 } from "../utils/PlatformUtils";
-import { ASSISTANT_CONTROL_CHAT_GUTTER } from "../components/chat/assistant-controls/positioning";
+import {
+  getFloatingCanvasSize,
+  getFloatingWindowSize,
+} from "../components/chat/floatingChatSize";
 
 interface DesktopResizeOptions {
   disabled?: boolean;
@@ -33,7 +38,11 @@ export function useDesktopWindowResize(
   containerRef: RefObject<HTMLElement | null> | null = null,
   options: DesktopResizeOptions = {},
 ): void {
-  const isChatContainerVisible = useIsChatContainerVisible();
+  const chatContainerVisible = useIsChatContainerVisible();
+  const isVoiceMode = useIsVoiceMode();
+  const uiConfig = useUIConfig();
+  const isChatContainerVisible =
+    chatContainerVisible || (isVoiceMode && uiConfig.enableModelLoading);
   const positionManagerRef = usePositionManagerRef();
   const api = useDesktopApi();
   const observerRef = useRef<ResizeObserver | null>(null);
@@ -72,20 +81,19 @@ export function useDesktopWindowResize(
         positionManagerRef?.current?.canvasHeight ||
         window.innerHeight ||
         DEFAULT_MAIN_WINDOW_HEIGHT;
+      const fallbackCanvas = getFloatingCanvasSize(canvasWidth, canvasHeight);
 
-      const chatContainerWidth = isChatContainerVisible
-        ? 400 + ASSISTANT_CONTROL_CHAT_GUTTER
-        : 0;
-
-      const width =
-        canvasWidth +
-        chatContainerWidth +
-        (isChatContainerVisible ? windowPadding : 0);
-      const height =
-        canvasHeight + (isChatContainerVisible ? windowPadding : 0);
-
-      void api.window.setSize(width, height);
-      return;
+      const resize = () => {
+        const size = getFloatingWindowSize(
+          positionManagerRef?.current?.canvasWidth || fallbackCanvas.width,
+          positionManagerRef?.current?.canvasHeight || fallbackCanvas.height,
+          isChatContainerVisible,
+        );
+        void api.window.setSize(size.width, size.height);
+      };
+      resize();
+      window.addEventListener("floatingChatSizeChange", resize);
+      return () => window.removeEventListener("floatingChatSizeChange", resize);
     }
 
     if (!containerRef?.current) return;

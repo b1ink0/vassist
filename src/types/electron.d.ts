@@ -3,6 +3,7 @@
  */
 
 import type { AndroidAPI } from "./android";
+import type { ElectronXrAPI } from "./xr";
 
 export interface ElectronWindow {
   minimize: () => Promise<void>;
@@ -168,6 +169,7 @@ export interface ElectronIPC {
 }
 
 export interface ElectronAPI {
+  xr?: ElectronXrAPI;
   window: ElectronWindow;
   inputWindow: ElectronInputWindow;
   desktopBackground?: ElectronDesktopBackground;

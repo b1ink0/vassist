@@ -21,6 +21,7 @@ import Toggle from "../common/Toggle";
 import Icon from "../icons/Icon";
 import { isAndroid } from "../../utils/PlatformUtils";
 import resourceLoader from "../../utils/ResourceLoader";
+import { useXrRuntime } from "../../contexts/XrRuntimeContext";
 
 type StageItem = Awaited<
   ReturnType<typeof stageStorageService.getStagesList>
@@ -56,6 +57,7 @@ export function StageSelectionControls({
   refreshTrigger?: number;
   onRequestDeleteStageDialog?: ((id: string) => void) | undefined;
 }) {
+  const xr = useXrRuntime();
   const [stages, setStages] = useState<StageItem[]>([]);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState("");
@@ -68,6 +70,8 @@ export function StageSelectionControls({
   const latestSettings = useRef(settings);
   const latestOnSettingsChange = useRef(onSettingsChange);
   const latestRecreateScene = useRef(recreateScene);
+  const latestXr = useRef(xr);
+  latestXr.current = xr;
   const selected = useMemo(
     () =>
       settings.selection ??
@@ -160,11 +164,17 @@ export function StageSelectionControls({
             selection?.kind === "custom" &&
             !list.some((stage) => stage.id === selection.id)
           ) {
-            latestOnSettingsChange.current({
+            const next: StageSettingsValue = {
               ...currentSettings,
               selection: { kind: "none" },
-            });
-            requestAnimationFrame(latestRecreateScene.current);
+            };
+            latestOnSettingsChange.current(next);
+            const runtime = latestXr.current;
+            if (runtime.enabled && runtime.scene?.metadata?.replaceXrStage)
+              void runtime.scene.metadata
+                .replaceXrStage(next)
+                .catch((reason: unknown) => setError(String(reason)));
+            else requestAnimationFrame(latestRecreateScene.current);
           }
         }
       })
@@ -194,20 +204,28 @@ export function StageSelectionControls({
     try {
       if (saveCustomDefault && selection.kind === "custom")
         await stageStorageService.setDefaultStage(selection.id);
-      onSettingsChange({ ...settings, selection });
+      const next = { ...settings, selection };
+      onSettingsChange(next);
       setError("");
-      requestAnimationFrame(recreateScene);
+      if (xr.enabled && xr.scene?.metadata?.replaceXrStage)
+        await xr.scene.metadata.replaceXrStage(next);
+      else requestAnimationFrame(recreateScene);
     } catch (reason) {
       setError(String(reason));
     }
   };
   const apply = () => {
-    onSettingsChange({
+    const next = {
       ...settings,
       options: { ...settings.options, [selectedId]: options },
       calibration: { ...settings.calibration, [modelId]: calibration },
-    });
-    requestAnimationFrame(recreateScene);
+    };
+    onSettingsChange(next);
+    if (xr.enabled && xr.scene?.metadata?.replaceXrStage)
+      void xr.scene.metadata
+        .replaceXrStage(next)
+        .catch((reason: unknown) => setError(String(reason)));
+    else requestAnimationFrame(recreateScene);
   };
   const upload = async (files: File[]) => {
     const errors: string[] = [];

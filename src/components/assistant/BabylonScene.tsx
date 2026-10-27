@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Babylon.js 3D scene component with drag-drop support and preview mode.
+ * Manages scene initialization, rendering, cleanup, and drag-drop overlay positioning.
+ */
+
 import {
   useEffect,
   useMemo,
@@ -132,12 +137,6 @@ const isWallpaperVisibilityDetail = (
     typeof (value as Partial<WallpaperVisibilityDetail>).visible === "boolean"
   );
 };
-
-/**
- * @fileoverview Babylon.js 3D scene component with drag-drop support and preview mode.
- * Manages scene initialization, rendering, cleanup, and drag-drop overlay positioning.
- */
-
 /**
  * BabylonScene component.
  *
@@ -382,6 +381,7 @@ const BabylonScene = ({
     }
 
     const handleVisibilityChange = () => {
+      if (sceneRef.current?.metadata?.xrActive) return;
       if (document.hidden) {
         Logger.log("BabylonScene", "Tab hidden - showing loading overlay");
         setShowModelLoadingOverlay(true);

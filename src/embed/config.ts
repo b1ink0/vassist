@@ -56,6 +56,7 @@ export type VAssistSettingsTabId =
   | "stt"
   | "ai-plus";
 export type VAssistFeatureName =
+  | "xr"
   | "chat"
   | "history"
   | "settings"
@@ -68,6 +69,7 @@ export type VAssistFeatureName =
   | "screenShare";
 
 export type VAssistSettingsSubTabId =
+  | "ui.mode"
   | "llm.provider"
   | "llm.routing"
   | "llm.decision"
@@ -443,6 +445,12 @@ export interface VAssistEmbedConfig {
     mode?: VAssistShellMode;
     deferSetupUntilStarted?: boolean;
     forcePortraitMode?: boolean;
+    controlDockInsets?: Partial<{
+      top: number;
+      right: number;
+      bottom: number;
+      left: number;
+    }>;
   };
   features?: Partial<Record<VAssistFeatureName, boolean>>;
   ui?: VAssistUIConfig;
@@ -481,6 +489,7 @@ export interface VAssistEmbedConfig {
   transport?: {
     mode?: VAssistTransportMode;
     bridge?: VAssistProviderBridge;
+    xrPairingUrl?: string;
   };
   branding?: VAssistBrandingConfig;
   hooks?: VAssistEmbedHooks;
@@ -499,6 +508,12 @@ export interface ResolvedVAssistEmbedConfig {
     mode: VAssistShellMode;
     deferSetupUntilStarted: boolean;
     forcePortraitMode: boolean;
+    controlDockInsets: {
+      top: number;
+      right: number;
+      bottom: number;
+      left: number;
+    };
   };
   features: Record<VAssistFeatureName, boolean>;
   ui: VAssistUIConfig;
@@ -553,6 +568,7 @@ export interface ResolvedVAssistEmbedConfig {
   transport: {
     mode: VAssistTransportMode;
     bridge?: VAssistProviderBridge;
+    xrPairingUrl?: string;
   };
   branding: VAssistBrandingConfig;
   hooks: VAssistEmbedHooks;
@@ -566,6 +582,7 @@ export interface VAssistEmbedInjectOptions {
 }
 
 export interface VAssistEmbedApi {
+  enterXR: () => void;
   inject: (options?: VAssistEmbedInjectOptions) => HTMLElement;
   remove: (hostId?: string) => void;
   updateConfig: (
@@ -588,6 +605,7 @@ export interface VAssistEmbedApi {
 }
 
 export interface VAssistEmbedElementHandle extends HTMLElement {
+  enterXR: () => void;
   setConfig: (config: VAssistEmbedConfig) => void;
   getConfig: () => ResolvedVAssistEmbedConfig;
   openChat: () => void;
@@ -652,6 +670,7 @@ export const VASSIST_SETTINGS_TABS: readonly VAssistSettingsTabId[] = [
 ];
 
 export const VASSIST_SETTINGS_SUB_TABS: readonly VAssistSettingsSubTabId[] = [
+  "ui.mode",
   "llm.provider",
   "llm.routing",
   "llm.decision",
@@ -748,6 +767,7 @@ const SHELL_FEATURE_DEFAULTS: Record<
     liveAssistant3d: true,
     camera: true,
     screenShare: true,
+    xr: false,
   },
   "chat-only": {
     chat: true,
@@ -760,6 +780,7 @@ const SHELL_FEATURE_DEFAULTS: Record<
     liveAssistant3d: false,
     camera: true,
     screenShare: true,
+    xr: false,
   },
   "chat-toolbar": {
     chat: true,
@@ -772,6 +793,7 @@ const SHELL_FEATURE_DEFAULTS: Record<
     liveAssistant3d: false,
     camera: true,
     screenShare: true,
+    xr: false,
   },
   "toolbar-only": {
     chat: false,
@@ -784,6 +806,7 @@ const SHELL_FEATURE_DEFAULTS: Record<
     liveAssistant3d: false,
     camera: false,
     screenShare: false,
+    xr: false,
   },
 };
 
@@ -958,6 +981,7 @@ export function normalizeVAssistEmbedConfig(
     features.camera = false;
     features.screenShare = false;
   }
+  if (!features.liveAssistant3d) features.xr = false;
 
   if (!features.chat) {
     features.history = false;
@@ -1060,6 +1084,20 @@ export function normalizeVAssistEmbedConfig(
       deferSetupUntilStarted:
         config.shell?.deferSetupUntilStarted ?? setupMode === "deferred",
       forcePortraitMode: config.shell?.forcePortraitMode ?? false,
+      controlDockInsets: Object.fromEntries(
+        ["top", "right", "bottom", "left"].map((side) => {
+          const value =
+            config.shell?.controlDockInsets?.[
+              side as "top" | "right" | "bottom" | "left"
+            ];
+          return [
+            side,
+            typeof value === "number" && Number.isFinite(value)
+              ? Math.max(0, value)
+              : 0,
+          ];
+        }),
+      ) as { top: number; right: number; bottom: number; left: number },
     },
     features,
     ui: cloneConfigValue(config.ui ?? {}),
@@ -1132,6 +1170,9 @@ export function normalizeVAssistEmbedConfig(
     },
     transport: {
       mode: transportMode,
+      ...(config.transport?.xrPairingUrl
+        ? { xrPairingUrl: config.transport.xrPairingUrl }
+        : {}),
       ...(config.transport?.bridge !== undefined
         ? { bridge: config.transport.bridge }
         : {}),

@@ -6,6 +6,7 @@
  */
 
 import { ServiceProxy } from "./ServiceProxy";
+import audioVisualizationService from "../audio/AudioVisualizationService";
 import STTService from "../audio/STTService";
 import { MessageTypes } from "../../../extension/shared/MessageTypes";
 import Logger from "../common/LoggerService";
@@ -30,6 +31,7 @@ interface STTServiceLike {
   isCurrentlyRecording(): boolean;
   startRecording(deviceId?: string | null): Promise<boolean>;
   stopRecording(): void;
+  cancelRecording(): void;
   transcribeAudio(audioBlob: Blob): Promise<string>;
   testRecording(duration?: number, deviceId?: string | null): Promise<string>;
   setTranscriptionCallback(callback: (text: string) => void): void;
@@ -41,7 +43,8 @@ interface STTServiceLike {
 
 class STTServiceProxy extends ServiceProxy {
   protected directService: STTServiceLike;
-  protected _configuring: boolean;
+  private configuring: Promise<void> | null = null;
+  private stopVisualization: (() => void) | null = null;
   private audioStream: MediaStream | null;
   private mediaRecorder: MediaRecorder | null;
   private audioChunks: Blob[];
@@ -54,7 +57,6 @@ class STTServiceProxy extends ServiceProxy {
   constructor() {
     super("STTService");
     this.directService = STTService as unknown as STTServiceLike;
-    this._configuring = false;
     this.audioStream = null;
     this.mediaRecorder = null;
     this.audioChunks = [];
@@ -100,30 +102,22 @@ class STTServiceProxy extends ServiceProxy {
    * @returns {Promise<void>}
    */
   async ensureConfigured(): Promise<void> {
-    if (this._configuring) return;
-
-    if (this.getHostTransportBridge()?.stt) {
-      return;
-    }
-
-    const configured = await this.isConfigured();
-    if (configured) return;
-
-    this._configuring = true;
-    try {
+    if (this.configuring) return this.configuring;
+    this.configuring = (async () => {
+      if (this.getHostTransportBridge()?.stt || (await this.isConfigured()))
+        return;
       const storedConfig = (await StorageServiceProxy.configLoad(
         "sttConfig",
         null,
       )) as STTProxyConfig | null;
       const sttConfig =
         storedConfig ?? (DefaultSTTConfig as unknown as STTProxyConfig);
-
-      if (sttConfig && sttConfig.enabled) {
-        Logger.log("STTServiceProxy", "Auto-configuring from storage...");
-        await this.configure(sttConfig);
-      }
+      if (sttConfig.enabled) await this.configure(sttConfig);
+    })();
+    try {
+      await this.configuring;
     } finally {
-      this._configuring = false;
+      this.configuring = null;
     }
   }
 
@@ -226,6 +220,10 @@ class STTServiceProxy extends ServiceProxy {
 
         this.audioStream =
           await navigator.mediaDevices.getUserMedia(constraints);
+        this.stopVisualization = audioVisualizationService.monitorStream(
+          "microphone",
+          this.audioStream,
+        );
 
         // Create MediaRecorder
         const mimeType = this.getSupportedMimeType();
@@ -310,8 +308,23 @@ class STTServiceProxy extends ServiceProxy {
   }
 
   /**
-   * Stop recording audio
+   * Cancel recording without requesting transcription.
    */
+  cancelRecording(): void {
+    if (!this.isUsingBridgeTranscription()) {
+      this.directService.cancelRecording();
+      return;
+    }
+    if (this.mediaRecorder) {
+      this.mediaRecorder.onstop = null;
+      this.mediaRecorder.ondataavailable = null;
+      this.mediaRecorder.onerror = null;
+      if (this.mediaRecorder.state !== "inactive") this.mediaRecorder.stop();
+    }
+    this.cleanup();
+    this.onRecordingStop?.();
+  }
+
   stopRecording(): void {
     if (this.isUsingBridgeTranscription()) {
       if (!this._isRecording || !this.mediaRecorder) {
@@ -430,6 +443,8 @@ class STTServiceProxy extends ServiceProxy {
    * Cleanup recording resources
    */
   cleanup(): void {
+    this.stopVisualization?.();
+    this.stopVisualization = null;
     if (this.audioStream) {
       this.audioStream
         .getTracks()

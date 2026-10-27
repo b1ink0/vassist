@@ -60,11 +60,12 @@ mount: {
 
 Controls which shell variant renders and how the initial setup flow works.
 
-| Field                    | Type                                                        | Default  | Description                                                                      |
-| ------------------------ | ----------------------------------------------------------- | -------- | -------------------------------------------------------------------------------- |
-| `mode`                   | `"full" \| "chat-only" \| "chat-toolbar" \| "toolbar-only"` | `"full"` | Shell preset. Determines the default feature set                                 |
-| `deferSetupUntilStarted` | `boolean`                                                   | `false`  | When `true`, setup UI stays deferred until the user actively opens the assistant |
-| `forcePortraitMode`      | `boolean`                                                   | `false`  | Force portrait layout regardless of viewport size                                |
+| Field                    | Type                                                        | Default  | Description                                                                                                                                                  |
+| ------------------------ | ----------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mode`                   | `"full" \| "chat-only" \| "chat-toolbar" \| "toolbar-only"` | `"full"` | Shell preset. Determines the default feature set                                                                                                             |
+| `deferSetupUntilStarted` | `boolean`                                                   | `false`  | When `true`, setup UI stays deferred until the user actively opens the assistant                                                                             |
+| `controlDockInsets`      | `{ top?, right?, bottom?, left? }`                          | All `0`  | Reserve nonnegative CSS pixels around the assistant dock and its palettes for host navigation or footers. The dock scales to keep the chat button reachable. |
+| `forcePortraitMode`      | `boolean`                                                   | `false`  | Force portrait layout regardless of viewport size                                                                                                            |
 
 If `setup.mode` is omitted, `shell.deferSetupUntilStarted: true` also implies `setup.mode: "deferred"`.
 
@@ -82,23 +83,25 @@ If `setup.mode` is omitted, `shell.deferSetupUntilStarted: true` also implies `s
 | `liveAssistant3d` |   ✓    |      -      |       -        |       -        |
 | `camera`          |   ✓    |      ✓      |       ✓        |       -        |
 | `screenShare`     |   ✓    |      ✓      |       ✓        |       -        |
+| `xr`              |   -    |      -      |       -        |       -        |
 
 ## `features`
 
 Override individual feature flags on top of the shell preset defaults.
 
-| Feature           | Description                            |
-| ----------------- | -------------------------------------- |
-| `chat`            | Chat input and message thread          |
-| `history`         | Saved conversations panel              |
-| `settings`        | In-app settings panel                  |
-| `voiceInput`      | Microphone input for voice-to-text     |
-| `voiceCall`       | Real-time voice conversation mode      |
-| `voiceOutput`     | TTS playback of assistant responses    |
-| `aiToolbar`       | Page-level AI toolbar for text actions |
-| `liveAssistant3d` | 3D Live Assistant avatar               |
-| `camera`          | Camera capture for visual input        |
-| `screenShare`     | Screen share for visual context        |
+| Feature           | Description                                                                              |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| `chat`            | Chat input and message thread                                                            |
+| `history`         | Saved conversations panel                                                                |
+| `settings`        | In-app settings panel                                                                    |
+| `voiceInput`      | Microphone input for voice-to-text                                                       |
+| `voiceCall`       | Real-time voice conversation mode                                                        |
+| `voiceOutput`     | TTS playback of assistant responses                                                      |
+| `aiToolbar`       | Page-level AI toolbar for text actions                                                   |
+| `liveAssistant3d` | 3D Live Assistant avatar                                                                 |
+| `camera`          | Camera capture for visual input                                                          |
+| `screenShare`     | Screen share for visual context                                                          |
+| `xr`              | Opt into experimental WebXR with native HTML spatial panels. Requires `liveAssistant3d`. |
 
 Normalization also applies a few safety rules:
 
@@ -123,7 +126,7 @@ Browser embeds ignore UI settings that require Electron or Android services.
 | Field                | Default                                             | Behavior                                                                                                                                                                     |
 | -------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `stage`              | `{ selection: null, options: {}, calibration: {} }` | Native App and Wallpaper stage selection, per-environment options, and per-avatar alignment. Stages are omitted during Android AR. See [Stages](../settings/three-d#stages). |
-| `enableAvatarShadow` | `true`                                              | With no stage, show the avatar silhouette behind the character; with a stage, enable its real 3D cast shadow.                                                                |
+| `enableAvatarShadow` | `true`                                              | With no stage, show the avatar silhouette behind the character. With a stage, enable its real 3D cast shadow.                                                                |
 
 `stage.selection` is `null` until the user chooses an environment, or one of `{ kind: "none" }`, `{ kind: "builtin", id }`, or `{ kind: "custom", id }`. `stage.options` is keyed by stage ID and stores partial lighting, season, animation, and brightness settings. `stage.calibration` is keyed by avatar ID and stores `heightMeters` (default `1.65`) and `floorOffset` (default `0`). The UI and runtime apply only options supported by the selected stage.
 
@@ -132,13 +135,13 @@ Browser embeds ignore UI settings that require Electron or Android services.
 | `mood`                         | `""`     | Named lighting preset when the selected stage supports moods.               |
 | `hour`                         | `15.5`   | Manual local-stage time, from 0 to 24 in quarter-hour steps.                |
 | `localTime`                    | `true`   | Follow the device's local clock when time lighting is selected.             |
-| `lightingMode`                 | Inferred | `"time"` or `"mood"`; mood mode is only offered by stages with named moods. |
+| `lightingMode`                 | Inferred | `"time"` or `"mood"`. Mood mode is only offered by stages with named moods. |
 | `season`                       | `"auto"` | Local-calendar season, or `spring`, `summer`, `autumn`, or `winter`.        |
 | `seasonalEffects`              | `true`   | Enable seasonal particles where the environment supports them.              |
 | `brightness`                   | `1`      | Stage brightness multiplier, clamped to 0.35–1.5.                           |
 | `animate`                      | `true`   | Enable stage-provided animation such as water, stars, rain, or fire.        |
 
-`stage.calibration[avatarId]` has `heightMeters` and `floorOffset` fields. These adjust stage/avatar alignment without changing the avatar's physics rig. The selected built-in or custom stage and its options are shared across supported native app and wallpaper modes; Android AR suppresses stage rendering while active.
+`stage.calibration[avatarId]` has `heightMeters` and `floorOffset` fields. These adjust stage/avatar alignment without changing the avatar's physics rig. The selected built-in or custom stage and its options are shared across supported native app and wallpaper modes. Android AR suppresses stage rendering while active.
 
 ### Native background settings
 
@@ -634,10 +637,11 @@ statusWarning;
 
 Controls how AI, TTS, and STT requests are executed. It also defines the host callback used by the Decision API settings connection check.
 
-| Field    | Type                                                            | Default                                | Description                               |
-| -------- | --------------------------------------------------------------- | -------------------------------------- | ----------------------------------------- |
-| `mode`   | `"builtin" \| "openai-compatible" \| "custom" \| "host-bridge"` | `"builtin"` unless a bridge is present | Transport strategy                        |
-| `bridge` | `VAssistProviderBridge`                                         | `undefined`                            | Host-owned provider bridge implementation |
+| Field          | Type                                                            | Default                                | Description                                                                                                                                   |
+| -------------- | --------------------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`         | `"builtin" \| "openai-compatible" \| "custom" \| "host-bridge"` | `"builtin"` unless a bridge is present | Transport strategy                                                                                                                            |
+| `bridge`       | `VAssistProviderBridge`                                         | `undefined`                            | Host-owned provider bridge implementation                                                                                                     |
+| `xrPairingUrl` | `string`                                                        | `undefined`                            | One-use desktop pairing URL, consumed before storage and providers initialize. Treat it as an ephemeral credential. Do not persist or log it. |
 
 | Mode                  | Runtime behavior                                                              |
 | --------------------- | ----------------------------------------------------------------------------- |

@@ -568,6 +568,7 @@ export function createQuietStage(
   return {
     id: preset,
     name: p.name,
+    floorMeshes: [ground],
     root,
     setSeason,
     setTime,

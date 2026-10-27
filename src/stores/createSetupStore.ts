@@ -148,7 +148,7 @@ export const DEFAULT_SETUP_STATE = {
       enableModelLoading: true,
       enablePortraitMode: false,
       position: "bottom-right",
-      enableAIToolbar: true,
+      enableAIToolbar: !isDesktop && !isAndroid,
       background: {
         ...DEFAULT_BACKGROUND_FILL_SETTINGS,
         ...DEFAULT_BACKGROUND_IMAGE_EFFECTS,

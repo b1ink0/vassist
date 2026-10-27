@@ -100,10 +100,7 @@ export function registerUIIPCHandlers({
     }
   };
 
-  const getBuiltInBackgroundPath = (
-    backgroundId: string,
-    preview = false,
-  ) => {
+  const getBuiltInBackgroundPath = (backgroundId: string, preview = false) => {
     if (!isBuiltInBackgroundId(backgroundId)) {
       throw new Error("Unknown built-in background");
     }
@@ -168,9 +165,7 @@ export function registerUIIPCHandlers({
     async (_event: IpcMainInvokeEvent, multiple = true) => {
       try {
         const result = await dialog.showOpenDialog({
-          properties: multiple
-            ? ["openFile", "multiSelections"]
-            : ["openFile"],
+          properties: multiple ? ["openFile", "multiSelections"] : ["openFile"],
           title: "Choose Desktop Background Images",
           filters: [
             {
@@ -674,6 +669,23 @@ export function registerUIIPCHandlers({
   });
 
   ipcMain.on(
+    "desktop:chat-command",
+    (event: IpcMainEvent, command: unknown) => {
+      if (
+        state.controlPlacement !== "detached" ||
+        !state.avatarWindow ||
+        event.sender !== state.avatarWindow.webContents ||
+        !state.mainWindow ||
+        state.mainWindow.isDestroyed() ||
+        !["new", "history", "settings", "temporary"].includes(String(command))
+      )
+        return;
+      state.mainWindow.showInactive();
+      state.mainWindow.webContents.send("desktop:chat-command", command);
+    },
+  );
+
+  ipcMain.on(
     "desktop:chat-visibility",
     (event: IpcMainEvent, payload: unknown) => {
       if (
@@ -699,9 +711,18 @@ export function registerUIIPCHandlers({
 
       state.mainWindow.showInactive();
 
+      const temporary =
+        payload &&
+        typeof payload === "object" &&
+        "temporary" in payload &&
+        typeof payload.temporary === "boolean"
+          ? payload.temporary
+          : false;
+
       if (state.avatarWindow && !state.avatarWindow.isDestroyed()) {
         state.avatarWindow.webContents.send("desktop:chat-visibility", {
           visible,
+          temporary,
         });
       }
     },
@@ -1013,6 +1034,29 @@ export function registerUIIPCHandlers({
     },
   );
 
+  for (const channel of [
+    "chatInput:stop",
+    "chatInput:micCancel",
+    "chatInput:requestGenerationState",
+    "voice:requestSession",
+  ]) {
+    ipcMain.on(channel, (event: IpcMainEvent) => {
+      if (event.sender !== state.inputWindow?.webContents) return;
+      state.mainWindow?.webContents.send(channel);
+    });
+  }
+  ipcMain.on(
+    "state:chatGeneration",
+    (event: IpcMainEvent, processing: unknown) => {
+      if (
+        event.sender !== state.mainWindow?.webContents ||
+        typeof processing !== "boolean"
+      )
+        return;
+      state.inputWindow?.webContents.send("state:chatGeneration", processing);
+    },
+  );
+
   ipcMain.on("chatInput:micToggle", () => {
     if (state.mainWindow && state.mainWindow.webContents) {
       state.mainWindow.webContents.send("chatInput:micToggle");
@@ -1032,6 +1076,23 @@ export function registerUIIPCHandlers({
   });
 
   ipcMain.on(
+    "audio:visualizationActive",
+    (event: IpcMainEvent, active: unknown) => {
+      if (typeof active !== "boolean") return;
+      const owner = state.mainWindow;
+      const input = state.inputWindow;
+      if (!owner || owner.isDestroyed() || event.sender !== owner.webContents)
+        return;
+      // The recording owner must keep publishing envelopes while the input has focus.
+      owner.webContents.setBackgroundThrottling(
+        active ? false : state.desktopMode !== "live-wallpaper",
+      );
+      if (input && !input.isDestroyed())
+        input.webContents.setBackgroundThrottling(!active);
+    },
+  );
+
+  ipcMain.on(
     "state:voiceState",
     (_event: IpcMainEvent, stateValue: unknown) => {
       if (state.inputWindow && state.inputWindow.webContents) {
@@ -1044,5 +1105,20 @@ export function registerUIIPCHandlers({
     if (state.inputWindow && state.inputWindow.webContents) {
       state.inputWindow.webContents.send("state:sttRecording", payload);
     }
+  });
+
+  ipcMain.on("state:voiceSession", (event: IpcMainEvent, payload: unknown) => {
+    if (
+      event.sender !== state.mainWindow?.webContents ||
+      !payload ||
+      typeof payload !== "object"
+    )
+      return;
+    const session = payload as { active?: unknown; error?: unknown };
+    if (typeof session.active !== "boolean") return;
+    state.inputWindow?.webContents.send("state:voiceSession", {
+      active: session.active,
+      ...(typeof session.error === "string" ? { error: session.error } : {}),
+    });
   });
 }

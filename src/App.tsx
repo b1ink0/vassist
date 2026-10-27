@@ -28,6 +28,7 @@ import {
   isAndroid,
   isDesktop,
   isEmbed,
+  isXR,
   isInputWindow,
   isScreenPicker,
   isDesktopAttachedModeWindow,
@@ -42,6 +43,11 @@ import {
   type ReactNode,
 } from "react";
 import { vassistTestFlags } from "./testing/runtime";
+import {
+  prepareXrClient,
+  type XrClientRuntime,
+} from "./services/xr/XrClientRuntime";
+import { Button } from "./components/ui";
 
 interface AppWithSetupProps {
   mode?: string;
@@ -282,7 +288,7 @@ function DevelopmentDemoSite({ onStartSetup }: { onStartSetup: () => void }) {
  * @param {string} props.mode - Application mode ('development'|'extension'|'desktop'|'android')
  * @returns {JSX.Element}
  */
-function App({
+function Application({
   mode = "development",
   isWallpaperMode: explicitWallpaperMode,
   embedded = false,
@@ -309,7 +315,9 @@ function App({
     ? "desktop"
     : isAndroid
       ? "android"
-      : mode;
+      : isXR
+        ? "xr"
+        : mode;
   const isEmbeddedDevelopmentMode =
     actualMode === "development" &&
     (embedded || isEmbed || isEmbeddedModeEnabled());
@@ -385,6 +393,21 @@ function App({
                 </Suspense>
               )}
             </div>
+          </AnimationProvider>
+        </SetupProvider>
+      </StoreBootstrap>
+    );
+  }
+
+  if (actualMode === "xr") {
+    return (
+      <StoreBootstrap
+        embedConfig={resolvedEmbedConfig}
+        onStoreReady={onStoreReady}
+      >
+        <SetupProvider embedConfig={resolvedEmbedConfig}>
+          <AnimationProvider>
+            <AppWithSetup mode="xr" embedConfig={resolvedEmbedConfig} />
           </AnimationProvider>
         </SetupProvider>
       </StoreBootstrap>
@@ -473,7 +496,7 @@ function App({
         <AnimationProvider>
           {actualMode === "development" ? (
             <div className={developmentContainerClass}>
-              {!vassistTestFlags.enabled || !isEmbeddedDevelopmentMode ? (
+              {!isEmbeddedDevelopmentMode ? (
                 <DevelopmentDemoSite
                   onStartSetup={() => setShowDeferredSetup(false)}
                 />
@@ -516,4 +539,83 @@ function App({
   );
 }
 
-export default App;
+export default function App(props: AppProps) {
+  const { embedConfig, onStoreReady: notifyStoreReady } = props;
+  const pairingUrl = embedConfig?.transport?.xrPairingUrl;
+  const [boot, setBoot] = useState<{
+    ready: boolean;
+    runtime: XrClientRuntime | null;
+    error: string;
+  }>({ ready: false, runtime: null, error: "" });
+  useEffect(() => {
+    let cancelled = false;
+    void prepareXrClient(pairingUrl)
+      .then((runtime) => {
+        if (!cancelled) setBoot({ ready: true, runtime, error: "" });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled)
+          setBoot({
+            ready: false,
+            runtime: null,
+            error: error instanceof Error ? error.message : String(error),
+          });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pairingUrl]);
+  const config = useMemo(
+    () =>
+      boot.runtime
+        ? {
+            ...embedConfig,
+            ...boot.runtime.config,
+            features: {
+              ...embedConfig?.features,
+              ...boot.runtime.config.features,
+            },
+          }
+        : embedConfig,
+    [boot.runtime, embedConfig],
+  );
+  const onStoreReady = useMemo(
+    () => (store: AppStore) => {
+      boot.runtime?.attachStore(store);
+      notifyStoreReady?.(store);
+    },
+    [boot.runtime, notifyStoreReady],
+  );
+  if (boot.error)
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-black/80 p-6 text-white">
+        <div className="max-w-md space-y-4">
+          <p role="alert">{boot.error}</p>
+          <Button
+            onClick={() => {
+              if (location.protocol === "about:") {
+                setBoot({ ready: true, runtime: null, error: "" });
+                return;
+              }
+              location.hash = "";
+              location.reload();
+            }}
+          >
+            Use browser storage
+          </Button>
+          <p className="text-xs text-white/60">
+            Open a fresh connection link from VAssist to reconnect to desktop.
+          </p>
+        </div>
+      </div>
+    );
+  if (!boot.ready) return <LoadingIndicator isVisible />;
+  return (
+    <Application
+      {...props}
+      {...(config ? { embedConfig: config } : {})}
+      embedded={boot.runtime ? true : (props.embedded ?? false)}
+      onStoreReady={onStoreReady}
+    />
+  );
+}

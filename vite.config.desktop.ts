@@ -3,7 +3,7 @@
  * Creates a transparent window app without demo site background
  */
 
-import { defineConfig } from "vite";
+import { defineConfig, build as buildVite } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import electron from "vite-plugin-electron/simple";
 import { resolve } from "path";
@@ -15,6 +15,7 @@ import { excludeBackgroundAssetsPlugin } from "./tools/vite-plugins/background-a
 import {
   createAppAliases,
   createReactPlugin,
+  thirdPartyLicensesPlugin,
   createViteDefines,
 } from "./tools/vite/shared-config";
 
@@ -23,12 +24,30 @@ const __dirname = path.dirname(__filename);
 
 export default defineConfig(({ mode }) => {
   const isProduction = mode === "production";
+  let xrBuild: Promise<unknown> | undefined;
+  const buildXr = () =>
+    (xrBuild ??= buildVite({
+      configFile: resolve(__dirname, "vite.config.xr.ts"),
+      mode,
+      publicDir: false,
+      build: { outDir: "dist-desktop/xr-app" },
+    }));
 
   return {
     publicDir: "public",
 
     plugins: [
+      {
+        name: "desktop-xr-client",
+        async configureServer() {
+          await buildXr();
+        },
+        async closeBundle() {
+          await buildXr();
+        },
+      },
       createReactPlugin(true),
+      thirdPartyLicensesPlugin(),
       tailwindcss(),
       vadAssetsPlugin("dist-desktop"),
       excludeBackgroundAssetsPlugin("dist-desktop"),
@@ -133,6 +152,7 @@ export default defineConfig(({ mode }) => {
                   "axios",
                   "form-data",
                   "multer",
+                  "ws",
                   "util",
                   "stream",
                   "unzipper",

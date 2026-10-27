@@ -25,7 +25,7 @@ These two buttons are at the top of the Display sub-tab.
 
 ### Appearance
 
-**Changing the theme:** Set **Application Theme** to `Light` or `Dark` for a fixed appearance. `Adaptive` is the default: it samples the page background and picks higher-contrast colors so the assistant stays readable on any website. Adaptive only affects the assistant panel, not the surrounding page.
+**Changing the theme:** Set **Application Theme** to `Light` or `Dark` for a fixed appearance. Desktop defaults to `Dark`. Other platforms default to `Adaptive`. Adaptive samples the background and chooses colors for contrast. It affects the assistant UI, not the surrounding page. Existing saved theme choices are preserved.
 
 On desktop, the selected theme is also applied to the separate input window.
 
@@ -40,7 +40,7 @@ Attached App and Wallpaper controls use the same shared glass appearance as Andr
 | Use Colored Icons    | Off                                                               | Switches icons from monochrome to color.                                                                                         |
 | Toolbar Only         | Off                                                               | Only when Colored Icons is on. Restricts colorization to the AI toolbar.                                                         |
 | Chat Window Position | `bottom-right` (web/extension), `bottom-center` (desktop/Android) | Only when the avatar is off and the runtime allows placement. Includes `Last Location` to restore the previous dragged position. |
-| Application Theme    | Adaptive                                                          | `Adaptive`, `Light`, or `Dark`.                                                                                                  |
+| Application Theme    | Dark (desktop), Adaptive (other platforms)                        | `Adaptive`, `Light`, or `Dark`.                                                                                                  |
 | Detection Accuracy   | `5`                                                               | Only when Theme is Adaptive. Grid size for background sampling, 3–10. Higher = more sample points.                               |
 
 ::: info
@@ -148,22 +148,46 @@ The selected image list shows filenames and an image count. **Show desktop backg
 
 **Smooth Response Animation** animates the chat window height as responses stream in. It can affect performance on lower-end devices, so turn it off if the chat feels sluggish.
 
-| Control                   | Default | Behavior                                                                                      |
-| ------------------------- | ------- | --------------------------------------------------------------------------------------------- |
-| Smooth Response Animation | Off     | Animates the container height while responses stream. Can cost performance on slower devices. |
-| Show Emote Duration Bar   | On      | Shows a playback progress bar while an emote plays.                                           |
-| Show Emote Time Labels    | On      | Only when Duration Bar is on. Adds current and total time labels above the bar.               |
-| Emote Button Progress     | `none`  | Choose bottom bar, emote button ring, or both.                                                |
+| Control                   | Default | Behavior                                                                                                                                                                                                              |
+| ------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fade chat messages        | Off     | Shows the latest message and fades it after eight seconds of inactivity. Use the chat menu to show the full conversation. Voice conversation uses this view automatically when the avatar is enabled. Not used in XR. |
+| Animate response text     | On      | Smooths bursts of streamed text and fades in new words. Respects reduced-motion preferences.                                                                                                                          |
+| Smooth Response Animation | Off     | Animates the container height while responses stream. Can cost performance on slower devices.                                                                                                                         |
+| Show Emote Duration Bar   | On      | Shows a playback progress bar while an emote plays.                                                                                                                                                                   |
+| Show Emote Time Labels    | On      | Only when Duration Bar is on. Adds current and total time labels above the bar.                                                                                                                                       |
+| Emote Button Progress     | `none`  | Choose bottom bar, emote button ring, or both.                                                                                                                                                                        |
 
 ## Mode sub-tab (desktop only)
 
+### XR browser connection
+
+The **XR** section opens the shared VAssist application in an external browser. XR is experimental and requires a secure Chromium browser with WebXR and native HTML-in-Canvas support. Enable **Canvas Draw Element** and restart the browser if requested. Explicit Chrome, Edge and Brave launches include that switch. The default browser must be configured separately.
+
+| Control                    | Behavior                                                                                              |
+| -------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Browser                    | Choose the external browser.                                                                          |
+| Force OpenXR               | Add Chromium's OpenXR runtime switch for an explicitly selected browser.                              |
+| Hosted app URL             | Optional HTTPS VAssist app or XR-enabled embed page. Empty uses the bundled application.              |
+| Share XR over HTTPS        | Opt into LAN access for a separate headset. Otherwise the server listens on loopback only.            |
+| HTTPS host name            | LAN address or DNS name covered by the selected certificate. The headset must trust that certificate. |
+| Choose certificate and key | Select existing TLS files. VAssist does not install certificates or bypass browser trust.             |
+| Open in XR                 | Open a paired browser. Select **Enter VR** there to enter immersion.                                  |
+| Pairing link               | Create a one-use link valid for one minute. Share it only with a browser you trust.                   |
+| Disconnect                 | Revoke paired sessions and stop the XR listener. Disabling HTTPS sharing also stops it.               |
+
+Paired browsers can access shared conversations and avatar, stage and motion libraries, save supported settings, and use desktop AI, TTS and STT. Credentials remain on desktop. Desktop provider configuration is read-only in the paired browser. A disconnected browser does not silently switch to a separate local database. Open a fresh pairing link after the owning desktop window restarts.
+
+Use **Quick Access > XR > Open in XR**, or the assistant dock’s **VR headset** palette in App and Floating modes, to launch with your saved configuration. Enable Avatar first. **More** opens this Mode sub-tab. See [Live Assistant in VR](/guide/virtual-companion#live-assistant-in-vr) for the spatial controls.
+
+### Desktop presentation
+
 Choose how the desktop app is displayed. The same controls are available in **Quick Access > Mode**.
 
-| Control  | Default  | Behavior                                                                                                                                                                                                               |
-| -------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mode     | App      | **App** uses the standard resizable window. **Floating** shows a compact, transparent, always-on-top avatar window. **Wallpaper** places the Live Assistant behind the desktop icons and is supported on Windows only. |
-| Controls | Attached | In Floating or Wallpaper mode, choose whether the avatar and chat controls stay together or use separate windows. This setting does not change App mode.                                                               |
-| Interact | Off      | Shown only in Wallpaper mode. When off, the wallpaper is click-through. Turn it on to interact with the wallpaper.                                                                                                     |
+| Control              | Default | Behavior                                                                                                                                                                                                               |
+| -------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mode                 | App     | **App** uses the standard resizable window. **Floating** shows a compact, transparent, always-on-top avatar window. **Wallpaper** places the Live Assistant behind the desktop icons and is supported on Windows only. |
+| Separate chat window | Off     | Shown in Floating and Wallpaper modes. On opens chat and input separately from the avatar. Off keeps them together.                                                                                                    |
+| Interact             | Off     | Shown only in Wallpaper mode. When off, the wallpaper is click-through. Turn it on to interact with the wallpaper.                                                                                                     |
 
 This sub-tab appears only when the desktop mode API is available.
 
@@ -179,11 +203,11 @@ The AI Toolbar is the floating popup that appears when you select text on a page
 
 What actions the toolbar offers is mostly controlled by the AI+ settings tab. In embedded hosts, the host can also force built-in toolbar visibility and ordering through the embed config.
 
-| Control             | Default | Behavior                                                                      |
-| ------------------- | ------- | ----------------------------------------------------------------------------- |
-| Enable AI Toolbar   | On      | The floating in-page toolbar for selected text and quick actions.             |
-| Show on Input Focus | On      | Only when toolbar is on. Shows dictation helpers when you focus a text field. |
-| Show on Image Hover | On      | Only when toolbar is on. Shows image analysis affordances on hover.           |
+| Control             | Default                                              | Behavior                                                                      |
+| ------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Enable AI Toolbar   | Off on desktop and Android, on for web and extension | The floating in-page toolbar for selected text and quick actions.             |
+| Show on Input Focus | On                                                   | Only when toolbar is on. Shows dictation helpers when you focus a text field. |
+| Show on Image Hover | On                                                   | Only when toolbar is on. Shows image analysis affordances on hover.           |
 
 ### Keyboard shortcuts
 

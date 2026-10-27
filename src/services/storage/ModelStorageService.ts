@@ -301,9 +301,12 @@ class ModelStorageService {
    */
   async getDefaultModel(): Promise<ModelWithId | null> {
     try {
-      const allModels = await this.getAllModels();
-      const defaultModel = allModels.find((model) => model.isDefault === true);
-      return defaultModel || null;
+      const selected = (await this.getModelsList()).find(
+        (model) => model.isDefault,
+      );
+      if (!selected) return null;
+      const model = await this.getModel(selected.id);
+      return model ? { ...model, id: selected.id } : null;
     } catch (error) {
       Logger.error("ModelStorage", "Failed to get default model:", error);
       return null;
@@ -317,12 +320,11 @@ class ModelStorageService {
    */
   async setDefaultModel(modelId: string): Promise<boolean> {
     try {
-      await this.clearAllDefaults();
-
       const model = await this.getModel(modelId);
       if (!model) {
         throw new Error(`Model ${modelId} not found`);
       }
+      await this.clearAllDefaults();
 
       model.isDefault = true;
 
@@ -343,12 +345,16 @@ class ModelStorageService {
    */
   async clearAllDefaults(): Promise<void> {
     try {
-      const allModels = await this.getAllModels();
+      const allModels = (await this.getModelsList()).filter(
+        (model) => model.isDefault,
+      );
 
       for (const model of allModels) {
         if (model.isDefault) {
-          model.isDefault = false;
-          await storageServiceProxy.fileSave(model.id, model, this.CATEGORY);
+          const stored = await this.getModel(model.id);
+          if (!stored) continue;
+          stored.isDefault = false;
+          await storageServiceProxy.fileSave(model.id, stored, this.CATEGORY);
         }
       }
 

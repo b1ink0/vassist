@@ -1,6 +1,6 @@
 # Start Here
 
-VAssist is an AI assistant that runs on desktop, Android, and as a browser extension. It has three main parts: a full chat window, on-page tools that appear when you select text or focus an input, and an animated 3D Live Assistant that stays visible while you work.
+VAssist is an AI assistant that runs on desktop, Android, as a browser extension, and as a standalone web app, with experimental XR support. It has three main parts: a full chat window, on-page tools that appear when you select text or focus an input, and an animated 3D Live Assistant that stays visible while you work.
 
 <figure class="doc-figure">
   <img src="/assets/overview.gif" alt="VAssist overview showing chat, toolbar, and Live Assistant use." />
@@ -37,6 +37,10 @@ The [live demo](https://vassist-demo.vercel.app) runs in your browser with no in
 </div>
 
 If you are embedding VAssist, start with [Package integration](/architecture/packages-and-integration). That page covers the decisions you usually need first: package choice, shell entry point, provider ownership, request execution, and host control surfaces.
+
+## XR
+
+Use your avatar, stages, chat, and floating controls in VR. Use it in a browser or pair with the desktop app to access your conversations and AI providers. See [XR setup and controls](/guide/virtual-companion#live-assistant-in-vr).
 
 ## The three main features
 

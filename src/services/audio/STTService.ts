@@ -14,6 +14,7 @@ import {
 import storageManager from "../../storage";
 import ChromeAIValidator from "../ai/ChromeAIValidator";
 import Logger from "../common/LoggerService";
+import audioVisualizationService from "./AudioVisualizationService";
 import MicrophoneService from "./MicrophoneService";
 import { isExtension } from "../../utils/PlatformUtils";
 
@@ -52,6 +53,7 @@ class STTService {
   private enabled: boolean;
   private chromeAISession: any;
   private mediaRecorder: MediaRecorder | null;
+  private stopVisualization: (() => void) | null = null;
   private audioStream: MediaStream | null;
   private audioChunks: Blob[];
   private isRecording: boolean;
@@ -304,6 +306,10 @@ class STTService {
         : MicrophoneService.getAudioConstraints();
 
       this.audioStream = await navigator.mediaDevices.getUserMedia(constraints);
+      this.stopVisualization = audioVisualizationService.monitorStream(
+        "microphone",
+        this.audioStream,
+      );
 
       // Create MediaRecorder
       const mimeType = this.getSupportedMimeType();
@@ -403,8 +409,19 @@ class STTService {
   }
 
   /**
-   * Stop recording audio
+   * Cancel recording without requesting transcription.
    */
+  cancelRecording(): void {
+    if (this.mediaRecorder) {
+      this.mediaRecorder.onstop = null;
+      this.mediaRecorder.ondataavailable = null;
+      this.mediaRecorder.onerror = null;
+      if (this.mediaRecorder.state !== "inactive") this.mediaRecorder.stop();
+    }
+    this.cleanup();
+    this.onRecordingStop?.();
+  }
+
   stopRecording(): void {
     if (!this.isRecording || !this.mediaRecorder) {
       Logger.warn("STTService", "Not recording");
@@ -703,6 +720,8 @@ class STTService {
    * Cleanup recording resources
    */
   cleanup(): void {
+    this.stopVisualization?.();
+    this.stopVisualization = null;
     Logger.log("STTService", "Cleaning up recording resources...");
 
     if (this.audioStream) {

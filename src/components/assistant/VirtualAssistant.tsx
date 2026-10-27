@@ -11,6 +11,7 @@ import {
   useEffect,
 } from "react";
 import BabylonScene from "./BabylonScene";
+import { useXrRuntime } from "../../contexts/XrRuntimeContext";
 import LoadingIndicator from "../common/LoadingIndicator";
 import { buildMmdModelScene } from "../../babylon/scenes/MmdModelScene";
 import {
@@ -29,7 +30,7 @@ import {
   useUIConfig,
 } from "../../hooks/config/useConfigUI";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
-import { isDetachedAvatarWindow } from "../../utils/PlatformUtils";
+import { isDetachedAvatarWindow, isXR } from "../../utils/PlatformUtils";
 import Logger from "../../services/common/LoggerService";
 import emotePlayerService from "../../services/mmd/EmotePlayerService";
 import liveLipSyncService, {
@@ -172,6 +173,7 @@ const VirtualAssistant = forwardRef<AssistantHandle, VirtualAssistantProps>(
       previewPosition = "bottom-center",
     } = props;
     const uiConfig = useUIConfig();
+    const { enabled: xrEnabled } = useXrRuntime();
     const { updateUIConfig } = useConfigUIActions();
     const isConfigLoading = useIsConfigLoading();
     const savedModelPosition = useSavedModelPosition();
@@ -966,6 +968,9 @@ const VirtualAssistant = forwardRef<AssistantHandle, VirtualAssistantProps>(
     );
 
     const sceneBuildConfig: Partial<SceneBuildConfig> = {
+      ...((isXR || xrEnabled) && !isPreview
+        ? { presentation: "xr" as const }
+        : {}),
       enablePhysics: isPreview ? false : uiConfig?.enablePhysics !== false,
       renderQuality: isPreview ? "low" : uiConfig?.renderQuality || "medium",
       savedModelPosition: isPreview ? null : savedModelPosition,

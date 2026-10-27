@@ -3,7 +3,7 @@ layout: home
 
 hero:
   name: VAssist
-  tagline: Personal AI assistant with an on-screen Live Assistant. Runs on desktop, Android, and in the browser.
+  tagline: Personal AI assistant with an on-screen Live Assistant. Desktop, Android, extension, web, and XR.
   image:
     src: /VA.svg
     alt: VAssist

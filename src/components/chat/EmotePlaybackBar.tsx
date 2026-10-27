@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { Popover } from "@base-ui/react/popover";
+import { useSpatialHtmlPanelHost } from "../xr/SpatialHtmlPanelContext";
 
 interface EmotePlaybackBarProps {
   isVisible: boolean;
@@ -32,6 +33,7 @@ const EmotePlaybackBar = ({
   showTime,
   onSeek,
 }: EmotePlaybackBarProps) => {
+  const spatialHost = useSpatialHtmlPanelHost();
   const trackHitRef = useRef<HTMLButtonElement | null>(null);
   const seekRafRef = useRef<number | null>(null);
   const pendingSeekProgressRef = useRef(0);
@@ -92,21 +94,29 @@ const EmotePlaybackBar = ({
       queueSeekUpdate(nextProgress);
     };
 
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", finishSeeking);
-    window.addEventListener("pointercancel", finishSeeking);
+    const target: EventTarget = spatialHost ?? window;
+    const move = (event: Event) => handlePointerMove(event as PointerEvent);
+    target.addEventListener("pointermove", move);
+    target.addEventListener("pointerup", finishSeeking);
+    target.addEventListener("pointercancel", finishSeeking);
 
     return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", finishSeeking);
-      window.removeEventListener("pointercancel", finishSeeking);
+      target.removeEventListener("pointermove", move);
+      target.removeEventListener("pointerup", finishSeeking);
+      target.removeEventListener("pointercancel", finishSeeking);
 
       if (seekRafRef.current !== null) {
         window.cancelAnimationFrame(seekRafRef.current);
         seekRafRef.current = null;
       }
     };
-  }, [finishSeeking, getProgressFromPointer, isSeeking, queueSeekUpdate]);
+  }, [
+    finishSeeking,
+    getProgressFromPointer,
+    isSeeking,
+    queueSeekUpdate,
+    spatialHost,
+  ]);
 
   if (!isVisible || duration <= 0) {
     return null;
@@ -120,7 +130,7 @@ const EmotePlaybackBar = ({
   ) => {
     seekActiveRef.current = true;
     setIsSeeking(true);
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    if (!spatialHost) event.currentTarget.setPointerCapture?.(event.pointerId);
 
     const nextProgress = getProgressFromPointer(event.clientX);
     setLocalProgress(nextProgress);
@@ -150,7 +160,9 @@ const EmotePlaybackBar = ({
               className="absolute -inset-y-3 left-0 z-30 m-0 block h-auto w-full cursor-ew-resize touch-none appearance-none border-0 bg-transparent p-0"
             />
 
-            <Popover.Portal>
+            <Popover.Portal
+              {...(spatialHost ? { container: spatialHost } : {})}
+            >
               <Popover.Positioner
                 side="top"
                 sideOffset={8}

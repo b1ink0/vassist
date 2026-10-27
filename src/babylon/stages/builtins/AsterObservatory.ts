@@ -181,7 +181,17 @@ export async function createAsterObservatory(
   ivory.albedoColor = Color3.White();
   // Circular observatory deck with restrained radial expansion joints.
   cylinder("station deck edge", 0, -0.21, -1, 16, 16, 0.35, graphite, 96);
-  cylinder("station deck surface", 0, -0.01, -1, 15.8, 15.8, 0.08, slate, 96);
+  const xrFloor = cylinder(
+    "station deck surface",
+    0,
+    -0.01,
+    -1,
+    15.8,
+    15.8,
+    0.08,
+    slate,
+    96,
+  );
   cylinder(
     "companion inlay",
     -0.4,
@@ -912,6 +922,7 @@ export async function createAsterObservatory(
   onProgress("Scene ready");
   return {
     id: "aster-observatory",
+    floorMeshes: [xrFloor],
     root,
     runtime,
     setMood,

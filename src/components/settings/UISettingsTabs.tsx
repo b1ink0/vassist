@@ -52,7 +52,7 @@ export const DisplayTab = ({
             troubleshooting, and feature explanations.
           </p>
           <a
-            href="https://b1ink0.github.io/vassist/intro"
+            href="https://docs-vassist.vercel.app/"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 text-xs font-medium transition-colors"
@@ -233,6 +233,24 @@ export const ChatTab = ({
   isLightBackground,
 }: ChatTabProps) => (
   <div className="space-y-4">
+    <SettingsRow
+      label="Fade chat messages"
+      description="Show the latest message briefly. Open Chat options to show the full conversation."
+    >
+      <Toggle
+        checked={uiConfig.fadeChatMessages === true}
+        onChange={(checked) => updateUIConfig("fadeChatMessages", checked)}
+      />
+    </SettingsRow>
+    <SettingsRow
+      label="Animate response text"
+      description="Gently reveal new words as the assistant responds."
+    >
+      <Toggle
+        checked={uiConfig.animateStreamingText !== false}
+        onChange={(checked) => updateUIConfig("animateStreamingText", checked)}
+      />
+    </SettingsRow>
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <div className="flex-1">
