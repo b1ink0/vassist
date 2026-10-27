@@ -125,6 +125,7 @@ class VAssistWallpaperService : WallpaperService() {
         }
         
         private fun cleanup() {
+            rendererWebView?.disposeBackgroundMotion()
             rendererWebView?.loadUrl("about:blank")
             rendererWebView?.destroy()
             rendererWebView = null

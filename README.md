@@ -1,100 +1,88 @@
 <div align="center">
   <img src="public/VA.svg" alt="VAssist Logo" width="64" />
   <h1>VAssist</h1>
-  <p>Cross-platform AI assistant available as a Browser Extension, Desktop App, and Android App, with in-page tools, full chat, voice interaction, and a customizable virtual companion.</p>
+  <p>Chat, page tools, and a Live Assistant across desktop, Android, browser extension, web, and XR.</p>
 </div>
 
 <div align="center">
 
-[Try Demo](https://vassist-demo.vercel.app) • [Documentation](https://b1ink0.github.io/vassist/docs/intro) • [Installation](#installation)
+[Live Demo](https://vassist-demo.vercel.app) • [Documentation](https://docs-vassist.vercel.app/) • [Installation](#installation)
 
 </div>
 
-## Overview
+## What VAssist Does
 
 <div align="center">
-  <img src="./assets/overview.gif" alt="VAssist Overview" width="540" height="360" />
+  <img src="./documentation/site/public/assets/overview.gif" alt="VAssist Overview" width="540" height="360" />
 </div>
 
-VAssist is built around three core surfaces:
+- Full chat for longer conversations, saved threads, attachments, alternate replies, and voice.
+- On-page tools for rewrite, summarize, translate, dictation, writing, and image actions without leaving the page.
+- Live Assistant that stays on screen, speaks, and works with your own MMD assets.
+- Customizable stages with time of day, seasonal effects, and floating controls in experimental XR.
 
-- **Chat Interface** - Full conversation workspace with streaming, attachments, voice mode, and history branching
-- **Virtual Companion** - Animated assistant with responsive states and interaction feedback
-- **AI Toolbar** - Appears on selection/focus and runs rewrite, summarize, translate, writer, dictation, and image tools
+Choose local or remote providers for chat, speech input, and speech output. You can mix them to suit your setup.
 
-The experience is provider-configurable from setup/settings, so chat/voice/tools can run with different LLM, STT, and TTS backends.
+[View the full documentation ->](https://docs-vassist.vercel.app/)
 
-[View full documentation →](https://b1ink0.github.io/vassist/docs/intro)
-
-## Features
-
-VAssist combines three workflows in one interface:
-
-- In-page tools for rewrite, summarize, translate, writing, dictation, and image actions
-- Full chat with streaming, attachments, page context, and history branching
-- A customizable 3D companion with PMX models, stages, VMD motions, and emotes
-- Android live wallpaper mode for running the companion avatar on the home screen
-
-### Chat Interface
+### Full Chat
 
 <div align="center">
-  <img src="./assets/chat.png" alt="Chat Interface" />
+  <img src="./documentation/site/public/assets/chat.png" alt="Chat Interface" />
 </div>
 
-Open full chat for streaming responses, page context, attachments, and history branching.
+The main chat view handles streaming replies, page context, attachments, voice mode, and history branching.
 
----
-
-### Virtual Companion
+### Live Assistant
 
 <div align="center">
-  <img src="./assets/companion.png" alt="Virtual Companion" />
+  <img src="./documentation/site/public/assets/companion.png" alt="Live Assistant" />
 </div>
 
-Use a customizable companion with model/stage/motion/emote controls and runtime-aware behavior.
+Keep the assistant visible while you work, swap models or stages on the fly, and reuse the same avatar as an Android live wallpaper.
 
----
+Use the desktop assistant in an app, as a floating companion, or as a live wallpaper on Windows. Desktop and Android include built-in wallpapers, and you can choose your own images too.
+
+### XR
+
+Use your avatar, stages, and chat in VR, independently in a browser or paired with the desktop app. XR support is experimental.
+
+[XR setup and controls →](https://docs-vassist.vercel.app/guide/virtual-companion#live-assistant-in-vr)
 
 ### AI Toolbar
 
 <div align="center">
-  <img src="./assets/toolbars.png" alt="AI Toolbar" />
+  <img src="./documentation/site/public/assets/toolbars.png" alt="AI Toolbar" />
 </div>
 
-Select text in-page to open quick rewrite, summarize, translate, writer, dictation, and image actions.
+Select text or focus an input to rewrite, summarize, translate, dictate, or run image actions in place.
 
----
+## Choose a Version
 
-### Provider and Runtime Details
+| Version                | Best if you want                                   | What you get                                                                                                                       |
+| ---------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Desktop app            | Everything in one desktop app                      | On-device LLM support, on-device speech input, on-device speech output, camera and screen share, and tray integration              |
+| Android app            | VAssist on a phone or tablet                       | On-device LLM support, on-device speech input, on-device speech output, shared app and wallpaper settings, and live wallpaper mode |
+| Browser extension      | VAssist inside the sites you already use           | Page-aware chat, on-page tools, and Chrome AI support where available                                                              |
+| Standalone web app     | Use VAssist in a browser without installing an app | Browser storage, configurable AI and speech providers, and the shared chat and Live Assistant interface                            |
+| Experimental XR        | Use the assistant in VR                            | Floating controls, avatars and stages, with optional desktop pairing                                                               |
+| Browser embed packages | Embed VAssist in your own web app                  | `@vassist/react` for React hosts and `@vassist/embed` for JavaScript hosts. Currently available only inside this Bun workspace     |
 
-VAssist lets you configure LLM, STT, and TTS providers independently from setup/settings.
+## Embed in Your Own App
 
-- LLM providers: Chrome AI, OpenAI, Ollama, android-local, desktop-local
-- STT providers: Chrome AI Multimodal, OpenAI, OpenAI-compatible, android-local, desktop-local
-- TTS providers: Kokoro, OpenAI, OpenAI-compatible, GPT-SoVITS remote, android-local, desktop-local
+The `@vassist/react` and `@vassist/embed` packages are not published on npm yet. Their source is available as Bun workspaces in this repository. They provide the shared browser runtime, configurable UI and provider settings, and host bridges. Electron and Android native services remain specific to those apps.
 
-<details>
-<summary>Local provider implementation details</summary>
+[Package integration docs →](https://docs-vassist.vercel.app/architecture/packages-and-integration)
 
-- android-local runs through the in-app Android local AI server and uses llama.cpp with GGUF model management; mmproj pairing is supported for vision-capable models
-- desktop-local runs through the desktop local AI server and uses node-llama-cpp for local LLM inference
-- Android local STT is handled by WhisperService (whisper-tiny.en) using sherpa-onnx on-device inference
-- Android local TTS is handled by VitsService (vits-vctk, multi-speaker) using sherpa-onnx on-device inference
-- Desktop local STT is proxied by the local server to the Faster Whisper Python service
-- Desktop local TTS is proxied by the local server to GPT-SoVITS and returned as WAV audio
-- Both local runtimes expose OpenAI-style audio routes for transcription and speech through the local server surface
+## Model and Voice Support
 
-</details>
+| Capability       | On-device or built-in options                                                                                                                                                     | Remote or hosted options                                 |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Chat and main AI | Desktop: GGUF through llama-server (default) or node-llama-cpp. Android: native llama.cpp or LiteRT-LM for supported models. Browser and extension: Chrome AI where available.    | OpenAI, Ollama, and OpenAI-compatible servers            |
+| Speech output    | Desktop: GPT-SoVITS or Supertonic 3. Android: sherpa-onnx voice packs, including VITS, Kitten, and Supertonic 3. Kokoro is also available in the browser, extension, and desktop. | GPT-SoVITS Remote, OpenAI TTS, and OpenAI-compatible TTS |
+| Speech input     | Desktop: whisper.cpp (default) or faster-whisper. Android: sherpa-onnx Whisper, SenseVoice, or Dolphin. Browser and extension: Chrome AI speech input where supported.            | OpenAI Whisper and OpenAI-compatible STT                 |
 
-
----
-
-### Companion Customization
-
-- Upload custom PMX companion models and PMX stages
-- Import VMD animations, assign categories, and control which motions are enabled
-- Create/import emotes with motion, audio, and camera variants
-- Apply the configured avatar as an Android live wallpaper from the app setup flow
+The [AI and Media Stack guide](https://docs-vassist.vercel.app/architecture/ai-and-media-stack) goes deeper on the engines and file formats behind those options.
 
 ## Installation
 
@@ -118,15 +106,28 @@ Download artifacts from [releases](https://github.com/b1ink0/vassist/releases):
 
 </details>
 
+If you are not sure where to start, use the [installation guide](https://docs-vassist.vercel.app/getting-started/installation).
+
 ### Build From Source
+
+Use Bun to install dependencies and run project commands. Additional requirements depend on the version you want to build.
 
 #### Requirements
 
-- Bun (recommended) or Node.js
-- Chrome (for extension runtime)
-- Android Studio + SDK (for Android build/run)
+- Bun 1.3.5
+- Git
 
-1. Clone and install dependencies:
+#### Platform Requirements
+
+| Target                  | Additional requirements                                                                   |
+| ----------------------- | ----------------------------------------------------------------------------------------- |
+| Browser extension       | Chrome to load and use the extension                                                      |
+| Android                 | Android Studio and the Android SDK                                                        |
+| Windows desktop package | Windows, Node.js, Python, Visual Studio C++ build tools with MSVC v143, and a Windows SDK |
+
+Windows desktop packaging builds a native addon for live-wallpaper support. See the [native addon build guide](electron/native/desktop-host/README.md) for details.
+
+#### Setup
 
 ```bash
 git clone https://github.com/b1ink0/vassist.git
@@ -134,82 +135,53 @@ cd vassist
 bun install
 ```
 
-2. Choose your runtime:
+#### Common Commands
 
-- Extension: `bun run dev:extension` (or build zip with `bun run build:extension:zip`)
-- Desktop app: `bun run dev:desktop` (or production build with `bun run build:desktop:production`)
-- Android app: `bun run dev:android` (or production build with `bun run build:android`)
+| Goal                               | Command                 |
+| ---------------------------------- | ----------------------- |
+| Standalone web app                 | `bun run dev`           |
+| Extension watch build              | `bun run dev:extension` |
+| Desktop renderer                   | `bun run dev:desktop`   |
+| Android web build + Capacitor sync | `bun run dev:android`   |
+| Docs site with embedded assistant  | `bun run docs:dev`      |
+| Lint                               | `bun run lint`          |
+| App typecheck                      | `bun run typecheck:app` |
 
-<details>
-<summary>Android run (Capacitor dev flow)</summary>
+#### Production Builds
 
-1. Build and sync Android assets:
-
-```bash
-bun run dev:android
-```
-
-2. Open Android project:
-
-```bash
-bun run cap:open:android
-```
-
-3. Run from Android Studio on emulator/device.
-4. Use the Android app option to set VAssist as your live wallpaper.
-
-</details>
-
-<details>
-<summary>Optional Chrome AI mode</summary>
-
-If you specifically want Chrome built-in AI providers, enable the required Chrome AI flags in your browser.
-
-</details>
-
-[Detailed installation guide →](https://b1ink0.github.io/vassist/docs/installation)
+- Standalone web: `bun run build`
+- Experimental XR: `bun run build:xr`
+- Extension: `bun run build:extension` or `bun run build:extension:zip`
+- Desktop renderer: `bun run build:desktop:production`
+- Windows desktop package: `bun run build:desktop:win`
+- macOS desktop package: `bun run build:desktop:mac`
+- Android: `bun run build:android`
+- Docs: `bun run docs:build`
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
-```bash
-git clone https://github.com/b1ink0/vassist.git
-cd vassist
-bun install
+## Stack
 
-bun run dev:extension          # Extension development build (watch)
-bun run dev:desktop            # Desktop renderer development
-bun run dev:android            # Android web build + Capacitor sync
-bun run build:extension        # Build extension
-bun run build:extension:zip    # Create distributable
-bun run build:desktop:production
-bun run build:android
-```
+- React
+- Vite
+- Electron
+- Capacitor for Android
+- Babylon.js and babylon-mmd
+- Dexie
+- Kokoro.js
+- node-llama-cpp
+- llama.cpp
+- Express and NanoHTTPD
+- `@vassist/react` and `@vassist/embed` browser packages (Bun workspace, not yet published)
 
-## Built With
+## Licenses
 
-- **React** - UI framework
-- **Vite** - Build tool
-- **Electron** - Desktop runtime
-- **Capacitor (Android)** - Android runtime bridge
-- **Babylon.js** - Character rendering and animation
-- **babylon-mmd** - PMX/VMD companion pipeline
-- **Tailwind CSS** - Styling
-- **Dexie.js** - IndexedDB wrapper
-- **Kokoro.js** - On-device TTS
-- **node-llama-cpp** - Desktop local LLM integration
-- **llama.cpp** - Android local LLM backend (native)
-- **Express + NanoHTTPD** - Local OpenAI-style API servers
-- **Whisper + VITS integrations** - Local STT/TTS service backends
-- **Chrome AI APIs** - Native on-device AI integration
+- [LiveKit Aura](./licenses/livekit-aura.txt).
 
-## License
-
-MIT License - see [LICENSE](LICENSE) file for details.
+GPL-3.0. See [LICENSE](LICENSE).
 
 ## Links
 
-[🐛 Issues](https://github.com/b1ink0/vassist/issues) • [💬 Discussions](https://github.com/b1ink0/vassist/discussions) • [📖 Docs](https://b1ink0.github.io/vassist/docs/intro)
-
----
+[Issues](https://github.com/b1ink0/vassist/issues) • [Discussions](https://github.com/b1ink0/vassist/discussions) • [Docs](https://docs-vassist.vercel.app/)

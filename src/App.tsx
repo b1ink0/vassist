@@ -1,0 +1,621 @@
+/**
+ * @fileoverview Root application component with setup wizard and context providers.
+ */
+
+import CameraService from "./services/media/CameraService";
+import ScreenShareService from "./services/media/ScreenShareService";
+import LoadingIndicator from "./components/common/LoadingIndicator";
+import { AppRuntimeProvider } from "./contexts/AppRuntimeContext";
+import type { AppStore } from "./stores/createAppStore";
+import { SetupProvider, useSetup } from "./contexts/SetupContext";
+import {
+  normalizeVAssistEmbedConfig,
+  type ResolvedVAssistEmbedConfig,
+  type VAssistEmbedConfig,
+} from "./embed/config";
+import { getVAssistThemeRootAttributes } from "./embed/theme";
+import {
+  setActiveEmbedHostId,
+  setResolvedEmbedConfig,
+} from "./embed/runtimeStore";
+import { EmbedHostProvider } from "./embed/EmbedHostContext";
+import { AnimationProvider } from "./contexts/AnimationContext";
+import { useInitializeAppStore } from "./hooks/bootstrap/useInitializeAppStore";
+import { useInitializeConfigStore } from "./hooks/bootstrap/useInitializeConfigStore";
+import { useRefreshAndroidApi } from "./hooks/useAndroidStore";
+import { useRefreshDesktopApi } from "./hooks/useDesktopStore";
+import {
+  isAndroid,
+  isDesktop,
+  isEmbed,
+  isXR,
+  isInputWindow,
+  isScreenPicker,
+  isDesktopAttachedModeWindow,
+} from "./utils/PlatformUtils";
+import { useConfigStore } from "./stores/useConfigStore";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { vassistTestFlags } from "./testing/runtime";
+import {
+  prepareXrClient,
+  type XrClientRuntime,
+} from "./services/xr/XrClientRuntime";
+import { Button } from "./components/ui";
+
+interface AppWithSetupProps {
+  mode?: string;
+  showDeferredSetup?: boolean;
+  onStartSetup?: (() => void) | undefined;
+  onMinimizeSetup?: (() => void) | undefined;
+  forcePortraitWhileDeferred?: boolean;
+  embedConfig: ResolvedVAssistEmbedConfig;
+}
+
+interface AppProps {
+  mode?: string;
+  isWallpaperMode?: boolean;
+  embedded?: boolean;
+  deferSetupUntilStarted?: boolean;
+  embedConfig?: VAssistEmbedConfig;
+  onStoreReady?: ((store: AppStore) => void) | undefined;
+}
+
+function StoreBootstrap({
+  children,
+  embedConfig,
+  onStoreReady,
+}: {
+  children: ReactNode;
+  embedConfig: ResolvedVAssistEmbedConfig;
+  onStoreReady?: ((store: AppStore) => void) | undefined;
+}) {
+  return (
+    <AppRuntimeProvider onStoreReady={onStoreReady}>
+      <StoreBootstrapInner embedConfig={embedConfig}>
+        {children}
+      </StoreBootstrapInner>
+    </AppRuntimeProvider>
+  );
+}
+
+function StoreBootstrapInner({
+  children,
+  embedConfig,
+}: {
+  children: ReactNode;
+  embedConfig: ResolvedVAssistEmbedConfig;
+}) {
+  useInitializeConfigStore(embedConfig);
+  useInitializeAppStore(embedConfig);
+
+  const desktopThemeMode = useConfigStore(
+    (state) => state.uiConfig.backgroundDetection?.mode,
+  );
+  const hasConfigHydrated = useConfigStore((state) => state.hasHydrated);
+  const applyEmbedConfigToCurrentState = useConfigStore(
+    (state) => state.applyEmbedConfigToCurrentState,
+  );
+
+  const refreshDesktopApi = useRefreshDesktopApi();
+  const refreshAndroidApi = useRefreshAndroidApi();
+
+  useEffect(() => {
+    refreshDesktopApi();
+    refreshAndroidApi();
+  }, [refreshAndroidApi, refreshDesktopApi]);
+
+  useEffect(() => {
+    setResolvedEmbedConfig(embedConfig, embedConfig.mount.hostId);
+    setActiveEmbedHostId(embedConfig.mount.hostId);
+  }, [embedConfig]);
+
+  useEffect(() => {
+    if (hasConfigHydrated) {
+      void applyEmbedConfigToCurrentState(embedConfig);
+    }
+  }, [applyEmbedConfigToCurrentState, embedConfig, hasConfigHydrated]);
+
+  const themeRoot = useMemo(
+    () => getVAssistThemeRootAttributes(embedConfig),
+    [embedConfig],
+  );
+
+  return (
+    <EmbedHostProvider embedConfig={embedConfig}>
+      <div
+        className="vassist-theme-root"
+        data-vassist-host-id={embedConfig.mount.hostId}
+        data-vassist-theme-mode={themeRoot.mode}
+        data-vassist-surface-style={themeRoot.surfaceStyle}
+        data-vassist-desktop-theme={
+          isDesktop && !isDesktopAttachedModeWindow
+            ? desktopThemeMode
+            : undefined
+        }
+        style={themeRoot.style}
+        onMouseEnter={() => setActiveEmbedHostId(embedConfig.mount.hostId)}
+        onPointerDownCapture={() =>
+          setActiveEmbedHostId(embedConfig.mount.hostId)
+        }
+        onFocusCapture={() => setActiveEmbedHostId(embedConfig.mount.hostId)}
+      >
+        {children}
+      </div>
+    </EmbedHostProvider>
+  );
+}
+
+const AppContent = lazy(() => import("./components/AppContent"));
+const DemoSite = lazy(() => import("./components/DemoSite"));
+const SetupWizard = lazy(() => import("./components/setup/SetupWizard"));
+const ChatInput = lazy(() => import("./components/chat/ChatInput"));
+const VideoPreview = lazy(() => import("./components/desktop/VideoPreview"));
+const DesktopWindowInteractivityBridge = lazy(
+  () => import("./components/desktop/DesktopWindowInteractivityBridge"),
+);
+const DesktopScreenShareDialog = lazy(
+  () => import("./components/desktop/DesktopScreenShareDialog"),
+);
+const DesktopModeHost = lazy(
+  () => import("./components/desktop/DesktopModeHost"),
+);
+const AndroidContent = lazy(() => import("../android-src/AndroidContent"));
+const AndroidBackground = lazy(
+  () => import("./components/android/AndroidBackground"),
+);
+
+/**
+ * Application wrapper component that handles setup flow.
+ *
+ * @param {Object} props
+ * @param {string} props.mode - Application mode ('development'|'extension'|'android')
+ * @returns {JSX.Element}
+ */
+function AppWithSetup({
+  mode = "development",
+  showDeferredSetup = false,
+  onStartSetup,
+  onMinimizeSetup,
+  forcePortraitWhileDeferred = false,
+  embedConfig,
+}: AppWithSetupProps) {
+  const { setupCompleted, isLoading } = useSetup();
+  const requireSetupOnChatClick = showDeferredSetup && !setupCompleted;
+  const appContentProps = onStartSetup ? { onRequireSetup: onStartSetup } : {};
+
+  if (isLoading) {
+    return <LoadingIndicator isVisible={true} />;
+  }
+
+  if (!setupCompleted) {
+    if (showDeferredSetup) {
+      return (
+        <Suspense fallback={<LoadingIndicator isVisible={true} />}>
+          <AppContent
+            mode={mode}
+            requireSetupOnChatClick={requireSetupOnChatClick}
+            {...appContentProps}
+            forcePortraitMode={forcePortraitWhileDeferred}
+            embedConfig={embedConfig}
+          />
+        </Suspense>
+      );
+    }
+
+    return (
+      <Suspense fallback={<LoadingIndicator isVisible={true} />}>
+        <SetupWizard onMinimizeSetup={onMinimizeSetup} />
+      </Suspense>
+    );
+  }
+
+  return (
+    <Suspense fallback={<LoadingIndicator isVisible={true} />}>
+      <AppContent
+        mode={mode}
+        requireSetupOnChatClick={requireSetupOnChatClick}
+        {...appContentProps}
+        embedConfig={embedConfig}
+      />
+    </Suspense>
+  );
+}
+
+/**
+ * Android wrapper component - only loads the 3D model for wallpaper.
+ *
+ * @returns {JSX.Element}
+ */
+function AndroidWrapper() {
+  return (
+    <Suspense fallback={<LoadingIndicator isVisible={true} />}>
+      <AndroidContent />
+    </Suspense>
+  );
+}
+
+/**
+ * Check if running in Android wallpaper mode
+ */
+function isWallpaperMode() {
+  if (typeof window === "undefined") return true;
+  const params = new URLSearchParams(window.location.search);
+  const mode = params.get("mode");
+  return mode !== "app";
+}
+
+function isEmbeddedModeEnabled() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const embedParam = params.get("embed");
+
+  if (embedParam === null) {
+    return false;
+  }
+
+  return !["0", "false", "no", "off"].includes(embedParam.toLowerCase());
+}
+
+function DevelopmentDemoSite({ onStartSetup }: { onStartSetup: () => void }) {
+  const { setupCompleted, isLoading } = useSetup();
+  const launchHandler =
+    !isLoading && !setupCompleted ? onStartSetup : undefined;
+  const demoSiteProps = launchHandler
+    ? { onLaunchAssistant: launchHandler }
+    : {};
+
+  return (
+    <Suspense fallback={null}>
+      <DemoSite {...demoSiteProps} />
+    </Suspense>
+  );
+}
+
+/**
+ * Root application component.
+ *
+ * @param {Object} props
+ * @param {string} props.mode - Application mode ('development'|'extension'|'desktop'|'android')
+ * @returns {JSX.Element}
+ */
+function Application({
+  mode = "development",
+  isWallpaperMode: explicitWallpaperMode,
+  embedded = false,
+  deferSetupUntilStarted,
+  embedConfig,
+  onStoreReady,
+}: AppProps) {
+  const shouldRenderCameraPreview =
+    !vassistTestFlags.enabled || !vassistTestFlags.disableCamera;
+
+  const resolvedEmbedConfig = useMemo(
+    () =>
+      normalizeVAssistEmbedConfig(
+        embedConfig ??
+          (deferSetupUntilStarted
+            ? { shell: { deferSetupUntilStarted } }
+            : undefined),
+      ),
+    [deferSetupUntilStarted, embedConfig],
+  );
+
+  // Determine actual mode based on build-time constants and props
+  const actualMode = __DESKTOP_MODE__
+    ? "desktop"
+    : isAndroid
+      ? "android"
+      : isXR
+        ? "xr"
+        : mode;
+  const isEmbeddedDevelopmentMode =
+    actualMode === "development" &&
+    (embedded || isEmbed || isEmbeddedModeEnabled());
+  const shouldDeferEmbeddedSetup = isEmbeddedDevelopmentMode
+    ? resolvedEmbedConfig.shell.deferSetupUntilStarted
+    : false;
+  const defaultDeferredSetup =
+    actualMode === "development"
+      ? isEmbeddedDevelopmentMode
+        ? shouldDeferEmbeddedSetup
+        : (deferSetupUntilStarted ?? !isEmbeddedDevelopmentMode)
+      : false;
+  const defaultForcePortraitWhileDeferred =
+    actualMode === "development"
+      ? isEmbeddedDevelopmentMode
+        ? resolvedEmbedConfig.shell.forcePortraitMode
+        : !isEmbeddedDevelopmentMode
+      : false;
+  const developmentContainerClass = isEmbeddedDevelopmentMode
+    ? "relative h-full w-full overflow-visible"
+    : "relative w-full h-screen overflow-hidden";
+  const [showDeferredSetup, setShowDeferredSetup] =
+    useState(defaultDeferredSetup);
+
+  useEffect(() => {
+    setShowDeferredSetup(defaultDeferredSetup);
+  }, [defaultDeferredSetup]);
+
+  if (actualMode === "android") {
+    if (
+      typeof explicitWallpaperMode === "boolean"
+        ? explicitWallpaperMode
+        : isWallpaperMode()
+    ) {
+      return (
+        <StoreBootstrap
+          embedConfig={resolvedEmbedConfig}
+          onStoreReady={onStoreReady}
+        >
+          <AnimationProvider>
+            <div className="relative w-full h-screen overflow-hidden bg-transparent">
+              <Suspense fallback={null}>
+                <AndroidBackground />
+              </Suspense>
+              <AndroidWrapper />
+            </div>
+          </AnimationProvider>
+        </StoreBootstrap>
+      );
+    }
+
+    return (
+      <StoreBootstrap
+        embedConfig={resolvedEmbedConfig}
+        onStoreReady={onStoreReady}
+      >
+        <SetupProvider embedConfig={resolvedEmbedConfig}>
+          <AnimationProvider>
+            <div className="relative w-full h-screen overflow-hidden">
+              <Suspense fallback={null}>
+                <AndroidBackground />
+              </Suspense>
+              <AppWithSetup
+                mode="android"
+                showDeferredSetup={showDeferredSetup}
+                onStartSetup={() => setShowDeferredSetup(false)}
+                onMinimizeSetup={() => setShowDeferredSetup(true)}
+                embedConfig={resolvedEmbedConfig}
+              />
+              {shouldRenderCameraPreview && (
+                <Suspense fallback={null}>
+                  <VideoPreview service={CameraService} type="camera" />
+                </Suspense>
+              )}
+            </div>
+          </AnimationProvider>
+        </SetupProvider>
+      </StoreBootstrap>
+    );
+  }
+
+  if (actualMode === "xr") {
+    return (
+      <StoreBootstrap
+        embedConfig={resolvedEmbedConfig}
+        onStoreReady={onStoreReady}
+      >
+        <SetupProvider embedConfig={resolvedEmbedConfig}>
+          <AnimationProvider>
+            <AppWithSetup mode="xr" embedConfig={resolvedEmbedConfig} />
+          </AnimationProvider>
+        </SetupProvider>
+      </StoreBootstrap>
+    );
+  }
+
+  if (actualMode === "desktop") {
+    if (isScreenPicker) {
+      return (
+        <StoreBootstrap
+          embedConfig={resolvedEmbedConfig}
+          onStoreReady={onStoreReady}
+        >
+          <Suspense fallback={<LoadingIndicator isVisible={true} />}>
+            <DesktopScreenShareDialog />
+          </Suspense>
+        </StoreBootstrap>
+      );
+    }
+
+    if (isInputWindow) {
+      return (
+        <StoreBootstrap
+          embedConfig={resolvedEmbedConfig}
+          onStoreReady={onStoreReady}
+        >
+          <Suspense fallback={null}>
+            <DesktopWindowInteractivityBridge />
+          </Suspense>
+          <Suspense fallback={<LoadingIndicator isVisible={true} />}>
+            <ChatInput
+              onSend={() => {}}
+              onClose={() => {}}
+              onVoiceTranscription={() => {}}
+              onVoiceMode={() => {}}
+              embedConfig={resolvedEmbedConfig}
+            />
+          </Suspense>
+          <Suspense fallback={null}>
+            {shouldRenderCameraPreview && (
+              <VideoPreview service={CameraService} type="camera" />
+            )}
+            <VideoPreview service={ScreenShareService} type="screen" />
+          </Suspense>
+        </StoreBootstrap>
+      );
+    }
+
+    return (
+      <StoreBootstrap
+        embedConfig={resolvedEmbedConfig}
+        onStoreReady={onStoreReady}
+      >
+        <SetupProvider embedConfig={resolvedEmbedConfig}>
+          <AnimationProvider>
+            <Suspense fallback={null}>
+              <DesktopModeHost>
+                <AppWithSetup
+                  mode="desktop"
+                  showDeferredSetup={showDeferredSetup}
+                  onStartSetup={() => setShowDeferredSetup(false)}
+                  onMinimizeSetup={() => setShowDeferredSetup(true)}
+                  embedConfig={resolvedEmbedConfig}
+                />
+                <Suspense fallback={null}>
+                  {shouldRenderCameraPreview && (
+                    <VideoPreview service={CameraService} type="camera" />
+                  )}
+                  <VideoPreview service={ScreenShareService} type="screen" />
+                </Suspense>
+              </DesktopModeHost>
+            </Suspense>
+          </AnimationProvider>
+        </SetupProvider>
+      </StoreBootstrap>
+    );
+  }
+
+  // Development and Extension modes
+  return (
+    <StoreBootstrap
+      embedConfig={resolvedEmbedConfig}
+      onStoreReady={onStoreReady}
+    >
+      <SetupProvider embedConfig={resolvedEmbedConfig}>
+        <AnimationProvider>
+          {actualMode === "development" ? (
+            <div className={developmentContainerClass}>
+              {!isEmbeddedDevelopmentMode ? (
+                <DevelopmentDemoSite
+                  onStartSetup={() => setShowDeferredSetup(false)}
+                />
+              ) : null}
+              <AppWithSetup
+                mode="development"
+                showDeferredSetup={showDeferredSetup}
+                onStartSetup={() => setShowDeferredSetup(false)}
+                onMinimizeSetup={() => setShowDeferredSetup(true)}
+                forcePortraitWhileDeferred={defaultForcePortraitWhileDeferred}
+                embedConfig={resolvedEmbedConfig}
+              />
+              <Suspense fallback={null}>
+                {shouldRenderCameraPreview && (
+                  <VideoPreview service={CameraService} type="camera" />
+                )}
+                <VideoPreview service={ScreenShareService} type="screen" />
+              </Suspense>
+            </div>
+          ) : (
+            <>
+              <AppWithSetup
+                mode="extension"
+                showDeferredSetup={showDeferredSetup}
+                onStartSetup={() => setShowDeferredSetup(false)}
+                onMinimizeSetup={() => setShowDeferredSetup(true)}
+                embedConfig={resolvedEmbedConfig}
+              />
+              <Suspense fallback={<LoadingIndicator isVisible={true} />}>
+                {shouldRenderCameraPreview && (
+                  <VideoPreview service={CameraService} type="camera" />
+                )}
+                <VideoPreview service={ScreenShareService} type="screen" />
+              </Suspense>
+            </>
+          )}
+        </AnimationProvider>
+      </SetupProvider>
+    </StoreBootstrap>
+  );
+}
+
+export default function App(props: AppProps) {
+  const { embedConfig, onStoreReady: notifyStoreReady } = props;
+  const pairingUrl = embedConfig?.transport?.xrPairingUrl;
+  const [boot, setBoot] = useState<{
+    ready: boolean;
+    runtime: XrClientRuntime | null;
+    error: string;
+  }>({ ready: false, runtime: null, error: "" });
+  useEffect(() => {
+    let cancelled = false;
+    void prepareXrClient(pairingUrl)
+      .then((runtime) => {
+        if (!cancelled) setBoot({ ready: true, runtime, error: "" });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled)
+          setBoot({
+            ready: false,
+            runtime: null,
+            error: error instanceof Error ? error.message : String(error),
+          });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pairingUrl]);
+  const config = useMemo(
+    () =>
+      boot.runtime
+        ? {
+            ...embedConfig,
+            ...boot.runtime.config,
+            features: {
+              ...embedConfig?.features,
+              ...boot.runtime.config.features,
+            },
+          }
+        : embedConfig,
+    [boot.runtime, embedConfig],
+  );
+  const onStoreReady = useMemo(
+    () => (store: AppStore) => {
+      boot.runtime?.attachStore(store);
+      notifyStoreReady?.(store);
+    },
+    [boot.runtime, notifyStoreReady],
+  );
+  if (boot.error)
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-black/80 p-6 text-white">
+        <div className="max-w-md space-y-4">
+          <p role="alert">{boot.error}</p>
+          <Button
+            onClick={() => {
+              if (location.protocol === "about:") {
+                setBoot({ ready: true, runtime: null, error: "" });
+                return;
+              }
+              location.hash = "";
+              location.reload();
+            }}
+          >
+            Use browser storage
+          </Button>
+          <p className="text-xs text-white/60">
+            Open a fresh connection link from VAssist to reconnect to desktop.
+          </p>
+        </div>
+      </div>
+    );
+  if (!boot.ready) return <LoadingIndicator isVisible />;
+  return (
+    <Application
+      {...props}
+      {...(config ? { embedConfig: config } : {})}
+      embedded={boot.runtime ? true : (props.embedded ?? false)}
+      onStoreReady={onStoreReady}
+    />
+  );
+}

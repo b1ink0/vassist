@@ -1,0 +1,22 @@
+{
+  "extends": "./electron-builder.shared.json",
+  "files": [
+    "!node_modules/@capacitor/**",
+    "!node_modules/onnxruntime-node/bin/napi-v3/darwin/**",
+    "!node_modules/onnxruntime-node/bin/napi-v3/win32/arm64/**"
+  ],
+  "win": {
+    "target": ["nsis", "portable"],
+    "icon": "electron/assets/icon-512.png",
+    "extraResources": [
+      {
+        "from": "electron/native/desktop-host/build/Release/desktop_host.node",
+        "to": "native/desktop-host/desktop_host.node"
+      },
+      {
+        "from": "electron/assets/backgrounds",
+        "to": "backgrounds"
+      }
+    ]
+  }
+}

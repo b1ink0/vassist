@@ -1,0 +1,20 @@
+{
+  "extends": "./electron-builder.shared.json",
+  "files": [
+    "electron/assets/icon.icns",
+    "electron/assets/icon.iconset/**/*",
+    "electron/assets/trayTemplate.png",
+    "electron/assets/trayTemplate@2x.png",
+    "!node_modules/onnxruntime-node/bin/napi-v3/win32/**"
+  ],
+  "mac": {
+    "target": ["dmg", "zip"],
+    "icon": "electron/assets/icon.icns"
+  },
+  "extraResources": [
+    {
+      "from": "electron/assets/backgrounds",
+      "to": "backgrounds"
+    }
+  ]
+}

@@ -1,0 +1,3765 @@
+/**
+ * @fileoverview Main chat container component managing chat UI, messages, and positioning.
+ * Handles chat display, TTS playback, drag-drop, background detection, and history management.
+ */
+
+import {
+  lazy,
+  Suspense,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useCallback,
+  type Dispatch,
+  type MutableRefObject,
+  type RefObject,
+  type SetStateAction,
+} from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import type {
+  ResolvedVAssistEmbedConfig,
+  VAssistOpenSettingsOptions,
+  VAssistSettingsTargetId,
+} from "../../embed/config";
+import { getBrandedLabel } from "../../embed/branding";
+import { useEmbedHost } from "../../embed/EmbedHostContext";
+import { useXrRuntime } from "../../contexts/XrRuntimeContext";
+import { XrSurface } from "../xr/XrSurface";
+import { getHostCommandEventName } from "../../embed/hostCommands";
+import { useVAssistReactCustomizations } from "../../embed/reactHostCustomizations";
+import {
+  useAppRuntimeServices,
+  useAppStoreApi,
+} from "../../contexts/AppRuntimeContext";
+import { getChatSession } from "../../services/chat/ChatSessionRuntime";
+import { Icon } from "../icons";
+import { Button } from "../ui";
+import { cn } from "../../utils/cn";
+import { TTSServiceProxy, StorageServiceProxy } from "../../services/proxies";
+import { DefaultTTSConfig } from "../../config/aiConfig";
+import BackgroundDetector from "../../utils/BackgroundDetector";
+import DragDropService from "../../services/media/DragDropService";
+import UtilService from "../../services/common/UtilService";
+import ChatMessage from "./ChatMessage";
+import { ComposerMenu } from "./ComposerMenu";
+import DesktopModeSettings from "../settings/DesktopModeSettings";
+import { modelStorageService } from "../../services/storage/ModelStorageService";
+import { motionStorageService } from "../../services/storage/MotionStorageService";
+import { stageStorageService } from "../../services/storage/StageStorageService";
+import emoteStorageService from "../../services/storage/EmoteStorageService";
+import { getFloatingChatSize, setFloatingChatSize } from "./floatingChatSize";
+import { Tooltip } from "../ui/Tooltip";
+import { useWideDesktopHistory } from "../../hooks/useWideDesktopHistory";
+import {
+  useChatActions,
+  useCurrentChatId,
+  useChatMessages,
+  useIsChatContainerVisible,
+  useIsProcessing,
+  useIsTempChat,
+} from "../../hooks/app/useChat";
+import {
+  useButtonPosition,
+  useDragActions,
+  useIsDragOverChat,
+  useIsDraggingButton,
+  useIsDraggingModel,
+} from "../../hooks/app/useDrag";
+import {
+  useIsSpeaking,
+  useIsVoiceMode,
+  useLoadingMessageIndex,
+  usePlaybackActions,
+  usePlayingMessageIndex,
+} from "../../hooks/app/usePlayback";
+import { usePositionManagerRef } from "../../hooks/app/useScene";
+import {
+  useIsHistoryPanelOpen,
+  useIsQuickPanelOpen,
+  useIsSettingsPanelOpen,
+  useToolingActions,
+} from "../../hooks/app/useTooling";
+import { useAIConfig } from "../../hooks/config/useConfigAI";
+import { useConfigTTSActions } from "../../hooks/config/useConfigTTS";
+import {
+  useConfigUIActions,
+  useUIConfig,
+} from "../../hooks/config/useConfigUI";
+import { useAndroidApi } from "../../hooks/useAndroidStore";
+import { useDesktopApi } from "../../hooks/useDesktopStore";
+import Logger from "../../services/common/LoggerService";
+import {
+  isDesktop,
+  isAndroid,
+  isAppModeWindow,
+  isDesktopAttachedModeWindow,
+  isDetachedDesktopWindow,
+  isDetachedChatWindow,
+  isLiveWallpaperWindow,
+} from "../../utils/PlatformUtils";
+import {
+  ANDROID_SYSTEM_INSET_TOP,
+  HISTORY_SIDEBAR_WIDTH,
+} from "./historyLayout";
+import type { PositionManagerLike } from "../../babylon/types";
+import type { ComponentType } from "react";
+import {
+  ASSISTANT_CONTROL_CHAT_GUTTER,
+  getButtonPositionFromPreset,
+} from "./assistant-controls/positioning";
+
+const SettingsPanel = lazy(() => import("../SettingsPanel"));
+const QuickAccessPanel = lazy(() => import("../QuickAccessPanel"));
+const ChatHistoryPanel = lazy(() => import("./ChatHistoryPanel"));
+const ChatHistorySidebar = lazy(() => import("./ChatHistorySidebar"));
+const Dialog = lazy(() => import("../common/Dialog"));
+
+interface ChatContainerProps {
+  modelDisabled?: boolean;
+  normalDesktop?: boolean;
+  chatInputRef?: RefObject<HTMLElement | null>;
+  embedConfig: ResolvedVAssistEmbedConfig;
+  onDragDrop?: (data: {
+    text?: string;
+    images?: string[];
+    audios?: string[];
+    errors?: string[];
+  }) => void;
+}
+
+type ChatHistorySelection = { chatId: string };
+type ChatDragDropData = {
+  text?: string;
+  images?: string[];
+  audios?: string[];
+  errors?: string[];
+};
+
+interface ButtonPosition {
+  x: number;
+  y: number;
+}
+
+interface ContainerPosition {
+  x: number;
+  y: number;
+}
+
+interface ChatMessageLike {
+  id: string;
+  role: string;
+  isUser?: boolean;
+  content: string;
+  images?: string[];
+  audios?: string[];
+  branchInfo?: {
+    totalBranches?: number;
+    currentBranch?: number;
+    canGoBack?: boolean;
+    canGoForward?: boolean;
+  };
+}
+
+type ChatRenderableItem =
+  | {
+      kind: "message";
+      key: string;
+      message: ChatMessageLike;
+      messageIndex: number;
+      isLastAIMessage: boolean;
+      isLastUserMessage: boolean;
+      isExiting?: boolean;
+    }
+  | {
+      kind: "loading";
+      key: string;
+    };
+
+const CHAT_MESSAGE_GAP = 12;
+const CHAT_LIST_PADDING = 50;
+const CHAT_SCROLL_END_THRESHOLD = 120;
+const CHAT_ESTIMATED_ROW_HEIGHT = 128;
+const DETACHED_CHAT_BOTTOM_CLEARANCE = 100;
+
+interface ChatHistoryPanelPropsLike {
+  isLightBackground: boolean;
+  onClose: () => void;
+  onSelectChat: (chat: ChatHistorySelection) => void;
+  onRequestEditDialog: (chatId: string, title: string) => void;
+  onRequestDeleteDialog: (chatId: string) => void;
+  refreshTrigger: number;
+  animationClass?: string;
+  embedded?: boolean;
+  currentChatId?: string | null;
+  onNewChat?: () => void;
+  onOpenSettings?: (() => void) | undefined;
+}
+
+interface DialogPropsLike {
+  type: string;
+  title: string;
+  message: string;
+  itemId: string;
+  initialValue?: string;
+  inputPlaceholder?: string;
+  inputMaxLength?: number;
+  isLightBackground?: boolean;
+  animationClass?: string;
+  confirmLabel?: string;
+  confirmStyle?: string;
+  onConfirm: (...args: string[]) => void | Promise<void>;
+  onCancel: () => void;
+}
+
+interface DragDropServiceLike {
+  attach: (
+    element: HTMLElement,
+    callbacks: {
+      onSetDragOver?: (isDragging: boolean) => void;
+      onShowError?: (error: Error | string) => void;
+      checkVoiceMode?: (() => boolean) | null;
+      getCurrentCounts?: () => { images: number; audios: number };
+      onProcessData?: (data: ChatDragDropData) => void;
+    },
+  ) => void;
+  detach: () => void;
+}
+
+interface StorageServiceLike {
+  configLoad: <T>(key: string, defaultValue?: T) => Promise<T>;
+}
+
+interface TTSServiceLike {
+  isConfigured: () => boolean;
+  addEventListener: (event: string, callback: (event: Event) => void) => void;
+  removeEventListener: (
+    event: string,
+    callback: (event: Event) => void,
+  ) => void;
+  stopPlayback: () => void;
+  stopGeneration: () => void;
+  resumePlayback: () => void;
+  generateSpeech: (
+    text: string,
+    withLipSync?: boolean,
+  ) => Promise<{ audio?: Blob | ArrayBuffer; bvmdUrl?: string } | null>;
+  generateChunkedSpeech: (
+    text: string,
+    prefix?: string | null,
+    chunkSize?: number,
+    minChunkSize?: number,
+    sessionId?: string,
+  ) => Promise<string[]>;
+  queueAudio: (
+    text: string,
+    audioUrl: string,
+    bvmdUrl?: string,
+    sessionId?: string,
+  ) => void;
+  playAudioSequence: (audioUrls: string[], sessionId?: string) => Promise<void>;
+  cleanupBlobUrls: (audioUrls: string[]) => void;
+}
+
+interface DebugMarker {
+  x: number;
+  y: number;
+  color: string;
+  brightness: number;
+  alpha: number;
+  element: string;
+}
+
+type RawDebugMarker = {
+  x?: number;
+  y?: number;
+  color?: string;
+  brightness?: number;
+  alpha?: number | string;
+  element?: string;
+};
+
+const isHTMLElement = (value: unknown): value is HTMLElement =>
+  value instanceof HTMLElement;
+
+const toDebugMarkers = (
+  markers: RawDebugMarker[] | null | undefined,
+): DebugMarker[] => {
+  if (!Array.isArray(markers)) {
+    return [];
+  }
+
+  return markers
+    .filter(
+      (marker): marker is RawDebugMarker =>
+        !!marker && typeof marker === "object",
+    )
+    .map((marker) => ({
+      x: typeof marker.x === "number" ? marker.x : 0,
+      y: typeof marker.y === "number" ? marker.y : 0,
+      color: typeof marker.color === "string" ? marker.color : "#ffffff",
+      brightness: typeof marker.brightness === "number" ? marker.brightness : 0,
+      alpha:
+        typeof marker.alpha === "number"
+          ? marker.alpha
+          : Number.parseFloat(String(marker.alpha ?? "1")) || 1,
+      element: typeof marker.element === "string" ? marker.element : "unknown",
+    }));
+};
+
+type TTSConfigLike = typeof DefaultTTSConfig & {
+  gptsovits?: {
+    referenceVoiceId?: string | null;
+    referenceText?: string;
+  };
+};
+
+interface DesktopLlmApiLike {
+  deleteModel?: (
+    filename: string,
+    customPath?: string | null,
+  ) => Promise<{ success?: boolean; error?: string }>;
+}
+
+interface DesktopApiLike {
+  llm?: DesktopLlmApiLike;
+  whisperCpp?: {
+    deleteModel?: (options: { modelId: string }) => Promise<unknown>;
+  };
+  llamaServer?: {
+    deleteBackend?: (backend: string) => Promise<void>;
+  };
+}
+
+interface AndroidApiLike {
+  deleteLLMModel?: (filename: string) => string;
+  deleteWhisperVariant?: (variantId: string) => string;
+  deleteSenseVoiceModel?: () => string;
+  deleteSenseVoiceQnnModel?: () => string;
+  deleteDolphinModel?: (variantId: string) => string;
+  deleteVitsModel?: () => string;
+  deleteTtsPack?: (packId: string) => string;
+}
+
+const storageService = StorageServiceProxy as StorageServiceLike;
+const ttsService = TTSServiceProxy as unknown as TTSServiceLike;
+const dragDropCtor = DragDropService as unknown as new (options: {
+  maxImages: number;
+  maxAudios: number;
+}) => DragDropServiceLike;
+const TypedChatHistoryPanel =
+  ChatHistoryPanel as ComponentType<ChatHistoryPanelPropsLike>;
+const TypedDialog = Dialog as ComponentType<DialogPropsLike>;
+
+const ANDROID_CHAT_TOP_OFFSET = 32;
+
+/**
+ * Chat container component.
+ *
+ * @component
+ * @param {Object} props - Component props
+ * @param {boolean} [props.modelDisabled=false] - Whether 3D model is disabled (chat-only mode)
+ * @param {Function} props.onDragDrop - Callback to handle dropped content
+ * @returns {JSX.Element} Chat container component
+ */
+const ChatContainer = ({
+  modelDisabled = false,
+  normalDesktop = isDesktopAttachedModeWindow,
+  chatInputRef: externalChatInputRef,
+  embedConfig,
+  onDragDrop,
+}: ChatContainerProps) => {
+  const xr = useXrRuntime();
+  const { hostId } = useEmbedHost();
+  const reactCustomizations = useVAssistReactCustomizations(hostId);
+  const { chatHistoryService } = useAppRuntimeServices();
+  const positionManagerRef = usePositionManagerRef();
+  const messages = useChatMessages();
+  const currentChatId = useCurrentChatId();
+  const chatContainerVisible = useIsChatContainerVisible();
+  const isVoiceMode = useIsVoiceMode();
+  const uiConfig = useUIConfig();
+  const voiceOverlay = isVoiceMode && uiConfig.enableModelLoading && !xr.active;
+  const isVisible = chatContainerVisible || voiceOverlay;
+  const isGenerating = useIsProcessing();
+  const isTempChat = useIsTempChat();
+  const {
+    setIsTempChat,
+    loadChatFromHistory,
+    clearChat,
+    stopGeneration,
+    closeChat,
+  } = useChatActions();
+  const isSpeaking = useIsSpeaking();
+  const playingMessageIndex = usePlayingMessageIndex();
+  const loadingMessageIndex = useLoadingMessageIndex();
+  const { setPlayingMessageIndex, setLoadingMessageIndex } =
+    usePlaybackActions();
+  const isDragOver = useIsDragOverChat();
+  const buttonPosition = useButtonPosition();
+  const isDraggingButton = useIsDraggingButton();
+  const isDraggingModel = useIsDraggingModel();
+  const showDragBounds =
+    !isAndroid &&
+    !normalDesktop &&
+    !isDetachedChatWindow &&
+    !isLiveWallpaperWindow &&
+    !xr.active;
+  const [isResizingDetachedChat, setIsResizingDetachedChat] = useState(false);
+  const [messagesFaded, setMessagesFaded] = useState(false);
+  const [messagesHovered, setMessagesHovered] = useState(false);
+  const [messagesFocused, setMessagesFocused] = useState(false);
+  const [revealingMessageId, setRevealingMessageId] = useState<string | null>(
+    null,
+  );
+  const handleRevealStateChange = useCallback((id: string, active: boolean) => {
+    setRevealingMessageId((current) =>
+      active ? id : current === id ? null : current,
+    );
+  }, []);
+  const [showFullVoiceChat, setShowFullVoiceChat] = useState(false);
+  const [exitingMessage, setExitingMessage] =
+    useState<ChatRenderableItem | null>(null);
+  const previousLatestRef = useRef<{
+    message: ChatMessageLike;
+    index: number;
+    chatId: string | null;
+  } | null>(null);
+  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [voiceStartMessageId, setVoiceStartMessageId] = useState<string | null>(
+    null,
+  );
+  const [floatingSize, setFloatingSize] = useState(getFloatingChatSize);
+  const [resizingFloatingChat, setResizingFloatingChat] = useState(false);
+  const floatingResizeRef = useRef<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  useEffect(() => {
+    const updateSize = () => setFloatingSize(getFloatingChatSize());
+    const move = (event: PointerEvent) => {
+      const start = floatingResizeRef.current;
+      if (!start) return;
+      setFloatingChatSize({
+        width: start.width + event.screenX - start.x,
+        height: start.height + event.screenY - start.y,
+      });
+    };
+    const stop = () => {
+      if (!floatingResizeRef.current) return;
+      floatingResizeRef.current = null;
+      delete document.documentElement.dataset.electronResizeActive;
+      setResizingFloatingChat(false);
+    };
+    window.addEventListener("floatingChatSizeChange", updateSize);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+    window.addEventListener("blur", stop);
+    return () => {
+      window.removeEventListener("floatingChatSizeChange", updateSize);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      window.removeEventListener("blur", stop);
+      if (floatingResizeRef.current) {
+        floatingResizeRef.current = null;
+        delete document.documentElement.dataset.electronResizeActive;
+      }
+    };
+  }, []);
+  const {
+    setIsDragOverChat: setIsDragOver,
+    startButtonDrag,
+    endButtonDrag,
+    startModelDrag,
+    endModelDrag,
+  } = useDragActions();
+  const isSettingsPanelOpen = useIsSettingsPanelOpen();
+  const isQuickPanelOpen = useIsQuickPanelOpen();
+  const isHistoryPanelOpen = useIsHistoryPanelOpen();
+  const isWideDesktopHistory = useWideDesktopHistory();
+  const {
+    setIsSettingsPanelOpen,
+    setIsQuickPanelOpen,
+    setIsHistoryPanelOpen,
+    editUserMessage,
+    regenerateAIMessage,
+    previousBranch,
+    nextBranch,
+  } = useToolingActions();
+
+  const { updateUIConfig } = useConfigUIActions();
+  const fadeMessages =
+    !xr.active &&
+    !showFullVoiceChat &&
+    (uiConfig.fadeChatMessages === true || voiceOverlay);
+  useEffect(() => {
+    if (isVoiceMode) {
+      setVoiceStartMessageId(messages.at(-1)?.id ?? null);
+    } else {
+      setShowFullVoiceChat(false);
+      setVoiceStartMessageId(null);
+    }
+    // Capture the conversation when the voice session starts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVoiceMode]);
+  useEffect(() => {
+    setMessagesFaded(false);
+    if (
+      !fadeMessages ||
+      !isVisible ||
+      messages.length === 0 ||
+      isGenerating ||
+      isSpeaking ||
+      revealingMessageId === messages.at(-1)?.id ||
+      messagesHovered ||
+      messagesFocused
+    )
+      return;
+    const timer = window.setTimeout(() => setMessagesFaded(true), 8000);
+    return () => window.clearTimeout(timer);
+  }, [
+    fadeMessages,
+    isVisible,
+    messages,
+    isGenerating,
+    isSpeaking,
+    revealingMessageId,
+    messagesHovered,
+    messagesFocused,
+  ]);
+  const { updateTTSConfig } = useConfigTTSActions();
+  const aiConfig = useAIConfig();
+  const api = useDesktopApi() as DesktopApiLike | null;
+  const androidAPI = useAndroidApi() as AndroidApiLike | null;
+
+  const buttonPosRef = useRef<ButtonPosition>(buttonPosition);
+  const buttonInitializedRef = useRef(false);
+  const [containerPos, setContainerPos] = useState<ContainerPosition>({
+    x: 0,
+    y: 0,
+  });
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const dragDropServiceRef = useRef<DragDropServiceLike | null>(null);
+  const currentSessionRef = useRef<string | null>(null);
+  const [isLightBackground, setIsLightBackground] = useState(false);
+  const [ttsConfig, setTtsConfig] = useState<TTSConfigLike>(
+    DefaultTTSConfig as TTSConfigLike,
+  );
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const [debugMarkers, setDebugMarkers] = useState<DebugMarker[]>([]);
+  const localChatInputRef = useRef<HTMLDivElement | null>(null);
+  const chatInputRef = externalChatInputRef ?? localChatInputRef;
+  const [normalChatInputHeight, setNormalChatInputHeight] = useState(140);
+  const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(
+    null,
+  );
+  const [isClosing, setIsClosing] = useState(false);
+  const [isSettingsPanelClosing, setIsSettingsPanelClosing] = useState(false);
+  const [isQuickPanelClosing, setIsQuickPanelClosing] = useState(false);
+  const [isHistoryPanelClosing, setIsHistoryPanelClosing] = useState(false);
+
+  useEffect(() => {
+    if (!isDetachedChatWindow) return;
+
+    const handleResizeStart = () => setIsResizingDetachedChat(true);
+    const handleResizeEnd = () => setIsResizingDetachedChat(false);
+
+    window.addEventListener("detachedChatResizeStart", handleResizeStart);
+    window.addEventListener("detachedChatResizeEnd", handleResizeEnd);
+
+    return () => {
+      window.removeEventListener("detachedChatResizeStart", handleResizeStart);
+      window.removeEventListener("detachedChatResizeEnd", handleResizeEnd);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!normalDesktop) return;
+
+    let frameId: number | null = null;
+    const updateInputHeight = () => {
+      const element = chatInputRef.current;
+      if (!element) return;
+
+      const nextHeight = Math.ceil(element.getBoundingClientRect().height);
+      if (nextHeight > 0) {
+        setNormalChatInputHeight(nextHeight);
+      }
+    };
+
+    frameId = window.requestAnimationFrame(updateInputHeight);
+    const element = chatInputRef.current;
+    const observer = element ? new ResizeObserver(updateInputHeight) : null;
+    if (element && observer) observer.observe(element);
+
+    return () => {
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+      observer?.disconnect();
+    };
+  }, [chatInputRef, normalDesktop]);
+
+  const [editingChatId, setEditingChatId] = useState<string | null>(null);
+  const [editingChatTitle, setEditingChatTitle] = useState("");
+  const [deletingChatId, setDeletingChatId] = useState<string | null>(null);
+  const [isEditDialogClosing, setIsEditDialogClosing] = useState(false);
+  const [isDeleteDialogClosing, setIsDeleteDialogClosing] = useState(false);
+
+  const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
+  const [deletingMotionId, setDeletingMotionId] = useState<string | null>(null);
+  const [deletingStageId, setDeletingStageId] = useState<string | null>(null);
+  const [deletingEmoteId, setDeletingEmoteId] = useState<string | null>(null);
+  const [deletingEmoteCategory, setDeletingEmoteCategory] = useState<
+    string | null
+  >(null);
+  const [deletingVoiceId, setDeletingVoiceId] = useState<string | null>(null);
+  const [deletingLLMModel, setDeletingLLMModel] = useState<string | null>(null);
+  const [deletingSttModelId, setDeletingSttModelId] = useState<string | null>(
+    null,
+  );
+  const [deletingTtsPackId, setDeletingTtsPackId] = useState<string | null>(
+    null,
+  );
+  const [sttExternalDeleteTick, setSttExternalDeleteTick] = useState(0);
+  const [ttsExternalDeleteTick, setTtsExternalDeleteTick] = useState(0);
+  const [settingsErrorMessage, setSettingsErrorMessage] = useState<
+    string | null
+  >(null);
+  const [pendingSettingsConfirmAction, setPendingSettingsConfirmAction] =
+    useState<(() => Promise<void> | void) | null>(null);
+  const [isDeleteModelDialogClosing, setIsDeleteModelDialogClosing] =
+    useState(false);
+  const [isDeleteMotionDialogClosing, setIsDeleteMotionDialogClosing] =
+    useState(false);
+  const [isDeleteStageDialogClosing, setIsDeleteStageDialogClosing] =
+    useState(false);
+  const [isDeleteEmoteDialogClosing, setIsDeleteEmoteDialogClosing] =
+    useState(false);
+  const [isDeleteVoiceDialogClosing, setIsDeleteVoiceDialogClosing] =
+    useState(false);
+  const [isDeleteLLMModelDialogClosing, setIsDeleteLLMModelDialogClosing] =
+    useState(false);
+  const [isDeleteSttModelDialogClosing, setIsDeleteSttModelDialogClosing] =
+    useState(false);
+  const [isDeleteTtsPackDialogClosing, setIsDeleteTtsPackDialogClosing] =
+    useState(false);
+  const [isSettingsConfirmDialogClosing, setIsSettingsConfirmDialogClosing] =
+    useState(false);
+  const [isSettingsErrorDialogClosing, setIsSettingsErrorDialogClosing] =
+    useState(false);
+  const [settingsRefreshTrigger, setSettingsRefreshTrigger] = useState(0);
+  const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0);
+  const [requestedSettingsView, setRequestedSettingsView] =
+    useState<VAssistOpenSettingsOptions | null>(null);
+  const [, setActiveSettingsTarget] = useState<VAssistSettingsTargetId | null>(
+    null,
+  );
+  const settingsEnabled = embedConfig.features.settings;
+  const historyEnabled = embedConfig.features.history;
+  const attachedHistoryLayout = (isAndroid || normalDesktop) && !xr.active;
+  const floatingDockChatControls =
+    isDesktop &&
+    !normalDesktop &&
+    (!isDetachedDesktopWindow || isDetachedChatWindow) &&
+    !xr.active;
+  const resizableFloatingChat =
+    floatingDockChatControls && !isDetachedChatWindow;
+  const chatOnlyAttached = modelDisabled && attachedHistoryLayout;
+  const attachedChatTop =
+    attachedHistoryLayout && historyEnabled ? (isAppModeWindow ? 96 : 64) : 16;
+  const androidChatTop = historyEnabled ? 64 : ANDROID_CHAT_TOP_OFFSET;
+  const liveAssistantEnabled = embedConfig.features.liveAssistant3d;
+
+  const lastAnimatedMessageIdRef = useRef<string | null>(null);
+  const wasVisibleRef = useRef(isVisible);
+  const pendingHistoryScrollToEndRef = useRef(false);
+  const wasAtChatEndRef = useRef(true);
+  const pendingStreamingScrollFrameRef = useRef<number | null>(null);
+  const autoScrollFrameRef = useRef<number | null>(null);
+  const isAutoScrollingRef = useRef(false);
+  const isTouchScrollingRef = useRef(false);
+  const userPausedScrollRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
+  const lastUserScrollIdRef = useRef<string | null>(null);
+
+  const lastUserMessageId = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index]?.role === "user") {
+        return messages[index]?.id ?? null;
+      }
+    }
+
+    return null;
+  }, [messages]);
+
+  useLayoutEffect(() => {
+    const latest = messages.at(-1);
+    const previous = previousLatestRef.current;
+    if (!fadeMessages || !latest) {
+      if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+      setExitingMessage(null);
+    } else if (
+      previous &&
+      previous.chatId === currentChatId &&
+      previous.message.id !== latest.id &&
+      !(voiceOverlay && previous.message.id === voiceStartMessageId)
+    ) {
+      if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+      setExitingMessage({
+        kind: "message",
+        key: previous.message.id,
+        message: previous.message,
+        messageIndex: previous.index,
+        isLastAIMessage: false,
+        isLastUserMessage: false,
+        isExiting: true,
+      });
+      exitTimerRef.current = setTimeout(() => setExitingMessage(null), 450);
+    }
+    previousLatestRef.current = latest
+      ? { message: latest, index: messages.length - 1, chatId: currentChatId }
+      : null;
+  }, [
+    currentChatId,
+    fadeMessages,
+    messages,
+    voiceOverlay,
+    voiceStartMessageId,
+  ]);
+
+  useEffect(
+    () => () => {
+      if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+    },
+    [],
+  );
+
+  const chatItems = useMemo<ChatRenderableItem[]>(() => {
+    const items: ChatRenderableItem[] = [];
+
+    if (fadeMessages && exitingMessage) items.push(exitingMessage);
+
+    for (const [index, message] of messages.entries()) {
+      const isLastMessage = index === messages.length - 1;
+      if (fadeMessages && !isLastMessage) continue;
+      if (fadeMessages && voiceOverlay && message.id === voiceStartMessageId)
+        continue;
+
+      const isUser = message.role === "user";
+      const isError = message.content.toLowerCase().startsWith("error:");
+
+      items.push({
+        kind: "message",
+        key: message.id,
+        message,
+        messageIndex: index,
+        isLastAIMessage: !isUser && !isError && isLastMessage,
+        isLastUserMessage: isUser && lastUserMessageId === message.id,
+      });
+    }
+
+    const lastMessage = messages[messages.length - 1];
+
+    if (isGenerating && lastMessage?.role === "user") {
+      items.push({
+        kind: "loading",
+        key: `loading-${lastMessage.id}`,
+      });
+    }
+
+    return items;
+  }, [
+    exitingMessage,
+    fadeMessages,
+    isGenerating,
+    lastUserMessageId,
+    messages,
+    voiceOverlay,
+    voiceStartMessageId,
+  ]);
+
+  const chatVirtualizer = useVirtualizer({
+    count: chatItems.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => CHAT_ESTIMATED_ROW_HEIGHT,
+    getItemKey: (index) => chatItems[index]?.key ?? `chat-item-${index}`,
+    anchorTo: "start",
+    followOnAppend: false,
+    scrollEndThreshold: CHAT_SCROLL_END_THRESHOLD,
+    overscan: 8,
+    paddingStart: CHAT_LIST_PADDING,
+    paddingEnd: CHAT_LIST_PADDING,
+    gap: CHAT_MESSAGE_GAP,
+    enabled: chatItems.length > 0,
+  });
+
+  const virtualChatItems = chatVirtualizer.getVirtualItems();
+
+  useEffect(() => {
+    buttonPosRef.current = buttonPosition;
+  }, [buttonPosition]);
+
+  useEffect(() => {
+    if (!settingsEnabled && isSettingsPanelOpen) {
+      setIsSettingsPanelOpen(false);
+    }
+  }, [isSettingsPanelOpen, setIsSettingsPanelOpen, settingsEnabled]);
+
+  useEffect(() => {
+    if (!settingsEnabled && isQuickPanelOpen) {
+      setIsQuickPanelOpen(false);
+    }
+  }, [isQuickPanelOpen, setIsQuickPanelOpen, settingsEnabled]);
+
+  useEffect(() => {
+    if ((!historyEnabled || !isVisible) && isHistoryPanelOpen) {
+      setIsHistoryPanelOpen(false);
+    }
+  }, [historyEnabled, isHistoryPanelOpen, isVisible, setIsHistoryPanelOpen]);
+
+  useEffect(() => {
+    const handleOpenSettings = (event: Event) => {
+      if (!(event instanceof CustomEvent) || !settingsEnabled) {
+        return;
+      }
+
+      setRequestedSettingsView(
+        (event.detail as VAssistOpenSettingsOptions | null | undefined) ?? {},
+      );
+      setIsQuickPanelOpen(false);
+      setIsHistoryPanelOpen(false);
+      setIsSettingsPanelOpen(true);
+    };
+
+    window.addEventListener(
+      getHostCommandEventName(hostId, "open-settings"),
+      handleOpenSettings,
+    );
+
+    return () => {
+      window.removeEventListener(
+        getHostCommandEventName(hostId, "open-settings"),
+        handleOpenSettings,
+      );
+    };
+  }, [
+    hostId,
+    setIsHistoryPanelOpen,
+    setIsQuickPanelOpen,
+    setIsSettingsPanelOpen,
+    settingsEnabled,
+  ]);
+
+  /**
+   * Auto-focuses input when chat is cleared (new chat created).
+   */
+  useEffect(() => {
+    if (messages.length === 0 && isVisible) {
+      const event = new CustomEvent("focusChatInput");
+      window.dispatchEvent(event);
+    }
+  }, [messages.length, isVisible]);
+
+  /**
+   * Calculates container position based on button or model position.
+   */
+  const calculateContainerPosition = useCallback(() => {
+    const chatInputHeight = resizableFloatingChat
+      ? 0
+      : chatInputRef?.current?.getBoundingClientRect().height || 140;
+    const isSmallScreen = window.innerWidth <= 768;
+
+    if (isAndroid) {
+      return { x: 8, y: ANDROID_CHAT_TOP_OFFSET };
+    }
+
+    if (isDetachedChatWindow) {
+      return { x: 16, y: 16 };
+    }
+
+    if (normalDesktop) {
+      const splitPercent = Math.min(
+        60,
+        Math.max(28, uiConfig.desktopMode.appMode.chatSplitPercent),
+      );
+      const containerWidth = Math.max(
+        360,
+        Math.floor((window.innerWidth * splitPercent) / 100) - 24,
+      );
+      return {
+        x: Math.max(16, window.innerWidth - containerWidth - 16),
+        y: 16,
+      };
+    }
+
+    if (isSmallScreen) {
+      const containerWidth = Math.min(
+        resizableFloatingChat ? floatingSize.width : 400,
+        window.innerWidth - 16,
+      );
+      const containerHeight = resizableFloatingChat
+        ? floatingSize.height
+        : modelDisabled
+          ? 400
+          : 500;
+      const availableHeight = window.innerHeight - chatInputHeight;
+
+      const containerX = Math.max(
+        8,
+        Math.min(
+          (window.innerWidth - containerWidth) / 2,
+          window.innerWidth - containerWidth - 8,
+        ),
+      );
+      const containerY = Math.max(
+        10,
+        Math.min(
+          (availableHeight - containerHeight) / 2,
+          availableHeight - containerHeight - 10,
+        ),
+      );
+
+      return { x: containerX, y: containerY };
+    }
+
+    if (modelDisabled) {
+      const buttonPos = buttonPosRef.current;
+      const containerWidth = Math.min(
+        resizableFloatingChat ? floatingSize.width : 400,
+        window.innerWidth - 16,
+      );
+      const containerHeight = resizableFloatingChat ? floatingSize.height : 400;
+      const offsetY = 5;
+      const buttonSize = 48;
+
+      const containerX = Math.max(
+        8,
+        Math.min(
+          buttonPos.x - (containerWidth - buttonSize) / 2,
+          window.innerWidth - containerWidth - 8,
+        ),
+      );
+      let containerY =
+        buttonPos.y - containerHeight - chatInputHeight - offsetY;
+      containerY = Math.max(10, containerY);
+      const maxY =
+        window.innerHeight - containerHeight - chatInputHeight - offsetY;
+      containerY = Math.max(10, Math.min(containerY, maxY));
+
+      return { x: containerX, y: containerY };
+    } else if (positionManagerRef?.current) {
+      try {
+        const modelPos = positionManagerRef.current.getPositionPixels();
+        const containerWidth = Math.min(
+          resizableFloatingChat ? floatingSize.width : 400,
+          window.innerWidth - 16,
+        );
+        const containerHeight = resizableFloatingChat
+          ? floatingSize.height
+          : 500;
+        const offsetX = 15 + (isDesktop ? ASSISTANT_CONTROL_CHAT_GUTTER : 0);
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+        const availableHeight = windowHeight - chatInputHeight;
+
+        const rightX = modelPos.x + modelPos.width + offsetX;
+        const leftX = modelPos.x - containerWidth - offsetX;
+        const wouldOverflowRight = rightX + containerWidth > windowWidth - 8;
+        const wouldOverflowLeft = leftX < 8;
+        const modelRightEdge = modelPos.x + modelPos.width;
+        const wouldOverlapRight = modelRightEdge > rightX;
+
+        // Always place on right side in desktop mode
+        let shouldBeOnLeft = false;
+        if (!isDesktop) {
+          if (wouldOverflowRight) {
+            shouldBeOnLeft = true;
+          } else if (wouldOverlapRight && !wouldOverflowLeft) {
+            shouldBeOnLeft = true;
+          } else if (modelPos.x > windowWidth * 0.7) {
+            shouldBeOnLeft = true;
+          }
+        }
+
+        let containerX = shouldBeOnLeft ? leftX : rightX;
+        containerX = Math.max(
+          8,
+          Math.min(containerX, windowWidth - containerWidth - 8),
+        );
+        let containerY = modelPos.y;
+        containerY = Math.max(
+          10,
+          Math.min(containerY, availableHeight - containerHeight - 10),
+        );
+
+        return { x: containerX, y: containerY };
+      } catch (error) {
+        Logger.error(
+          "ChatContainer",
+          "Failed to calculate model position:",
+          error,
+        );
+        return { x: 0, y: 0 };
+      }
+    }
+
+    return { x: 0, y: 0 };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    modelDisabled,
+    normalDesktop,
+    resizableFloatingChat,
+    floatingSize,
+    isDetachedChatWindow,
+    uiConfig.desktopMode.appMode.chatSplitPercent,
+  ]);
+
+  useEffect(() => {
+    if (!modelDisabled || buttonInitializedRef.current) return;
+
+    const initButton = async () => {
+      try {
+        if (isDetachedChatWindow) {
+          buttonPosRef.current = getButtonPositionFromPreset("bottom-center", {
+            width: window.innerWidth,
+            height: window.innerHeight,
+          });
+          buttonInitializedRef.current = true;
+          setContainerPos(calculateContainerPosition());
+          return;
+        }
+
+        const defaultPos = {
+          x: window.innerWidth - 68,
+          y: window.innerHeight - 68,
+        };
+        const savedPos = await storageService.configLoad(
+          "chatButtonPosition",
+          defaultPos,
+        );
+        buttonPosRef.current = savedPos;
+        buttonInitializedRef.current = true;
+        setContainerPos(calculateContainerPosition());
+      } catch (error) {
+        Logger.error("ChatContainer", "Failed to load button position:", error);
+        buttonInitializedRef.current = true;
+      }
+    };
+
+    initButton();
+  }, [modelDisabled, calculateContainerPosition]);
+
+  useEffect(() => {
+    if (!isVisible || modelDisabled) return;
+
+    const newPos = calculateContainerPosition();
+    setContainerPos(newPos);
+  }, [isVisible, modelDisabled, calculateContainerPosition]);
+
+  useEffect(() => {
+    if (!isVisible) return;
+    if (normalDesktop) return;
+
+    const handleModelPosition = () => {
+      if (resizableFloatingChat) {
+        setContainerPos(calculateContainerPosition());
+        return;
+      }
+      if (isAndroid) {
+        setContainerPos(calculateContainerPosition());
+        return;
+      }
+
+      if (window.innerWidth <= 768) {
+        setContainerPos(calculateContainerPosition());
+        return;
+      }
+
+      // Events are already RAF-throttled by PositionManager, just update directly
+      // Use .current to access latest refs without recreating handler
+      const chatInputHeight =
+        chatInputRef?.current?.getBoundingClientRect().height || 140;
+
+      if (modelDisabled) {
+        const buttonPos = buttonPosRef.current;
+        const containerWidth = Math.min(400, window.innerWidth - 16);
+        const containerHeight = 400;
+        const offsetY = 5;
+        const buttonSize = 48;
+
+        const containerX = Math.max(
+          8,
+          Math.min(
+            buttonPos.x - (containerWidth - buttonSize) / 2,
+            window.innerWidth - containerWidth - 8,
+          ),
+        );
+        let containerY =
+          buttonPos.y - containerHeight - chatInputHeight - offsetY;
+        containerY = Math.max(10, containerY);
+        const maxY =
+          window.innerHeight - containerHeight - chatInputHeight - offsetY;
+        containerY = Math.min(containerY, maxY);
+
+        setContainerPos({ x: containerX, y: containerY });
+      } else if (positionManagerRef?.current) {
+        try {
+          const modelPos = positionManagerRef.current.getPositionPixels();
+          const containerWidth = Math.min(400, window.innerWidth - 16);
+          const containerHeight = 500;
+          const offsetX = 15 + (isDesktop ? ASSISTANT_CONTROL_CHAT_GUTTER : 0);
+          const windowWidth = window.innerWidth;
+          const windowHeight = window.innerHeight;
+          const availableHeight = windowHeight - chatInputHeight;
+
+          const rightX = modelPos.x + modelPos.width + offsetX;
+          const leftX = modelPos.x - containerWidth - offsetX;
+          const wouldOverflowRight = rightX + containerWidth > windowWidth - 8;
+          const wouldOverflowLeft = leftX < 8;
+          const modelRightEdge = modelPos.x + modelPos.width;
+          const wouldOverlapRight = modelRightEdge > rightX;
+
+          let shouldBeOnLeft = false;
+          if (wouldOverflowRight) {
+            shouldBeOnLeft = true;
+          } else if (wouldOverlapRight && !wouldOverflowLeft) {
+            shouldBeOnLeft = true;
+          } else if (modelPos.x > windowWidth * 0.7) {
+            shouldBeOnLeft = true;
+          }
+
+          let containerX = shouldBeOnLeft ? leftX : rightX;
+          containerX = Math.max(
+            8,
+            Math.min(containerX, windowWidth - containerWidth - 8),
+          );
+          let containerY = modelPos.y;
+          containerY = Math.max(
+            10,
+            Math.min(containerY, availableHeight - containerHeight - 10),
+          );
+
+          setContainerPos({ x: containerX, y: containerY });
+        } catch (error) {
+          Logger.error(
+            "ChatContainer",
+            "Failed to calculate model position:",
+            error,
+          );
+        }
+      }
+    };
+
+    if (!modelDisabled) {
+      handleModelPosition();
+      window.addEventListener("modelPositionChange", handleModelPosition);
+      return () =>
+        window.removeEventListener("modelPositionChange", handleModelPosition);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isVisible,
+    modelDisabled,
+    normalDesktop,
+    resizableFloatingChat,
+    calculateContainerPosition,
+  ]);
+
+  useEffect(() => {
+    if (!isVisible) return;
+
+    const handleResize = () => {
+      if (normalDesktop) return;
+      const newPos = calculateContainerPosition();
+      setContainerPos(newPos);
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [isVisible, calculateContainerPosition, normalDesktop]);
+
+  useEffect(() => {
+    const handleButtonMoved = (event: Event) => {
+      if (!(event instanceof CustomEvent)) {
+        return;
+      }
+      buttonPosRef.current = event.detail;
+      const newPos = calculateContainerPosition();
+      setContainerPos(newPos);
+    };
+
+    if (modelDisabled && !normalDesktop) {
+      window.addEventListener("chatButtonMoved", handleButtonMoved);
+      return () =>
+        window.removeEventListener("chatButtonMoved", handleButtonMoved);
+    }
+  }, [modelDisabled, calculateContainerPosition, normalDesktop]);
+
+  useEffect(() => {
+    if (!isVisible) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      if (!messagesContainerRef.current) {
+        return;
+      }
+
+      dragDropServiceRef.current = new dragDropCtor({
+        maxImages: 3,
+        maxAudios: 1,
+      });
+
+      dragDropServiceRef.current.attach(messagesContainerRef.current, {
+        onSetDragOver: (isDragging: boolean) => setIsDragOver(isDragging),
+        onShowError: (error: Error | string) =>
+          Logger.error("ChatContainer", "Drag-drop error:", error),
+        checkVoiceMode: null,
+        getCurrentCounts: () => ({ images: 0, audios: 0 }),
+        onProcessData: (data: ChatDragDropData) => {
+          if (onDragDrop) {
+            onDragDrop(data);
+          }
+        },
+      });
+    }, 0);
+
+    return () => {
+      clearTimeout(timeoutId);
+      if (dragDropServiceRef.current) {
+        dragDropServiceRef.current.detach();
+      }
+    };
+  }, [isVisible, onDragDrop, setIsDragOver]);
+
+  useEffect(() => {
+    if (modelDisabled) {
+      window.addEventListener("chatButtonDragStart", startButtonDrag);
+      window.addEventListener("chatButtonDragEnd", endButtonDrag);
+      return () => {
+        window.removeEventListener("chatButtonDragStart", startButtonDrag);
+        window.removeEventListener("chatButtonDragEnd", endButtonDrag);
+      };
+    } else {
+      window.addEventListener("modelDragStart", startModelDrag);
+      window.addEventListener("modelDragEnd", endModelDrag);
+      return () => {
+        window.removeEventListener("modelDragStart", startModelDrag);
+        window.removeEventListener("modelDragEnd", endModelDrag);
+      };
+    }
+  }, [
+    modelDisabled,
+    startButtonDrag,
+    endButtonDrag,
+    startModelDrag,
+    endModelDrag,
+  ]);
+
+  const handleHistoryClose = useCallback(() => {
+    if (attachedHistoryLayout) {
+      setIsHistoryPanelOpen(false);
+      return;
+    }
+    setIsHistoryPanelClosing(true);
+    setTimeout(() => {
+      setIsHistoryPanelOpen(false);
+      setIsHistoryPanelClosing(false);
+    }, 200);
+  }, [attachedHistoryLayout, setIsHistoryPanelOpen]);
+
+  const handleSelectChat = useCallback(
+    (chat: ChatHistorySelection) => {
+      pendingHistoryScrollToEndRef.current = true;
+
+      loadChatFromHistory(chat);
+      if (attachedHistoryLayout) {
+        setIsHistoryPanelOpen(false);
+        return;
+      }
+      setIsHistoryPanelClosing(true);
+      setTimeout(() => {
+        setIsHistoryPanelOpen(false);
+        setIsHistoryPanelClosing(false);
+      }, 200);
+    },
+    [attachedHistoryLayout, loadChatFromHistory, setIsHistoryPanelOpen],
+  );
+
+  const handleRequestEditDialog = useCallback(
+    (chatId: string, title: string) => {
+      setEditingChatId(chatId);
+      setEditingChatTitle(title);
+    },
+    [],
+  );
+
+  const handleEditDialogSave = useCallback(
+    async (chatId: string, newTitle: string) => {
+      try {
+        await chatHistoryService.updateChatTitle(chatId, newTitle);
+        Logger.log("ChatContainer", "Updated chat title:", chatId, newTitle);
+
+        // Trigger chat history panel refresh
+        setHistoryRefreshTrigger((prev) => prev + 1);
+
+        setIsEditDialogClosing(true);
+        setTimeout(() => {
+          setEditingChatId(null);
+          setEditingChatTitle("");
+          setIsEditDialogClosing(false);
+        }, 200);
+      } catch (error) {
+        Logger.error("ChatContainer", "Failed to update chat title:", error);
+      }
+    },
+    [chatHistoryService],
+  );
+
+  const handleEditDialogCancel = useCallback(() => {
+    setIsEditDialogClosing(true);
+    setTimeout(() => {
+      setEditingChatId(null);
+      setEditingChatTitle("");
+      setIsEditDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteDialog = useCallback((chatId: string) => {
+    setDeletingChatId(chatId);
+  }, []);
+
+  const handleDeleteDialogConfirm = useCallback(
+    async (chatId: string) => {
+      try {
+        await chatHistoryService.deleteChat(chatId);
+        Logger.log("ChatContainer", "Deleted chat:", chatId);
+
+        // Trigger chat history panel refresh
+        setHistoryRefreshTrigger((prev) => prev + 1);
+
+        setIsDeleteDialogClosing(true);
+        setTimeout(() => {
+          setDeletingChatId(null);
+          setIsDeleteDialogClosing(false);
+        }, 200);
+      } catch (error) {
+        Logger.error("ChatContainer", "Failed to delete chat:", error);
+      }
+    },
+    [chatHistoryService],
+  );
+
+  const handleDeleteDialogCancel = useCallback(() => {
+    setIsDeleteDialogClosing(true);
+    setTimeout(() => {
+      setDeletingChatId(null);
+      setIsDeleteDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteModelDialog = useCallback((modelId: string) => {
+    setDeletingModelId(modelId);
+  }, []);
+
+  const handleDeleteModelConfirm = useCallback(async (modelId: string) => {
+    try {
+      await modelStorageService.deleteModel(modelId);
+      Logger.log("ChatContainer", "Deleted model:", modelId);
+
+      setIsDeleteModelDialogClosing(true);
+      setTimeout(() => {
+        setDeletingModelId(null);
+        setIsDeleteModelDialogClosing(false);
+        setSettingsRefreshTrigger((prev) => prev + 1); // Trigger refresh
+      }, 200);
+    } catch (error) {
+      Logger.error("ChatContainer", "Failed to delete model:", error);
+    }
+  }, []);
+
+  const handleDeleteModelCancel = useCallback(() => {
+    setIsDeleteModelDialogClosing(true);
+    setTimeout(() => {
+      setDeletingModelId(null);
+      setIsDeleteModelDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteMotionDialog = useCallback((motionId: string) => {
+    setDeletingMotionId(motionId);
+  }, []);
+
+  const handleRequestDeleteStageDialog = useCallback((stageId: string) => {
+    setDeletingStageId(stageId);
+  }, []);
+
+  const handleDeleteStageConfirm = useCallback(async (stageId: string) => {
+    try {
+      await stageStorageService.deleteStage(stageId);
+      Logger.log("ChatContainer", "Deleted stage:", stageId);
+
+      setIsDeleteStageDialogClosing(true);
+      setTimeout(() => {
+        setDeletingStageId(null);
+        setIsDeleteStageDialogClosing(false);
+        setSettingsRefreshTrigger((prev) => prev + 1);
+      }, 200);
+    } catch (error) {
+      Logger.error("ChatContainer", "Failed to delete stage:", error);
+      setSettingsErrorMessage("Failed to delete stage.");
+    }
+  }, []);
+
+  const handleDeleteStageCancel = useCallback(() => {
+    setIsDeleteStageDialogClosing(true);
+    setTimeout(() => {
+      setDeletingStageId(null);
+      setIsDeleteStageDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteEmoteDialog = useCallback(
+    (payload: { emoteId?: string; category?: string }) => {
+      setDeletingEmoteId(payload.emoteId || null);
+      setDeletingEmoteCategory(payload.category || null);
+    },
+    [],
+  );
+
+  const handleDeleteEmoteConfirm = useCallback(async () => {
+    try {
+      if (deletingEmoteCategory) {
+        const emotes = await emoteStorageService.getEmotesList();
+        const toDelete = emotes.filter((emote) => {
+          if (deletingEmoteCategory === "all") {
+            return true;
+          }
+          const categories = Array.isArray(emote.categories)
+            ? emote.categories
+            : ["general"];
+          return categories.includes(deletingEmoteCategory);
+        });
+
+        await Promise.all(
+          toDelete.map((emote) => emoteStorageService.deleteEmote(emote.id)),
+        );
+        Logger.log(
+          "ChatContainer",
+          "Deleted filtered emotes count:",
+          toDelete.length,
+        );
+      } else if (deletingEmoteId) {
+        await emoteStorageService.deleteEmote(deletingEmoteId);
+        Logger.log("ChatContainer", "Deleted emote:", deletingEmoteId);
+      } else {
+        return;
+      }
+
+      setIsDeleteEmoteDialogClosing(true);
+      setTimeout(() => {
+        setDeletingEmoteId(null);
+        setDeletingEmoteCategory(null);
+        setIsDeleteEmoteDialogClosing(false);
+        setSettingsRefreshTrigger((prev) => prev + 1);
+      }, 200);
+    } catch (error) {
+      Logger.error("ChatContainer", "Failed to delete emote(s):", error);
+      setSettingsErrorMessage("Failed to delete emote(s).");
+    }
+  }, [deletingEmoteCategory, deletingEmoteId]);
+
+  const handleDeleteEmoteCancel = useCallback(() => {
+    setIsDeleteEmoteDialogClosing(true);
+    setTimeout(() => {
+      setDeletingEmoteId(null);
+      setDeletingEmoteCategory(null);
+      setIsDeleteEmoteDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleDeleteMotionConfirm = useCallback(async (motionId: string) => {
+    try {
+      await motionStorageService.deleteMotion(motionId);
+      Logger.log("ChatContainer", "Deleted motion:", motionId);
+
+      setIsDeleteMotionDialogClosing(true);
+      setTimeout(() => {
+        setDeletingMotionId(null);
+        setIsDeleteMotionDialogClosing(false);
+        setSettingsRefreshTrigger((prev) => prev + 1); // Trigger refresh
+      }, 200);
+    } catch (error) {
+      Logger.error("ChatContainer", "Failed to delete motion:", error);
+    }
+  }, []);
+
+  const handleDeleteMotionCancel = useCallback(() => {
+    setIsDeleteMotionDialogClosing(true);
+    setTimeout(() => {
+      setDeletingMotionId(null);
+      setIsDeleteMotionDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteVoiceDialog = useCallback((voiceId: string) => {
+    setDeletingVoiceId(voiceId);
+  }, []);
+
+  const handleDeleteVoiceConfirm = useCallback(
+    async (voiceId: string) => {
+      try {
+        const { default: voiceStorageService } =
+          await import("../../services/audio/VoiceStorageService");
+        await voiceStorageService.deleteVoice(voiceId);
+        Logger.log("ChatContainer", "Deleted voice:", voiceId);
+
+        if (ttsConfig?.gptsovits?.referenceVoiceId === voiceId) {
+          updateTTSConfig("gptsovits.referenceVoiceId", null);
+          updateTTSConfig("gptsovits.referenceText", "");
+        }
+
+        setSettingsRefreshTrigger((prev) => {
+          const newValue = prev + 1;
+          return newValue;
+        });
+
+        setIsDeleteVoiceDialogClosing(true);
+        setTimeout(() => {
+          setDeletingVoiceId(null);
+          setIsDeleteVoiceDialogClosing(false);
+        }, 200);
+      } catch (error) {
+        Logger.error("ChatContainer", "Failed to delete voice:", error);
+      }
+    },
+    [ttsConfig, updateTTSConfig],
+  );
+
+  const handleDeleteVoiceCancel = useCallback(() => {
+    setIsDeleteVoiceDialogClosing(true);
+    setTimeout(() => {
+      setDeletingVoiceId(null);
+      setIsDeleteVoiceDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteLLMModel = useCallback((filename: string) => {
+    setDeletingLLMModel(filename);
+  }, []);
+
+  const handleDeleteLLMModelConfirm = useCallback(
+    async (filename: string) => {
+      try {
+        let result;
+
+        if (filename.startsWith("llama-backend:")) {
+          const backend = filename.slice("llama-backend:".length);
+          await api?.llamaServer
+            ?.deleteBackend?.(backend)
+            .catch((error: unknown) => {
+              Logger.error(
+                "ChatContainer",
+                "llama-server backend delete failed:",
+                error,
+              );
+            });
+          setSettingsRefreshTrigger((prev) => prev + 1);
+          setIsDeleteLLMModelDialogClosing(true);
+          setTimeout(() => {
+            setDeletingLLMModel(null);
+            setIsDeleteLLMModelDialogClosing(false);
+          }, 200);
+          return;
+        }
+
+        if (isDesktop && api?.llm) {
+          // Get custom models path from aiConfig
+          const customPath =
+            (
+              aiConfig as unknown as {
+                ["desktop-local"]?: { customModelsPath?: string };
+              } | null
+            )?.["desktop-local"]?.customModelsPath || null;
+          const deleteModel = api.llm.deleteModel;
+          if (!deleteModel) {
+            Logger.error(
+              "ChatContainer",
+              "Desktop LLM deleteModel API is unavailable",
+            );
+            return;
+          }
+          result = await deleteModel(filename, customPath);
+        } else if (isAndroid && androidAPI?.deleteLLMModel) {
+          const resultJson = androidAPI.deleteLLMModel(filename);
+          result = JSON.parse(resultJson);
+        } else {
+          Logger.error("ChatContainer", "No deletion API available");
+          return;
+        }
+
+        if (result?.success) {
+          Logger.log("ChatContainer", "Deleted LLM model:", filename);
+
+          // Trigger refresh
+          setSettingsRefreshTrigger((prev) => prev + 1);
+        } else {
+          Logger.error("ChatContainer", "Delete failed:", result?.error);
+        }
+
+        setIsDeleteLLMModelDialogClosing(true);
+        setTimeout(() => {
+          setDeletingLLMModel(null);
+          setIsDeleteLLMModelDialogClosing(false);
+        }, 200);
+      } catch (error) {
+        Logger.error("ChatContainer", "Failed to delete LLM model:", error);
+        setIsDeleteLLMModelDialogClosing(true);
+        setTimeout(() => {
+          setDeletingLLMModel(null);
+          setIsDeleteLLMModelDialogClosing(false);
+        }, 200);
+      }
+    },
+    [aiConfig, api, androidAPI],
+  );
+
+  const handleDeleteLLMModelCancel = useCallback(() => {
+    setIsDeleteLLMModelDialogClosing(true);
+    setTimeout(() => {
+      setDeletingLLMModel(null);
+      setIsDeleteLLMModelDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteSttModel = useCallback((variantId: string) => {
+    setDeletingSttModelId(variantId);
+  }, []);
+
+  const handleDeleteSttModelConfirm = useCallback(
+    async (variantId: string) => {
+      try {
+        let resultJson: string | undefined;
+        if (variantId.startsWith("whispercpp:")) {
+          // Desktop whisper.cpp GGML model (async IPC, no JSON envelope)
+          const modelId = variantId.slice("whispercpp:".length);
+          await api?.whisperCpp
+            ?.deleteModel?.({ modelId })
+            .catch((error: unknown) => {
+              Logger.error(
+                "ChatContainer",
+                "whisper.cpp model delete failed:",
+                error,
+              );
+            });
+          setSttExternalDeleteTick((prev) => prev + 1);
+          setIsDeleteSttModelDialogClosing(true);
+          setTimeout(() => {
+            setDeletingSttModelId(null);
+            setIsDeleteSttModelDialogClosing(false);
+          }, 200);
+          return;
+        }
+        if (variantId === "sensevoice-qnn") {
+          resultJson = androidAPI?.deleteSenseVoiceQnnModel?.();
+        } else if (variantId === "sensevoice") {
+          resultJson = androidAPI?.deleteSenseVoiceModel?.();
+        } else if (variantId.startsWith("dolphin-")) {
+          resultJson = androidAPI?.deleteDolphinModel?.(variantId);
+        } else {
+          resultJson = androidAPI?.deleteWhisperVariant?.(variantId);
+        }
+
+        if (!resultJson) {
+          Logger.error("ChatContainer", "No STT deletion API available");
+          return;
+        }
+
+        const result = JSON.parse(resultJson) as {
+          success?: boolean;
+          error?: string;
+        };
+
+        if (result?.success) {
+          Logger.log("ChatContainer", "Deleted STT model:", variantId);
+
+          // Trigger refresh inside the downloader components
+          setSttExternalDeleteTick((prev) => prev + 1);
+        } else {
+          Logger.error("ChatContainer", "Delete failed:", result?.error);
+        }
+
+        setIsDeleteSttModelDialogClosing(true);
+        setTimeout(() => {
+          setDeletingSttModelId(null);
+          setIsDeleteSttModelDialogClosing(false);
+        }, 200);
+      } catch (error) {
+        Logger.error("ChatContainer", "Failed to delete STT model:", error);
+        setIsDeleteSttModelDialogClosing(true);
+        setTimeout(() => {
+          setDeletingSttModelId(null);
+          setIsDeleteSttModelDialogClosing(false);
+        }, 200);
+      }
+    },
+    [androidAPI, api?.whisperCpp],
+  );
+
+  const handleDeleteSttModelCancel = useCallback(() => {
+    setIsDeleteSttModelDialogClosing(true);
+    setTimeout(() => {
+      setDeletingSttModelId(null);
+      setIsDeleteSttModelDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestDeleteTtsPack = useCallback((packId: string) => {
+    setDeletingTtsPackId(packId);
+  }, []);
+
+  const handleDeleteTtsPackConfirm = useCallback(
+    async (packId: string) => {
+      try {
+        const resultJson =
+          packId === "vits-vctk"
+            ? androidAPI?.deleteVitsModel?.()
+            : androidAPI?.deleteTtsPack?.(packId);
+
+        if (!resultJson) {
+          Logger.error("ChatContainer", "No TTS deletion API available");
+          return;
+        }
+
+        const result = JSON.parse(resultJson) as {
+          success?: boolean;
+          error?: string;
+        };
+
+        if (result?.success) {
+          Logger.log("ChatContainer", "Deleted TTS voice pack:", packId);
+
+          // Trigger refresh inside the downloader components
+          setTtsExternalDeleteTick((prev) => prev + 1);
+        } else {
+          Logger.error("ChatContainer", "Delete failed:", result?.error);
+        }
+
+        setIsDeleteTtsPackDialogClosing(true);
+        setTimeout(() => {
+          setDeletingTtsPackId(null);
+          setIsDeleteTtsPackDialogClosing(false);
+        }, 200);
+      } catch (error) {
+        Logger.error(
+          "ChatContainer",
+          "Failed to delete TTS voice pack:",
+          error,
+        );
+        setIsDeleteTtsPackDialogClosing(true);
+        setTimeout(() => {
+          setDeletingTtsPackId(null);
+          setIsDeleteTtsPackDialogClosing(false);
+        }, 200);
+      }
+    },
+    [androidAPI],
+  );
+
+  const handleDeleteTtsPackCancel = useCallback(() => {
+    setIsDeleteTtsPackDialogClosing(true);
+    setTimeout(() => {
+      setDeletingTtsPackId(null);
+      setIsDeleteTtsPackDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleRequestResetSetupDialog = useCallback(
+    (onConfirm: () => Promise<void> | void) => {
+      setPendingSettingsConfirmAction(() => onConfirm);
+    },
+    [],
+  );
+
+  const handleSettingsConfirmCancel = useCallback(() => {
+    setIsSettingsConfirmDialogClosing(true);
+    setTimeout(() => {
+      setPendingSettingsConfirmAction(null);
+      setIsSettingsConfirmDialogClosing(false);
+    }, 200);
+  }, []);
+
+  const handleSettingsConfirmConfirm = useCallback(async () => {
+    if (!pendingSettingsConfirmAction) {
+      return;
+    }
+
+    try {
+      setPendingSettingsConfirmAction(null);
+      await pendingSettingsConfirmAction();
+    } catch (error) {
+      Logger.error("ChatContainer", "Settings confirm action failed:", error);
+      setSettingsErrorMessage("Action failed. Please try again.");
+    }
+  }, [pendingSettingsConfirmAction]);
+
+  const handleRequestSettingsErrorDialog = useCallback((message: string) => {
+    setSettingsErrorMessage(message);
+  }, []);
+
+  const handleSettingsErrorClose = useCallback(() => {
+    setIsSettingsErrorDialogClosing(true);
+    setTimeout(() => {
+      setSettingsErrorMessage(null);
+      setIsSettingsErrorDialogClosing(false);
+    }, 200);
+  }, []);
+
+  /**
+   * Handles settings panel close with animation.
+   */
+  const handleSettingsPanelClose = useCallback(() => {
+    setIsSettingsPanelClosing(true);
+    setTimeout(() => {
+      setIsSettingsPanelOpen(false);
+      setIsSettingsPanelClosing(false);
+      setRequestedSettingsView(null);
+    }, 200);
+  }, [setIsSettingsPanelOpen]);
+
+  const handleQuickPanelClose = useCallback(() => {
+    setIsQuickPanelClosing(true);
+    setTimeout(() => {
+      setIsQuickPanelOpen(false);
+      setIsQuickPanelClosing(false);
+    }, 200);
+  }, [setIsQuickPanelOpen]);
+
+  /**
+   * Handle stop generation.
+   */
+  const handleStopGeneration = useCallback(() => {
+    if (isGenerating) {
+      Logger.log("ChatContainer", "Stop button clicked");
+      stopGeneration();
+    } else {
+      stopGeneration();
+    }
+  }, [isGenerating, stopGeneration]);
+
+  useEffect(() => {
+    const loadTtsConfig = async () => {
+      try {
+        const config = await storageService.configLoad(
+          "ttsConfig",
+          DefaultTTSConfig as TTSConfigLike,
+        );
+        setTtsConfig(config);
+      } catch (error) {
+        Logger.error("ChatContainer", "Failed to load TTS config:", error);
+        setTtsConfig(DefaultTTSConfig);
+      }
+    };
+
+    loadTtsConfig();
+  }, []);
+
+  /**
+   * Detects background color brightness behind the container.
+   * Samples a configurable grid for accurate detection.
+   */
+  useEffect(() => {
+    if (!isVisible) return;
+
+    const isAdaptiveMode =
+      (uiConfig?.backgroundDetection?.mode || "adaptive") === "adaptive";
+
+    if (!isAdaptiveMode) {
+      const forcedMode = uiConfig?.backgroundDetection?.mode;
+      if (forcedMode === "light") {
+        setIsLightBackground(true);
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.classList.add("light-bg");
+        }
+      } else if (forcedMode === "dark") {
+        setIsLightBackground(false);
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.classList.remove("light-bg");
+        }
+      }
+      return;
+    }
+
+    let detectionTimeout: ReturnType<typeof setTimeout> | null = null;
+    let scrollTimeout: ReturnType<typeof setTimeout> | null = null;
+    let intervalId = null;
+
+    const detectBackgroundBrightness = () => {
+      const canvas = document.getElementById("vassist-babylon-canvas");
+      const container = containerRef.current;
+
+      const elementsToDisable = [canvas, container].filter(isHTMLElement);
+      const elementsToIgnore = [canvas, container].filter(isHTMLElement);
+
+      const result = BackgroundDetector.withDisabledPointerEvents(
+        elementsToDisable,
+        () => {
+          return BackgroundDetector.detectBrightness({
+            sampleArea: {
+              type: "grid",
+              x: containerPos.x,
+              y: containerPos.y,
+              width: 400,
+              height: 500,
+              padding: 60,
+            },
+            elementsToIgnore: [...elementsToIgnore],
+            logPrefix: "[ChatContainer]",
+          });
+        },
+      );
+
+      setDebugMarkers(toDebugMarkers(result.debugMarkers));
+
+      setIsLightBackground((prevState) => {
+        if (prevState !== result.isLight) {
+          if (messagesContainerRef.current) {
+            if (result.isLight) {
+              messagesContainerRef.current.classList.add("light-bg");
+            } else {
+              messagesContainerRef.current.classList.remove("light-bg");
+            }
+          }
+          return result.isLight;
+        }
+        return prevState;
+      });
+    };
+
+    // Initial detection with delay
+    detectionTimeout = setTimeout(detectBackgroundBrightness, 400);
+
+    // Debounced scroll handler
+    const handleScroll = () => {
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
+      scrollTimeout = setTimeout(detectBackgroundBrightness, 500);
+    };
+
+    window.addEventListener("scroll", handleScroll, true);
+
+    // Periodic detection (less frequent)
+    intervalId = setInterval(detectBackgroundBrightness, 4000);
+
+    return () => {
+      if (detectionTimeout) {
+        clearTimeout(detectionTimeout);
+      }
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
+      window.removeEventListener("scroll", handleScroll, true);
+      clearInterval(intervalId);
+    };
+  }, [
+    isVisible,
+    containerPos,
+    isDraggingButton,
+    isDraggingModel,
+    uiConfig?.backgroundDetection?.mode,
+  ]);
+
+  /**
+   * Sets up audio start callback for updating UI when audio starts playing.
+   * SKIP in voice mode - VoiceConversationService owns the callbacks
+   */
+  useEffect(() => {
+    if (isVoiceMode) {
+      Logger.log(
+        "ChatContainer",
+        "Voice mode - skipping TTS event listener setup (VoiceConversationService owns events)",
+      );
+      return;
+    }
+
+    let voiceMonitoringStarted = false;
+
+    const handleAudioStart = (event: Event) => {
+      if (!(event instanceof CustomEvent)) {
+        return;
+      }
+      const { sessionId } = event.detail;
+      Logger.log(
+        "ChatContainer",
+        "Audio started playing for session:",
+        sessionId,
+      );
+
+      if (sessionId?.startsWith("manual_")) {
+        const parts = sessionId.split("_");
+        const messageIndex = parseInt(parts[1]);
+        if (!isNaN(messageIndex)) {
+          setLoadingMessageIndex(null);
+          setPlayingMessageIndex(messageIndex);
+          currentSessionRef.current = sessionId;
+        }
+      } else if (sessionId?.startsWith("auto_")) {
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const messageAtIndex = messages[i];
+          if (messageAtIndex?.role === "assistant") {
+            setLoadingMessageIndex(null);
+            setPlayingMessageIndex(i);
+            currentSessionRef.current = sessionId;
+            break;
+          }
+        }
+      } else if (sessionId?.startsWith("voice_")) {
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const messageAtIndex = messages[i];
+          if (messageAtIndex?.role === "assistant") {
+            setLoadingMessageIndex(null);
+            setPlayingMessageIndex(i);
+            currentSessionRef.current = sessionId;
+            break;
+          }
+        }
+
+        if (!voiceMonitoringStarted) {
+          voiceMonitoringStarted = true;
+          Logger.log(
+            "ChatContainer",
+            "Voice mode detected, VoiceConversationService will handle state",
+          );
+          // VoiceConversationService handles state transitions via events
+        }
+      }
+    };
+
+    const handleAudioEnd = (event: Event) => {
+      if (!(event instanceof CustomEvent)) {
+        return;
+      }
+      const { sessionId } = event.detail;
+      Logger.log(
+        "ChatContainer",
+        "Audio finished playing for session:",
+        sessionId,
+      );
+
+      // Always clear playing state when audioEnd fires - it only fires when truly done
+      setPlayingMessageIndex(null);
+      currentSessionRef.current = null;
+    };
+
+    const handleTTSAudioStart = (event: Event) => {
+      if (
+        !(event instanceof CustomEvent) ||
+        !event.detail ||
+        typeof event.detail !== "object"
+      ) {
+        return;
+      }
+      const detail = event.detail as {
+        messageIndex?: number;
+        sessionId?: string;
+      };
+      const { messageIndex, sessionId } = detail;
+      if (typeof messageIndex !== "number" || typeof sessionId !== "string") {
+        return;
+      }
+      Logger.log(
+        "ChatContainer",
+        "Custom TTS audio start event:",
+        messageIndex,
+        sessionId,
+      );
+      setLoadingMessageIndex(null);
+      setPlayingMessageIndex(messageIndex);
+      currentSessionRef.current = sessionId;
+    };
+
+    const handleTTSAudioEnd = (event: Event) => {
+      if (
+        !(event instanceof CustomEvent) ||
+        !event.detail ||
+        typeof event.detail !== "object"
+      ) {
+        return;
+      }
+      const detail = event.detail as { sessionId?: string };
+      const { sessionId } = detail;
+      if (typeof sessionId !== "string") {
+        return;
+      }
+      Logger.log("ChatContainer", "Custom TTS audio end event:", sessionId);
+      if (currentSessionRef.current === sessionId) {
+        setPlayingMessageIndex(null);
+        currentSessionRef.current = null;
+      }
+    };
+
+    window.addEventListener("ttsAudioStart", handleTTSAudioStart);
+    window.addEventListener("ttsAudioEnd", handleTTSAudioEnd);
+    ttsService.addEventListener("audioStart", handleAudioStart);
+    ttsService.addEventListener("audioEnd", handleAudioEnd);
+
+    return () => {
+      if (!isVoiceMode) {
+        ttsService.removeEventListener("audioStart", handleAudioStart);
+        ttsService.removeEventListener("audioEnd", handleAudioEnd);
+      }
+      window.removeEventListener("ttsAudioStart", handleTTSAudioStart);
+      window.removeEventListener("ttsAudioEnd", handleTTSAudioEnd);
+    };
+  }, [messages, setLoadingMessageIndex, setPlayingMessageIndex, isVoiceMode]);
+
+  /**
+   * Scrolls to bottom without checking if user is near bottom.
+   * Used for: chat open, user sends message.
+   */
+  const scrollToBottomImmediate = useCallback(() => {
+    if (autoScrollFrameRef.current !== null) {
+      cancelAnimationFrame(autoScrollFrameRef.current);
+      autoScrollFrameRef.current = null;
+    }
+    isAutoScrollingRef.current = false;
+    userPausedScrollRef.current = false;
+    wasAtChatEndRef.current = true;
+    chatVirtualizer.scrollToEnd({ behavior: "instant" });
+  }, [chatVirtualizer]);
+
+  /**
+   * Keeps the chat pinned to the bottom only when the user was already near the end.
+   */
+  const scrollToBottomIfPinned = useCallback(() => {
+    const element = scrollRef.current;
+    if (
+      !isVisible ||
+      !element ||
+      chatItems.length === 0 ||
+      !wasAtChatEndRef.current ||
+      isTouchScrollingRef.current
+    ) {
+      return;
+    }
+    if (autoScrollFrameRef.current !== null) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      chatVirtualizer.scrollToEnd({ behavior: "instant" });
+      return;
+    }
+    isAutoScrollingRef.current = true;
+    let previousTime: number | null = null;
+    const follow = (time: number) => {
+      autoScrollFrameRef.current = null;
+      if (
+        !wasAtChatEndRef.current ||
+        isTouchScrollingRef.current ||
+        !scrollRef.current
+      ) {
+        isAutoScrollingRef.current = false;
+        return;
+      }
+      const target = Math.max(0, element.scrollHeight - element.clientHeight);
+      const distance = target - element.scrollTop;
+      if (Math.abs(distance) < 0.75) {
+        element.scrollTop = target;
+        isAutoScrollingRef.current = false;
+        return;
+      }
+      const elapsed =
+        previousTime === null ? 16 : Math.min(50, time - previousTime);
+      previousTime = time;
+      element.scrollTop += distance * (1 - Math.exp(-elapsed / 160));
+      autoScrollFrameRef.current = requestAnimationFrame(follow);
+    };
+    autoScrollFrameRef.current = requestAnimationFrame(follow);
+  }, [chatItems.length, chatVirtualizer, isVisible]);
+
+  useEffect(() => {
+    const scrollElement = scrollRef.current;
+
+    if (!scrollElement) {
+      return;
+    }
+
+    const updatePinnedState = () => {
+      if (isAutoScrollingRef.current) return;
+      const movedDown = scrollElement.scrollTop > lastScrollTopRef.current;
+      lastScrollTopRef.current = scrollElement.scrollTop;
+      if (userPausedScrollRef.current) {
+        const distance =
+          scrollElement.scrollHeight -
+          scrollElement.clientHeight -
+          scrollElement.scrollTop;
+        if (!movedDown || distance > 2) {
+          wasAtChatEndRef.current = false;
+          return;
+        }
+        userPausedScrollRef.current = false;
+      }
+      wasAtChatEndRef.current = chatVirtualizer.isAtEnd(
+        CHAT_SCROLL_END_THRESHOLD,
+      );
+    };
+
+    const cancelFollowing = () => {
+      if (autoScrollFrameRef.current !== null)
+        cancelAnimationFrame(autoScrollFrameRef.current);
+      autoScrollFrameRef.current = null;
+      isAutoScrollingRef.current = false;
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (event.deltaY < 0) {
+        cancelFollowing();
+        userPausedScrollRef.current = true;
+        wasAtChatEndRef.current = false;
+      } else if (
+        event.deltaY > 0 &&
+        scrollElement.scrollHeight -
+          scrollElement.clientHeight -
+          scrollElement.scrollTop <=
+          2
+      ) {
+        userPausedScrollRef.current = false;
+        wasAtChatEndRef.current = true;
+      }
+    };
+    const onTouchStart = () => {
+      isTouchScrollingRef.current = true;
+      cancelFollowing();
+      userPausedScrollRef.current = true;
+    };
+    const onTouchEnd = () => {
+      isTouchScrollingRef.current = false;
+      if (
+        scrollElement.scrollHeight -
+          scrollElement.clientHeight -
+          scrollElement.scrollTop <=
+        2
+      )
+        userPausedScrollRef.current = false;
+      updatePinnedState();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (["ArrowUp", "PageUp", "Home"].includes(event.key)) {
+        cancelFollowing();
+        userPausedScrollRef.current = true;
+        wasAtChatEndRef.current = false;
+      }
+    };
+
+    updatePinnedState();
+    scrollElement.addEventListener("scroll", updatePinnedState, {
+      passive: true,
+    });
+    scrollElement.addEventListener("wheel", onWheel, { passive: true });
+    scrollElement.addEventListener("touchstart", onTouchStart, {
+      passive: true,
+    });
+    scrollElement.addEventListener("touchend", onTouchEnd, { passive: true });
+    scrollElement.addEventListener("touchcancel", onTouchEnd, {
+      passive: true,
+    });
+    scrollElement.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      scrollElement.removeEventListener("scroll", updatePinnedState);
+      scrollElement.removeEventListener("wheel", onWheel);
+      scrollElement.removeEventListener("touchstart", onTouchStart);
+      scrollElement.removeEventListener("touchend", onTouchEnd);
+      scrollElement.removeEventListener("touchcancel", onTouchEnd);
+      scrollElement.removeEventListener("keydown", onKeyDown);
+      cancelFollowing();
+      isTouchScrollingRef.current = false;
+    };
+  }, [chatVirtualizer, currentChatId, isVisible]);
+
+  /**
+   * Scroll to bottom immediately when chat opens (from button or history)
+   * Uses useLayoutEffect to scroll BEFORE paint to prevent visible jump
+   */
+  useLayoutEffect(() => {
+    if (isVisible && !wasVisibleRef.current && chatItems.length > 0) {
+      scrollToBottomImmediate();
+    }
+
+    wasVisibleRef.current = isVisible;
+  }, [chatItems.length, isVisible, scrollToBottomImmediate]);
+
+  useLayoutEffect(() => {
+    if (
+      pendingHistoryScrollToEndRef.current &&
+      isVisible &&
+      chatItems.length > 0
+    ) {
+      pendingHistoryScrollToEndRef.current = false;
+      scrollToBottomImmediate();
+    }
+  }, [chatItems.length, currentChatId, isVisible, scrollToBottomImmediate]);
+
+  useEffect(() => {
+    if (!isVisible || messages.length === 0) {
+      return;
+    }
+
+    const lastMessage = messages[messages.length - 1];
+
+    if (lastMessage?.role !== "assistant") {
+      return;
+    }
+
+    const frame = requestAnimationFrame(() => {
+      scrollToBottomIfPinned();
+    });
+
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, [messages, isVisible, scrollToBottomIfPinned]);
+
+  useEffect(() => {
+    if (!isVisible) {
+      return;
+    }
+
+    const handleStreamingWordAdded = () => {
+      if (
+        !wasAtChatEndRef.current ||
+        pendingStreamingScrollFrameRef.current !== null
+      ) {
+        return;
+      }
+
+      pendingStreamingScrollFrameRef.current = requestAnimationFrame(() => {
+        pendingStreamingScrollFrameRef.current = null;
+        scrollToBottomIfPinned();
+      });
+    };
+
+    window.addEventListener("streamingWordAdded", handleStreamingWordAdded);
+
+    return () => {
+      window.removeEventListener(
+        "streamingWordAdded",
+        handleStreamingWordAdded,
+      );
+
+      if (pendingStreamingScrollFrameRef.current !== null) {
+        cancelAnimationFrame(pendingStreamingScrollFrameRef.current);
+        pendingStreamingScrollFrameRef.current = null;
+      }
+    };
+  }, [isVisible, scrollToBottomIfPinned]);
+
+  useEffect(() => {
+    const content = scrollRef.current?.firstElementChild;
+    if (!isVisible || !content || chatItems.length === 0) return;
+    const observer = new ResizeObserver(() => scrollToBottomIfPinned());
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [isVisible, chatItems.length, scrollToBottomIfPinned]);
+
+  /**
+   * Force scroll to bottom when user sends a message
+   * Tracks last message to detect when user adds new message
+   */
+  useEffect(() => {
+    if (!isVisible || messages.length === 0) return;
+
+    const lastMessage = messages[messages.length - 1];
+
+    if (
+      lastMessage?.role === "user" &&
+      lastUserScrollIdRef.current !== lastMessage.id
+    ) {
+      lastUserScrollIdRef.current = lastMessage.id;
+      setTimeout(() => {
+        userPausedScrollRef.current = false;
+        wasAtChatEndRef.current = true;
+        scrollToBottomIfPinned();
+      }, 0);
+    }
+  }, [messages, isVisible, scrollToBottomIfPinned]);
+
+  /**
+   * Handles copying message content to clipboard.
+   */
+  const handleCopyMessage = useCallback(
+    async (messageIndex: number, content: string) => {
+      const success = await UtilService.copyToClipboard(content);
+      if (success) {
+        setCopiedMessageIndex(messageIndex);
+        setTimeout(() => setCopiedMessageIndex(null), 2000);
+      }
+    },
+    [],
+  );
+
+  /**
+   * Handle rewriting/regenerating AI message
+   */
+  const handleRewriteMessage = useCallback(
+    async (message: ChatMessageLike) => {
+      if (message?.id && message?.role === "assistant") {
+        try {
+          Logger.log("ChatContainer", "Regenerating AI message:", message.id);
+          await regenerateAIMessage(message.id);
+        } catch (error) {
+          Logger.error("ChatContainer", "Failed to regenerate message:", error);
+        }
+      }
+    },
+    [regenerateAIMessage],
+  );
+
+  /**
+   * Handle branch navigation
+   */
+  const handlePreviousBranch = useCallback(
+    (message: ChatMessageLike) => {
+      if (message?.id && message?.branchInfo?.canGoBack) {
+        previousBranch(message.id);
+      }
+    },
+    [previousBranch],
+  );
+
+  const handleNextBranch = useCallback(
+    (message: ChatMessageLike) => {
+      if (message?.id && message?.branchInfo?.canGoForward) {
+        nextBranch(message.id);
+      }
+    },
+    [nextBranch],
+  );
+
+  /**
+   * Handle close with animation - fade out before actually closing
+   */
+  const handleClose = useCallback(() => {
+    setIsClosing(true);
+    setTimeout(() => {
+      closeChat();
+      setIsClosing(false);
+    }, 200);
+  }, [closeChat]);
+
+  useEffect(() => {
+    const handleCloseChatEvent = () => {
+      handleClose();
+    };
+
+    window.addEventListener("closeChat", handleCloseChatEvent);
+    return () => window.removeEventListener("closeChat", handleCloseChatEvent);
+  }, [handleClose]);
+
+  /**
+   * Handles playing TTS for a message.
+   */
+  const chatSession = getChatSession(useAppStoreApi());
+  const handlePlayTTS = (index: number, _content: string) => {
+    const message = messages[index];
+    if (message)
+      return chatSession.execute({ type: "speak", messageId: message.id });
+  };
+  if (!isVisible) return null;
+
+  if (modelDisabled && !buttonInitializedRef.current) return null;
+
+  if (
+    !xr.active &&
+    !normalDesktop &&
+    !modelDisabled &&
+    containerPos.x === 0 &&
+    containerPos.y === 0
+  )
+    return null;
+
+  const ttsEnabled = ttsConfig.enabled;
+  const customHeaderActions = reactCustomizations.renderHeaderActions?.({
+    hostId,
+  });
+  const customFooterContent = reactCustomizations.renderFooterContent?.({
+    hostId,
+  });
+  const customEmptyState = reactCustomizations.renderEmptyState?.({
+    hostId,
+  });
+  const settingsLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.settings",
+    "Settings",
+  );
+  const historyLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.history",
+    "Chat history",
+  );
+  const stopLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.stop",
+    "Stop generation",
+  );
+  const newChatLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.new",
+    "Start new chat",
+  );
+  const closeLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.close",
+    "Close chat",
+  );
+  const showCharacterLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.showCharacter",
+    "Show character",
+  );
+  const hideCharacterLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.hideCharacter",
+    "Hide character",
+  );
+  const tempEnabledLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.tempEnable",
+    "Enable temp mode - chat won't be saved",
+  );
+  const tempDisabledLabel = getBrandedLabel(
+    embedConfig,
+    "chat.action.tempDisable",
+    "Disable temp mode - chat will be saved",
+  );
+  const emptyStateDescription = getBrandedLabel(
+    embedConfig,
+    "chat.emptyState.description",
+    "Type a message below to begin chatting with your AI assistant",
+  );
+  const androidChatInputHeight =
+    chatInputRef?.current?.getBoundingClientRect().height || 140;
+  const androidContainerHeight = Math.max(
+    320,
+    window.innerHeight - androidChatTop - androidChatInputHeight + 40,
+  );
+  const historyDialogs = (
+    <Suspense fallback={null}>
+      {editingChatId && (
+        <div className="absolute inset-0 z-30">
+          <TypedDialog
+            type="edit"
+            title="Edit Chat Title"
+            message=""
+            itemId={editingChatId}
+            initialValue={editingChatTitle}
+            inputPlaceholder="Enter new title..."
+            inputMaxLength={100}
+            isLightBackground={isLightBackground}
+            animationClass={
+              isEditDialogClosing
+                ? "animate-fade-out"
+                : "animate-slide-up-fade-in"
+            }
+            confirmLabel="Save"
+            onConfirm={handleEditDialogSave}
+            onCancel={handleEditDialogCancel}
+          />
+        </div>
+      )}
+
+      {deletingChatId && (
+        <div className="absolute inset-0 z-30">
+          <TypedDialog
+            type="delete"
+            title="Delete Chat?"
+            message="This will permanently delete this chat and all associated messages, images, and audio files. This cannot be undone."
+            itemId={deletingChatId}
+            isLightBackground={isLightBackground}
+            animationClass={
+              isDeleteDialogClosing
+                ? "animate-fade-out"
+                : "animate-slide-up-fade-in"
+            }
+            confirmLabel="Delete"
+            confirmStyle="error"
+            onConfirm={handleDeleteDialogConfirm}
+            onCancel={handleDeleteDialogCancel}
+          />
+        </div>
+      )}
+    </Suspense>
+  );
+
+  return (
+    <XrSurface
+      id="chat"
+      widthMeters={0.65}
+      heightMeters={0.85}
+      widthPixels={520}
+      heightPixels={700}
+      offsetMeters={[0.7, 0, 0]}
+    >
+      {/* Debug markers for background detection */}
+      {debugMarkers.map((marker, index) => (
+        <div
+          key={index}
+          style={{
+            position: "fixed",
+            left: `${marker.x - 8}px`,
+            top: `${marker.y - 8}px`,
+            width: "16px",
+            height: "16px",
+            borderRadius: "50%",
+            backgroundColor: marker.color,
+            border: "2px solid white",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
+            zIndex: 9999,
+            pointerEvents: "none",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "8px",
+            fontWeight: "bold",
+            color: "white",
+            textShadow: "0 1px 2px rgba(0,0,0,0.8)",
+          }}
+          title={`Brightness: ${marker.brightness} | Alpha: ${marker.alpha} | Element: ${marker.element}`}
+        >
+          {marker.brightness}
+        </div>
+      ))}
+
+      {attachedHistoryLayout && historyEnabled && (
+        <Suspense fallback={null}>
+          <ChatHistorySidebar
+            open={isHistoryPanelOpen}
+            isWide={isWideDesktopHistory}
+            isLightBackground={isLightBackground}
+            onOpenChange={(open) => {
+              setIsHistoryPanelOpen(open);
+              if (!open) {
+                setEditingChatId(null);
+                setDeletingChatId(null);
+              }
+            }}
+            dialogs={historyDialogs}
+          >
+            <TypedChatHistoryPanel
+              embedded
+              isLightBackground={isLightBackground}
+              currentChatId={currentChatId}
+              onClose={handleHistoryClose}
+              onSelectChat={handleSelectChat}
+              onNewChat={() => {
+                clearChat();
+                handleHistoryClose();
+              }}
+              onOpenSettings={
+                settingsEnabled
+                  ? () => {
+                      setIsQuickPanelOpen(false);
+                      setIsHistoryPanelOpen(false);
+                      setEditingChatId(null);
+                      setDeletingChatId(null);
+                      setIsSettingsPanelOpen(true);
+                    }
+                  : undefined
+              }
+              onRequestEditDialog={handleRequestEditDialog}
+              onRequestDeleteDialog={handleRequestDeleteDialog}
+              refreshTrigger={historyRefreshTrigger}
+            />
+          </ChatHistorySidebar>
+        </Suspense>
+      )}
+
+      <div
+        ref={containerRef}
+        data-testid="chat-container"
+        data-electron-interactive="true"
+        style={{
+          position: "fixed",
+          left: chatOnlyAttached
+            ? "50%"
+            : normalDesktop
+              ? "auto"
+              : isDetachedChatWindow
+                ? "16px"
+                : `${containerPos.x}px`,
+          right: normalDesktop && !chatOnlyAttached ? "16px" : undefined,
+          top: isAndroid
+            ? `calc(${androidChatTop}px + ${ANDROID_SYSTEM_INSET_TOP})`
+            : normalDesktop
+              ? `${attachedChatTop}px`
+              : isDetachedChatWindow
+                ? "16px"
+                : `${containerPos.y}px`,
+          height: isAndroid
+            ? `max(320px, calc(${androidContainerHeight}px - ${ANDROID_SYSTEM_INSET_TOP}))`
+            : normalDesktop
+              ? `calc(100vh - ${normalChatInputHeight + attachedChatTop + 16}px)`
+              : isDetachedChatWindow
+                ? `calc(100vh - ${DETACHED_CHAT_BOTTOM_CLEARANCE}px)`
+                : resizableFloatingChat
+                  ? `${floatingSize.height}px`
+                  : undefined,
+          maxHeight: isAndroid
+            ? `max(320px, calc(${androidContainerHeight}px - ${ANDROID_SYSTEM_INSET_TOP}))`
+            : normalDesktop
+              ? `calc(100vh - ${normalChatInputHeight + attachedChatTop + 16}px)`
+              : isDetachedChatWindow
+                ? `calc(100vh - ${DETACHED_CHAT_BOTTOM_CLEARANCE}px)`
+                : resizableFloatingChat
+                  ? `${floatingSize.height}px`
+                  : undefined,
+          width: chatOnlyAttached
+            ? "calc(100% - 32px)"
+            : normalDesktop
+              ? `calc(${Math.min(
+                  60,
+                  Math.max(28, uiConfig.desktopMode.appMode.chatSplitPercent),
+                )}% - 24px)`
+              : isDetachedChatWindow
+                ? "calc(100vw - 32px)"
+                : resizableFloatingChat
+                  ? `${floatingSize.width}px`
+                  : undefined,
+          maxWidth: chatOnlyAttached
+            ? "768px"
+            : normalDesktop || isDetachedChatWindow
+              ? "none"
+              : resizableFloatingChat
+                ? "none"
+                : undefined,
+          transform: chatOnlyAttached ? "translateX(-50%)" : undefined,
+          zIndex: 9999,
+          pointerEvents:
+            floatingDockChatControls &&
+            (messages.length === 0 || (fadeMessages && messagesFaded)) &&
+            !isGenerating &&
+            !isSettingsPanelOpen &&
+            !isHistoryPanelOpen &&
+            !isQuickPanelOpen &&
+            !customHeaderActions &&
+            !customFooterContent &&
+            !customEmptyState
+              ? "none"
+              : undefined,
+          borderColor: isDragOver
+            ? "rgba(59, 130, 246, 0.6)"
+            : (showDragBounds && (isDraggingButton || isDraggingModel)) ||
+                isResizingDetachedChat
+              ? "rgba(255, 255, 255, 0.4)"
+              : undefined,
+          boxShadow: isDragOver
+            ? "0 4px 20px rgba(59, 130, 246, 0.3)"
+            : (showDragBounds && (isDraggingButton || isDraggingModel)) ||
+                isResizingDetachedChat
+              ? "0 4px 20px rgba(255, 255, 255, 0.2)"
+              : undefined,
+          ...(xr.active
+            ? {
+                position: "absolute",
+                inset: "0",
+                width: "100%",
+                maxWidth: "none",
+                height: "100%",
+                maxHeight: "100%",
+              }
+            : {}),
+        }}
+        className={cn(
+          "flex flex-col-reverse gap-3 rounded-[10px] border-2 border-transparent p-[5px]",
+          normalDesktop
+            ? "h-full"
+            : isDetachedChatWindow
+              ? ""
+              : "w-[calc(100vw-16px)] max-w-[400px]",
+          !normalDesktop &&
+            !isDetachedChatWindow &&
+            !resizableFloatingChat &&
+            (modelDisabled ? "h-[450px]" : "h-[500px]"),
+        )}
+      >
+        {resizableFloatingChat && (
+          <Tooltip
+            content="Resize chat"
+            variant={isLightBackground ? "dark" : "default"}
+          >
+            <div
+              data-electron-interactive="true"
+              role="separator"
+              aria-label="Resize chat panel"
+              onPointerDown={(event) => {
+                if (event.button !== 0) return;
+                event.preventDefault();
+                event.stopPropagation();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                floatingResizeRef.current = {
+                  x: event.screenX,
+                  y: event.screenY,
+                  ...floatingSize,
+                };
+                document.documentElement.dataset.electronResizeActive = "true";
+                setResizingFloatingChat(true);
+              }}
+              className={cn(
+                "absolute -bottom-6 right-0 z-30 flex h-6 w-6 cursor-nwse-resize items-end justify-end rounded-sm p-1 pointer-events-auto transition-opacity hover:opacity-100",
+                isLightBackground ? "text-white" : "text-black",
+                resizingFloatingChat ? "opacity-100" : "opacity-50",
+              )}
+            >
+              <span
+                aria-hidden="true"
+                className="h-3 w-3 rounded-br border-b-2 border-r-2 border-current drop-shadow-[0_0_2px_rgba(128,128,128,0.9)]"
+              />
+            </div>
+          </Tooltip>
+        )}
+        {/* Drag overlay indicator - always rendered, visibility controlled by opacity */}
+        <div
+          className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center rounded-3xl"
+          style={{
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+            backgroundColor: "rgba(0, 0, 0, 0.1)",
+            opacity: isDragOver ? 1 : 0,
+            visibility: isDragOver ? "visible" : "hidden",
+            transition:
+              "opacity 200ms ease-in-out, visibility 200ms ease-in-out",
+          }}
+        >
+          <div
+            className={cn(
+              "glass-container",
+              isLightBackground && "glass-container-dark",
+              "px-6 py-2 md:py-4 rounded-xl border-2 border-dashed border-blue-400/50",
+            )}
+            style={{
+              transform: isDragOver ? "scale(1)" : "scale(0.95)",
+              transition: "transform 200ms ease-in-out",
+            }}
+          >
+            <p
+              className={cn(
+                isLightBackground ? "glass-text" : "glass-text-black",
+                "text-lg font-medium flex items-center gap-2",
+              )}
+            >
+              <Icon name="attachment" size={20} /> Drop
+            </p>
+          </div>
+        </div>
+
+        {customHeaderActions ? (
+          <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
+            {customHeaderActions}
+          </div>
+        ) : null}
+
+        {voiceOverlay && !customHeaderActions && (
+          <div className="absolute right-2 top-2 z-30 pointer-events-auto">
+            <Button
+              variant={isLightBackground ? "dark" : "default"}
+              size="sm"
+              className="rounded-full"
+              onClick={() => setShowFullVoiceChat((current) => !current)}
+            >
+              {showFullVoiceChat ? "Recent messages" : "Show full chat"}
+            </Button>
+          </div>
+        )}
+
+        {!xr.active &&
+          !floatingDockChatControls &&
+          (attachedHistoryLayout ||
+            (!isHistoryPanelOpen &&
+              !isSettingsPanelOpen &&
+              !isQuickPanelOpen)) && (
+            <div
+              className={cn(
+                "absolute z-20 flex items-center gap-1",
+                !attachedHistoryLayout && "glass-container rounded-full p-1",
+                !attachedHistoryLayout &&
+                  isLightBackground &&
+                  "glass-container-dark",
+              )}
+              style={{
+                top: attachedHistoryLayout
+                  ? historyEnabled
+                    ? -54
+                    : 0
+                  : undefined,
+                bottom: attachedHistoryLayout ? undefined : 8,
+                right: chatOnlyAttached
+                  ? `calc(10px - (100vw - ${isWideDesktopHistory && isHistoryPanelOpen ? HISTORY_SIDEBAR_WIDTH : 0}px - min(768px, 100vw - ${isWideDesktopHistory && isHistoryPanelOpen ? HISTORY_SIDEBAR_WIDTH + 32 : 32}px)) / 2)`
+                  : attachedHistoryLayout
+                    ? -4
+                    : 8,
+              }}
+            >
+              {!attachedHistoryLayout && historyEnabled && (
+                <Button
+                  onClick={() => {
+                    setIsQuickPanelOpen(false);
+                    setIsSettingsPanelOpen(false);
+                    setIsHistoryPanelOpen(true);
+                  }}
+                  variant="ghost"
+                  className="h-9 w-9 rounded-full"
+                  aria-label="Chat history"
+                  title={historyLabel}
+                >
+                  <Icon name="history" size={18} />
+                </Button>
+              )}
+              {isTempChat && (
+                <Button
+                  onClick={() => setIsTempChat(false)}
+                  variant={isLightBackground ? "dark" : "default"}
+                  className={cn(
+                    "rounded-full",
+                    attachedHistoryLayout ? "h-12 w-12" : "h-9 w-9",
+                  )}
+                  title="Disable temporary chat"
+                  aria-label="Disable temporary chat"
+                  aria-pressed="true"
+                >
+                  <Icon
+                    name="temporary-chat"
+                    size={attachedHistoryLayout ? 22 : 18}
+                  />
+                </Button>
+              )}
+              <ComposerMenu
+                isLightBackground={isLightBackground}
+                triggerIcon="chat-controls"
+                triggerLabel="Chat options"
+                triggerTestId="chat-panel-options"
+                triggerClassName={cn(
+                  "flex items-center justify-center rounded-full",
+                  attachedHistoryLayout
+                    ? "glass-button h-12 w-12"
+                    : "composer-icon h-9 w-9",
+                  attachedHistoryLayout &&
+                    isLightBackground &&
+                    "glass-button-dark",
+                )}
+                side={attachedHistoryLayout ? "bottom" : "top"}
+                align="end"
+                compact
+                items={[
+                  { label: "New chat", icon: "add", onClick: clearChat },
+                  {
+                    label: fadeMessages ? "Show full chat" : "Fade messages",
+                    icon: "chat",
+                    onClick: () => {
+                      if (voiceOverlay)
+                        setShowFullVoiceChat(!showFullVoiceChat);
+                      else updateUIConfig("fadeChatMessages", !fadeMessages);
+                    },
+                  },
+                  ...(isGenerating || isSpeaking || loadingMessageIndex !== null
+                    ? [
+                        {
+                          label: isGenerating ? stopLabel : "Stop speech",
+                          icon: "stop",
+                          onClick: handleStopGeneration,
+                        },
+                      ]
+                    : []),
+                  ...(historyEnabled
+                    ? [
+                        {
+                          label: "Temporary",
+                          icon: "temporary-chat",
+                          onClick: () => setIsTempChat(!isTempChat),
+                          active: isTempChat,
+                        },
+                      ]
+                    : []),
+                  ...(liveAssistantEnabled
+                    ? [
+                        {
+                          label: uiConfig.enableModelLoading
+                            ? hideCharacterLabel
+                            : showCharacterLabel,
+                          icon: uiConfig.enableModelLoading ? "eye-off" : "eye",
+                          onClick: () =>
+                            updateUIConfig(
+                              "enableModelLoading",
+                              !uiConfig.enableModelLoading,
+                            ),
+                        },
+                      ]
+                    : []),
+                  ...(settingsEnabled
+                    ? [
+                        {
+                          label: settingsLabel,
+                          icon: "settings",
+                          onClick: () => {
+                            setIsQuickPanelOpen(false);
+                            setIsHistoryPanelOpen(false);
+                            setIsSettingsPanelOpen(true);
+                          },
+                          testId: "settings-toggle-button",
+                        },
+                      ]
+                    : []),
+                  ...(!modelDisabled
+                    ? [
+                        {
+                          label: closeLabel,
+                          icon: "close",
+                          onClick: handleClose,
+                        },
+                      ]
+                    : []),
+                ]}
+              >
+                {isDesktop && (
+                  <DesktopModeSettings
+                    isLightBackground={isLightBackground}
+                    menu
+                  />
+                )}
+              </ComposerMenu>
+            </div>
+          )}
+
+        {xr.active && (
+          <div className="relative flex items-center justify-between gap-2 pb-1">
+            {/* LEFT: Settings + History */}
+            <div className="flex items-center gap-2">
+              {settingsEnabled ? (
+                <Button
+                  onClick={() => {
+                    setIsQuickPanelOpen(false);
+                    setIsHistoryPanelOpen(false);
+                    setIsSettingsPanelOpen(!isSettingsPanelOpen);
+                  }}
+                  size="icon"
+                  variant={isLightBackground ? "dark" : "default"}
+                  className={isClosing ? "animate-fade-out" : "animate-fade-in"}
+                  title={settingsLabel}
+                  aria-label="Settings"
+                  data-testid="settings-toggle-button"
+                >
+                  <span
+                    className={cn(
+                      isLightBackground ? "glass-text" : "glass-text-black",
+                      "text-base leading-none flex items-center justify-center",
+                    )}
+                  >
+                    <Icon name="settings" size={16} />
+                  </span>
+                </Button>
+              ) : null}
+
+              {historyEnabled && !attachedHistoryLayout ? (
+                <Button
+                  onClick={() => {
+                    setIsQuickPanelOpen(false);
+                    setIsSettingsPanelOpen(false);
+                    setIsHistoryPanelOpen(!isHistoryPanelOpen);
+                  }}
+                  size="icon"
+                  variant={isLightBackground ? "dark" : "default"}
+                  className={isClosing ? "animate-fade-out" : "animate-fade-in"}
+                  title={historyLabel}
+                  aria-label="Chat history"
+                >
+                  <span
+                    className={cn(
+                      isLightBackground ? "glass-text" : "glass-text-black",
+                      "text-lg leading-none flex items-center justify-center",
+                    )}
+                  >
+                    <Icon name="history" size={16} />
+                  </span>
+                </Button>
+              ) : null}
+            </div>
+
+            {/* CENTER: Stop + Add Chat + Close (grouped) */}
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={handleStopGeneration}
+                disabled={
+                  !isGenerating && !isSpeaking && loadingMessageIndex === null
+                }
+                size="icon"
+                variant={
+                  isGenerating || isSpeaking || loadingMessageIndex !== null
+                    ? "error"
+                    : isLightBackground
+                      ? "dark"
+                      : "default"
+                }
+                className={isClosing ? "animate-fade-out" : "animate-fade-in"}
+                title={
+                  isGenerating
+                    ? stopLabel
+                    : isSpeaking || loadingMessageIndex !== null
+                      ? "Stop TTS"
+                      : "Nothing to stop"
+                }
+              >
+                <span
+                  className={cn(
+                    isLightBackground ? "glass-text" : "glass-text-black",
+                    "text-lg leading-none flex items-center justify-center",
+                  )}
+                >
+                  <Icon name="stop" size={16} />
+                </span>
+              </Button>
+
+              <Button
+                onClick={clearChat}
+                size="icon"
+                variant={isLightBackground ? "dark" : "default"}
+                className={isClosing ? "animate-fade-out" : "animate-fade-in"}
+                title={newChatLabel}
+              >
+                <span
+                  className={cn(
+                    isLightBackground ? "glass-text" : "glass-text-black",
+                    "text-lg leading-none flex items-center justify-center",
+                  )}
+                >
+                  <Icon name="add" size={18} />
+                </span>
+              </Button>
+
+              {!modelDisabled && (
+                <Button
+                  onClick={handleClose}
+                  size="icon"
+                  variant={isLightBackground ? "dark" : "default"}
+                  className={isClosing ? "animate-fade-out" : "animate-fade-in"}
+                  title={closeLabel}
+                >
+                  <span
+                    className={cn(
+                      isLightBackground ? "glass-text" : "glass-text-black",
+                      "text-sm leading-none flex items-center justify-center",
+                    )}
+                  >
+                    <Icon name="close" size={16} />
+                  </span>
+                </Button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {liveAssistantEnabled ? (
+                <Button
+                  onClick={() =>
+                    updateUIConfig(
+                      "enableModelLoading",
+                      !uiConfig.enableModelLoading,
+                    )
+                  }
+                  size="icon"
+                  variant={isLightBackground ? "dark" : "default"}
+                  className={isClosing ? "animate-fade-out" : "animate-fade-in"}
+                  title={
+                    uiConfig.enableModelLoading
+                      ? hideCharacterLabel
+                      : showCharacterLabel
+                  }
+                >
+                  <span
+                    className={cn(
+                      isLightBackground ? "glass-text" : "glass-text-black",
+                      "text-lg leading-none flex items-center justify-center",
+                    )}
+                  >
+                    <Icon
+                      name={uiConfig.enableModelLoading ? "eye-off" : "eye"}
+                      size={18}
+                    />
+                  </span>
+                </Button>
+              ) : null}
+
+              {historyEnabled ? (
+                <Button
+                  onClick={() => setIsTempChat(!isTempChat)}
+                  size="icon"
+                  variant={
+                    isTempChat
+                      ? "default"
+                      : isLightBackground
+                        ? "dark"
+                        : "default"
+                  }
+                  className={cn(
+                    isTempChat &&
+                      (isLightBackground
+                        ? "bg-yellow-300/40 border-yellow-400/60"
+                        : "bg-yellow-500/40 border-yellow-500/60"),
+                    isClosing ? "animate-fade-out" : "animate-fade-in",
+                  )}
+                  title={isTempChat ? tempDisabledLabel : tempEnabledLabel}
+                >
+                  <span
+                    className={cn(
+                      isLightBackground ? "glass-text" : "glass-text-black",
+                      "text-lg leading-none flex items-center justify-center",
+                    )}
+                  >
+                    <Icon name={isTempChat ? "star" : "pin"} size={18} />
+                  </span>
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        )}
+
+        {customFooterContent ? (
+          <div className="relative z-10 px-1">{customFooterContent}</div>
+        ) : null}
+
+        {/* Messages container */}
+        <div
+          ref={messagesContainerRef}
+          aria-hidden={fadeMessages && messagesFaded ? true : undefined}
+          inert={fadeMessages && messagesFaded}
+          onMouseEnter={() => setMessagesHovered(true)}
+          onMouseLeave={() => setMessagesHovered(false)}
+          onFocusCapture={() => setMessagesFocused(true)}
+          onBlurCapture={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget))
+              setMessagesFocused(false);
+          }}
+          className={cn(
+            "flex-1 relative overflow-hidden",
+            !attachedHistoryLayout && isHistoryPanelOpen && "invisible",
+          )}
+          style={{
+            opacity: fadeMessages && messagesFaded ? 0 : 1,
+            pointerEvents: fadeMessages && messagesFaded ? "none" : undefined,
+            transition: "opacity 500ms ease",
+            ...(isDesktop && !normalDesktop && !xr.active
+              ? {
+                  maskImage:
+                    "linear-gradient(to bottom, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)",
+                  WebkitMaskImage:
+                    "linear-gradient(to bottom, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)",
+                }
+              : {}),
+          }}
+        >
+          {!(isDesktop || isAndroid) && (
+            <div
+              className={cn(
+                "absolute top-0 left-0 right-0 h-[10px] rounded-t-[10px] rounded-b-[1px] z-10 pointer-events-none glass-message",
+                isLightBackground && "glass-message-dark",
+                isClosing ? "animate-fade-out" : "animate-fade-in",
+              )}
+            />
+          )}
+
+          {!(isDesktop || isAndroid) && (
+            <div
+              className={cn(
+                "absolute bottom-0 left-0 right-0 h-[10px] rounded-t-[1px] rounded-b-[10px] z-10 pointer-events-none glass-message",
+                isLightBackground && "glass-message-dark",
+                isClosing ? "animate-fade-out" : "animate-fade-in",
+              )}
+            />
+          )}
+
+          {/* Scrollable messages */}
+          <div
+            ref={scrollRef}
+            className={cn(
+              "absolute inset-0 overflow-y-auto [overflow-anchor:none] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+              isDesktop && "p-3",
+              !xr.active && !attachedHistoryLayout && "pb-14",
+            )}
+          >
+            {messages.length === 0 ? (
+              customEmptyState ? (
+                <div className="flex flex-col items-center justify-center h-full gap-6">
+                  {customEmptyState}
+                </div>
+              ) : !xr.active ? null : (
+                <div className="flex flex-col items-center justify-center h-full gap-6">
+                  <div
+                    className={cn(
+                      "glass-container",
+                      isLightBackground && "glass-container-dark",
+                      "px-10 py-8 rounded-3xl max-w-md flex flex-col justify-center items-center gap-3 text-center",
+                      isClosing ? "animate-fade-out" : "animate-fade-in",
+                    )}
+                  >
+                    <Icon name="chat" size={24} className="self-center" />
+                    <p
+                      className={cn(
+                        isLightBackground ? "glass-text" : "glass-text-black",
+                        "text-sm opacity-70",
+                      )}
+                    >
+                      {emptyStateDescription}
+                    </p>
+                  </div>
+                </div>
+              )
+            ) : (
+              <div
+                style={{
+                  height: fadeMessages
+                    ? `max(100%, ${chatVirtualizer.getTotalSize()}px)`
+                    : `${chatVirtualizer.getTotalSize()}px`,
+                  position: "relative",
+                  width: "100%",
+                }}
+              >
+                {virtualChatItems.map((virtualItem) => {
+                  const item = chatItems[virtualItem.index];
+
+                  if (!item) {
+                    return null;
+                  }
+
+                  if (item.kind === "loading") {
+                    return (
+                      <div
+                        key={virtualItem.key}
+                        ref={chatVirtualizer.measureElement}
+                        data-index={virtualItem.index}
+                        style={{
+                          position: "absolute",
+                          top: fadeMessages
+                            ? `calc(max(0px, 100% - ${chatVirtualizer.getTotalSize()}px) + ${virtualItem.start}px)`
+                            : 0,
+                          left: 0,
+                          width: "100%",
+                          transform: fadeMessages
+                            ? undefined
+                            : `translateY(${virtualItem.start}px)`,
+                        }}
+                      >
+                        <div className="flex flex-col gap-3 animate-slide-left-up">
+                          <div className="flex flex-col items-start">
+                            <div className="flex items-start gap-2 max-w-[80%]">
+                              <div className="flex flex-col gap-1.5">
+                                <div
+                                  className={cn(
+                                    "glass-message",
+                                    isLightBackground && "glass-message-dark",
+                                    "px-2 md:px-4 py-2 md:py-3 rounded-[20px] rounded-tl-md flex items-center justify-center",
+                                  )}
+                                >
+                                  <div className="loading-dots">
+                                    <span className="loading-dot"></span>
+                                    <span className="loading-dot"></span>
+                                    <span className="loading-dot"></span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  const shouldAnimateThis =
+                    item.isLastUserMessage &&
+                    lastAnimatedMessageIdRef.current !== item.message.id;
+
+                  if (shouldAnimateThis) {
+                    lastAnimatedMessageIdRef.current = item.message.id;
+                  }
+
+                  return (
+                    <div
+                      key={virtualItem.key}
+                      ref={chatVirtualizer.measureElement}
+                      data-index={virtualItem.index}
+                      data-chat-recent-exiting={item.isExiting || undefined}
+                      aria-hidden={item.isExiting || undefined}
+                      inert={item.isExiting || undefined}
+                      style={{
+                        position: "absolute",
+                        top: fadeMessages
+                          ? `calc(max(0px, 100% - ${chatVirtualizer.getTotalSize()}px) + ${virtualItem.start}px)`
+                          : 0,
+                        left: 0,
+                        width: "100%",
+                        transform: fadeMessages
+                          ? undefined
+                          : `translateY(${virtualItem.start}px)`,
+                        animation: item.isExiting
+                          ? "chat-recent-exit 450ms ease forwards"
+                          : undefined,
+                        pointerEvents: item.isExiting ? "none" : undefined,
+                      }}
+                    >
+                      <ChatMessage
+                        message={item.message}
+                        messageIndex={item.messageIndex}
+                        isLightBackground={isLightBackground}
+                        ttsEnabled={ttsEnabled}
+                        playingMessageIndex={playingMessageIndex}
+                        loadingMessageIndex={loadingMessageIndex}
+                        copiedMessageIndex={copiedMessageIndex}
+                        isStreamingMessage={
+                          isGenerating && item.isLastAIMessage
+                        }
+                        smoothStreamingAnimation={
+                          uiConfig?.smoothStreamingAnimation || false
+                        }
+                        shouldAnimate={shouldAnimateThis}
+                        onRevealStateChange={handleRevealStateChange}
+                        onCopyMessage={handleCopyMessage}
+                        onPlayTTS={handlePlayTTS}
+                        onEditUserMessage={editUserMessage}
+                        onRewriteMessage={handleRewriteMessage}
+                        onPreviousBranch={handlePreviousBranch}
+                        onNextBranch={handleNextBranch}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Settings Panel - renders inside ChatContainer */}
+        {settingsEnabled && isQuickPanelOpen && (
+          <div className="absolute inset-0 z-10">
+            <Suspense fallback={null}>
+              <QuickAccessPanel
+                onClose={handleQuickPanelClose}
+                isLightBackground={isLightBackground}
+                embedConfig={embedConfig}
+                animationClass={
+                  isQuickPanelClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                onOpenSettings={(options) => {
+                  setRequestedSettingsView(options ?? {});
+                  setIsQuickPanelOpen(false);
+                  setIsHistoryPanelOpen(false);
+                  setIsSettingsPanelOpen(true);
+                }}
+              />
+            </Suspense>
+          </div>
+        )}
+
+        {/* Settings Panel - renders inside ChatContainer */}
+        {settingsEnabled && isSettingsPanelOpen && (
+          <XrSurface
+            id="settings"
+            widthMeters={0.85}
+            heightMeters={0.95}
+            widthPixels={680}
+            heightPixels={760}
+            offsetMeters={[0.95, 0, 0.15]}
+          >
+            <div className="absolute inset-0 z-10">
+              <Suspense fallback={null}>
+                <SettingsPanel
+                  onClose={handleSettingsPanelClose}
+                  isLightBackground={isLightBackground}
+                  embedConfig={embedConfig}
+                  requestedView={requestedSettingsView}
+                  onActiveTargetChange={setActiveSettingsTarget}
+                  animationClass={
+                    isSettingsPanelClosing
+                      ? "animate-fade-out"
+                      : "animate-slide-up-fade-in"
+                  }
+                  onRequestDeleteModelDialog={handleRequestDeleteModelDialog}
+                  onRequestDeleteMotionDialog={handleRequestDeleteMotionDialog}
+                  onRequestDeleteStageDialog={handleRequestDeleteStageDialog}
+                  onRequestDeleteEmoteDialog={handleRequestDeleteEmoteDialog}
+                  onRequestDeleteVoiceDialog={handleRequestDeleteVoiceDialog}
+                  onRequestDeleteLLMModel={handleRequestDeleteLLMModel}
+                  onRequestDeleteSttModel={handleRequestDeleteSttModel}
+                  onRequestDeleteTtsPack={handleRequestDeleteTtsPack}
+                  sttExternalDeleteTick={sttExternalDeleteTick}
+                  ttsExternalDeleteTick={ttsExternalDeleteTick}
+                  onRequestResetSetupDialog={handleRequestResetSetupDialog}
+                  onRequestSettingsErrorDialog={
+                    handleRequestSettingsErrorDialog
+                  }
+                  refreshTrigger={settingsRefreshTrigger}
+                />
+              </Suspense>
+            </div>
+          </XrSurface>
+        )}
+
+        {/* Chat History Panel - renders inside ChatContainer */}
+        {!attachedHistoryLayout && historyEnabled && isHistoryPanelOpen && (
+          <div className="absolute inset-0 z-10">
+            <Suspense fallback={null}>
+              <TypedChatHistoryPanel
+                isLightBackground={isLightBackground}
+                currentChatId={currentChatId}
+                onClose={handleHistoryClose}
+                onSelectChat={handleSelectChat}
+                onRequestEditDialog={handleRequestEditDialog}
+                onRequestDeleteDialog={handleRequestDeleteDialog}
+                refreshTrigger={historyRefreshTrigger}
+                animationClass={
+                  isHistoryPanelClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+              />
+            </Suspense>
+          </div>
+        )}
+
+        {!attachedHistoryLayout && historyDialogs}
+
+        <Suspense fallback={null}>
+          {/* Model Delete Dialog - renders outside SettingsPanel */}
+          {deletingModelId && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="delete"
+                title="Delete Model?"
+                message="This will permanently delete this custom model. This cannot be undone."
+                itemId={deletingModelId}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isDeleteModelDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Delete"
+                confirmStyle="error"
+                onConfirm={handleDeleteModelConfirm}
+                onCancel={handleDeleteModelCancel}
+              />
+            </div>
+          )}
+
+          {/* Motion Delete Dialog - renders outside SettingsPanel */}
+          {deletingMotionId && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="delete"
+                title="Delete Animation?"
+                message="This will permanently delete this custom animation. This cannot be undone."
+                itemId={deletingMotionId}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isDeleteMotionDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Delete"
+                confirmStyle="error"
+                onConfirm={handleDeleteMotionConfirm}
+                onCancel={handleDeleteMotionCancel}
+              />
+            </div>
+          )}
+
+          {/* Stage Delete Dialog - renders outside SettingsPanel */}
+          {deletingStageId && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="delete"
+                title="Delete Stage?"
+                message="This will permanently delete this stage. This cannot be undone."
+                itemId={deletingStageId}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isDeleteStageDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Delete"
+                confirmStyle="error"
+                onConfirm={handleDeleteStageConfirm}
+                onCancel={handleDeleteStageCancel}
+              />
+            </div>
+          )}
+
+          {/* Emote Delete Dialog - renders outside SettingsPanel */}
+          {(deletingEmoteId || deletingEmoteCategory) && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="delete"
+                title={
+                  deletingEmoteCategory ? "Delete Emotes?" : "Delete Emote?"
+                }
+                message={
+                  deletingEmoteCategory
+                    ? deletingEmoteCategory === "all"
+                      ? "Delete all emotes? This cannot be undone."
+                      : `Delete all emotes in category "${deletingEmoteCategory}"? This cannot be undone.`
+                    : "This will permanently delete this emote. This cannot be undone."
+                }
+                itemId={deletingEmoteId || deletingEmoteCategory || "emotes"}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isDeleteEmoteDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Delete"
+                confirmStyle="error"
+                onConfirm={handleDeleteEmoteConfirm}
+                onCancel={handleDeleteEmoteCancel}
+              />
+            </div>
+          )}
+
+          {/* Voice Delete Dialog - renders outside SettingsPanel */}
+          {deletingVoiceId && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="delete"
+                title="Delete Voice?"
+                message="This will permanently delete this reference voice. This cannot be undone."
+                itemId={deletingVoiceId}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isDeleteVoiceDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Delete"
+                confirmStyle="error"
+                onConfirm={handleDeleteVoiceConfirm}
+                onCancel={handleDeleteVoiceCancel}
+              />
+            </div>
+          )}
+
+          {/* LLM Model Delete Dialog - renders outside SettingsPanel */}
+          {deletingLLMModel && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="delete"
+                title="Delete Model?"
+                message={`This will permanently delete "${deletingLLMModel}". This cannot be undone.`}
+                itemId={deletingLLMModel}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isDeleteLLMModelDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Delete"
+                confirmStyle="error"
+                onConfirm={handleDeleteLLMModelConfirm}
+                onCancel={handleDeleteLLMModelCancel}
+              />
+            </div>
+          )}
+
+          {/* STT Model Delete Dialog - renders outside SettingsPanel */}
+          {deletingSttModelId && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="delete"
+                title="Delete Model?"
+                message="This will delete this STT model and free up storage on your device. The model can be re-downloaded later if needed."
+                itemId={deletingSttModelId}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isDeleteSttModelDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Delete"
+                confirmStyle="error"
+                onConfirm={handleDeleteSttModelConfirm}
+                onCancel={handleDeleteSttModelCancel}
+              />
+            </div>
+          )}
+
+          {/* TTS Voice Pack Delete Dialog - renders outside SettingsPanel */}
+          {deletingTtsPackId && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="delete"
+                title="Delete Voice Pack?"
+                message="This will delete this voice pack and free up storage on your device. The voice pack can be re-downloaded later if needed."
+                itemId={deletingTtsPackId}
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isDeleteTtsPackDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Delete"
+                confirmStyle="error"
+                onConfirm={handleDeleteTtsPackConfirm}
+                onCancel={handleDeleteTtsPackCancel}
+              />
+            </div>
+          )}
+
+          {/* Settings Confirm Dialog - renders outside SettingsPanel */}
+          {pendingSettingsConfirmAction && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="confirm"
+                title="Reset Setup Wizard?"
+                message="This will reset the setup wizard and take you back to the beginning."
+                itemId="settings-reset-setup"
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isSettingsConfirmDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="Reset"
+                confirmStyle="error"
+                onConfirm={handleSettingsConfirmConfirm}
+                onCancel={handleSettingsConfirmCancel}
+              />
+            </div>
+          )}
+
+          {/* Settings Error Dialog - renders outside SettingsPanel */}
+          {settingsErrorMessage && (
+            <div className="absolute inset-0 z-20">
+              <TypedDialog
+                type="confirm"
+                title="Error"
+                message={settingsErrorMessage}
+                itemId="settings-error"
+                isLightBackground={isLightBackground}
+                animationClass={
+                  isSettingsErrorDialogClosing
+                    ? "animate-fade-out"
+                    : "animate-slide-up-fade-in"
+                }
+                confirmLabel="OK"
+                onConfirm={handleSettingsErrorClose}
+                onCancel={handleSettingsErrorClose}
+              />
+            </div>
+          )}
+        </Suspense>
+      </div>
+    </XrSurface>
+  );
+};
+
+export default ChatContainer;

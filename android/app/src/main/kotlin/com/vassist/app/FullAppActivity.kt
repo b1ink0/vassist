@@ -28,6 +28,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewAssetLoader
 import com.vassist.app.ai.LocalAIBridge
 import com.vassist.app.ai.LocalAIServer
+import com.vassist.app.webview.BackgroundMotionBridge
 import com.vassist.app.webview.RendererWebView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,7 +50,10 @@ class FullAppActivity : ComponentActivity() {
     }
     
     private lateinit var webView: WebView
+    private lateinit var backgroundMotionBridge: BackgroundMotionBridge
     private var lastKeyboardHeight = 0
+    private var lastSystemInsetTop = -1
+    private var lastSystemInsetBottom = -1
     
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     
@@ -57,6 +61,9 @@ class FullAppActivity : ComponentActivity() {
     private var aiBridge: LocalAIBridge? = null
     private var aiInitialized = false
     
+    private var arSessionManager: com.vassist.app.ar.ARCoreSessionManager? = null
+    private var arBridge: com.vassist.app.ar.NativeARBridge? = null
+
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
     private var pendingPermissionRequest: PermissionRequest? = null
     private var cameraPhotoUri: Uri? = null
@@ -132,7 +139,38 @@ class FullAppActivity : ComponentActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
         }
+        backgroundMotionBridge = BackgroundMotionBridge(this, webView)
+        webView.addJavascriptInterface(
+            backgroundMotionBridge,
+            BackgroundMotionBridge.JS_INTERFACE_NAME,
+        )
+
+        // Create GLSurfaceView for AR
+        val glSurfaceView = android.opengl.GLSurfaceView(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
+
+        // Keep the AR surface detached until an AR session actually starts.
+        val rootLayout = android.widget.FrameLayout(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            addView(webView)
+        }
+
+        arSessionManager = com.vassist.app.ar.ARCoreSessionManager(
+            this,
+            glSurfaceView,
+            rootLayout
+        )
+        arBridge = com.vassist.app.ar.NativeARBridge(webView, arSessionManager)
+        arSessionManager?.bridge = arBridge
         
         // Custom PathHandler that serves assets from the public/ subfolder
         val publicAssetsPathHandler = object : WebViewAssetLoader.PathHandler {
@@ -171,6 +209,9 @@ class FullAppActivity : ComponentActivity() {
             
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
+                lastSystemInsetTop = -1
+                lastSystemInsetBottom = -1
+                ViewCompat.requestApplyInsets(webView)
                 Log.d(TAG, "Page finished loading: $url")
             }
             
@@ -350,7 +391,7 @@ class FullAppActivity : ComponentActivity() {
             }
         })
         
-        setContentView(webView)
+        setContentView(rootLayout)
         
         // Setup keyboard height detection using WindowInsets
         setupKeyboardListener()
@@ -377,6 +418,22 @@ class FullAppActivity : ComponentActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(webView) { _, insets ->
             val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
             val keyboardHeightPx = imeInsets.bottom
+            val systemInsets = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            if (systemInsets.top != lastSystemInsetTop || systemInsets.bottom != lastSystemInsetBottom) {
+                lastSystemInsetTop = systemInsets.top
+                lastSystemInsetBottom = systemInsets.bottom
+                val topCss = systemInsets.top / density
+                val bottomCss = systemInsets.bottom / density
+                webView.post {
+                    webView.evaluateJavascript(
+                        "document.documentElement.style.setProperty('--vassist-system-inset-top', '${topCss}px');" +
+                            "document.documentElement.style.setProperty('--vassist-system-inset-bottom', '${bottomCss}px');",
+                        null
+                    )
+                }
+            }
             
             if (keyboardHeightPx != lastKeyboardHeight) {
                 lastKeyboardHeight = keyboardHeightPx
@@ -567,8 +624,21 @@ class FullAppActivity : ComponentActivity() {
         webView.saveState(outState)
         Log.d(TAG, "Saved WebView state to Bundle")
     }
-    
+
+    override fun onPause() {
+        backgroundMotionBridge.setHostVisible(false)
+        arSessionManager?.onHostPause()
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        backgroundMotionBridge.setHostVisible(true)
+        arSessionManager?.onHostResume()
+    }
+
     override fun onDestroy() {
+        backgroundMotionBridge.dispose()
         // Cancel any pending file chooser callback
         fileChooserCallback?.onReceiveValue(null)
         fileChooserCallback = null
@@ -580,6 +650,10 @@ class FullAppActivity : ComponentActivity() {
         }
         aiServer = null
         aiBridge = null
+
+        arSessionManager?.dispose()
+        arSessionManager = null
+        arBridge = null
         
         ViewCompat.setOnApplyWindowInsetsListener(webView, null)
         webView.destroy()

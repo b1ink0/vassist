@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["vite/client"]
+  },
+  "include": ["src", "android-src", "embed", "packages"],
+  "exclude": [
+    "dist",
+    "dist-android",
+    "dist-desktop",
+    "dist-extension",
+    "build",
+    "node_modules"
+  ]
+}

@@ -4,267 +4,404 @@
  */
 
 /* Base glass effect - works on any background */
+.vassist-background-parallax-drift {
+  position: absolute;
+  inset: -5%;
+  animation: vassist-background-drift 42s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.vassist-android-background-parallax-stage {
+  position: absolute;
+  inset: -7%;
+  animation: vassist-android-background-drift 42s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.vassist-background-parallax-pointer {
+  position: absolute;
+  inset: 0;
+  transform: translate3d(
+    var(--background-pointer-x, 0%),
+    var(--background-pointer-y, 0%),
+    0
+  );
+  transition: transform 900ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  will-change: transform;
+}
+
+.vassist-background-parallax-sensor-image {
+  transform: translate3d(
+    var(--background-sensor-x, 0%),
+    var(--background-sensor-y, 0%),
+    0
+  );
+  transition: none;
+  will-change: transform;
+}
+
+@keyframes vassist-background-drift {
+  from {
+    transform: scale(1.08) translate3d(-0.65%, 0.45%, 0);
+  }
+  to {
+    transform: scale(1.08) translate3d(0.65%, -0.45%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vassist-background-parallax-drift {
+    animation: none;
+    transform: scale(1.08);
+    will-change: auto;
+  }
+
+  .vassist-android-background-parallax-stage {
+    animation: none;
+    transform: scale(1.06);
+    will-change: auto;
+  }
+
+  .vassist-background-parallax-pointer {
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
+
+  .vassist-background-parallax-sensor-image {
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
+}
+
+@keyframes vassist-android-background-drift {
+  from {
+    transform: scale(1.06) translate3d(-0.3%, 0.25%, 0);
+  }
+  to {
+    transform: scale(1.06) translate3d(0.3%, -0.25%, 0);
+  }
+}
+
 .glass-base {
-  background: rgba(255, 255, 255, 0.15);
-  -webkit-backdrop-filter: blur(15px) saturate(180%) contrast(90%);
-  backdrop-filter: blur(15px) saturate(180%) contrast(90%);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  background: var(--vassist-surface-base);
+  -webkit-backdrop-filter: blur(var(--vassist-backdrop-blur)) saturate(180%)
+    contrast(90%);
+  backdrop-filter: blur(var(--vassist-backdrop-blur)) saturate(180%)
+    contrast(90%);
+  border: 1px solid var(--vassist-border-color);
+  box-shadow: var(--vassist-surface-shadow);
 }
 
 /* Stronger glass for primary containers */
 .glass-container {
-  background: rgba(255, 255, 255, 0.12);
-  -webkit-backdrop-filter: blur(20px) saturate(180%) contrast(95%);
-  backdrop-filter: blur(20px) saturate(180%) contrast(95%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 
-    0 8px 32px 0 rgba(0, 0, 0, 0.37),
-    inset 0 1px 2px rgba(255, 255, 255, 0.15);
-  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+  background: var(--vassist-surface-base);
+  -webkit-backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px))
+    saturate(180%) contrast(95%);
+  backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px)) saturate(180%)
+    contrast(95%);
+  border: 1px solid var(--vassist-border-strong-color);
+  box-shadow: var(--vassist-surface-shadow);
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease;
 }
 
 /* Dark theme for containers (on light backgrounds) */
 .glass-container-dark {
-  background: rgba(0, 0, 0, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  color: #ffffff;
+  background: var(--vassist-dark-glass-base);
+  -webkit-backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px))
+    contrast(94%);
+  backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px)) contrast(94%);
+  border: 1px solid var(--vassist-dark-glass-border);
+  box-shadow: var(--vassist-surface-shadow);
+  color: var(--vassist-inverse-text-primary);
 }
 
 /* Chat message bubbles - enhanced readability */
 .glass-message {
-  background: rgba(255, 255, 255, 0.3);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  color: #ffffff;
-  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+  background: var(--vassist-surface-elevated);
+  -webkit-backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px))
+    saturate(180%);
+  backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px)) saturate(180%);
+  border: 1px solid var(--vassist-border-strong-color);
+  box-shadow: var(--vassist-surface-shadow);
+  color: var(--vassist-text-primary);
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease;
 }
 
 /* Dark theme for messages (on light backgrounds) */
 .glass-message-dark {
-  background: rgba(0, 0, 0, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  color: #ffffff;
+  background: var(--vassist-dark-glass-base);
+  -webkit-backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px))
+    contrast(94%);
+  backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px)) contrast(94%);
+  border: 1px solid var(--vassist-dark-glass-border);
+  box-shadow: var(--vassist-surface-shadow);
+  color: var(--vassist-inverse-text-primary);
 }
 
 /* User message - slightly stronger for distinction */
 .glass-message-user {
-  background: rgba(255, 255, 255, 0.25);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
-  color: #ffffff;
-  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+  background: var(--vassist-surface-interactive);
+  -webkit-backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px))
+    saturate(180%);
+  backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px)) saturate(180%);
+  border: 1px solid var(--vassist-border-strong-color);
+  box-shadow: var(--vassist-surface-shadow);
+  color: var(--vassist-text-primary);
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease;
 }
 
 .glass-message-user-dark {
-  background: rgba(0, 0, 0, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  color: #ffffff;
+  background: var(--vassist-dark-glass-interactive);
+  -webkit-backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px))
+    contrast(94%);
+  backdrop-filter: blur(calc(var(--vassist-backdrop-blur) + 4px)) contrast(94%);
+  border: 1px solid var(--vassist-dark-glass-border-strong);
+  box-shadow: var(--vassist-surface-shadow);
+  color: var(--vassist-inverse-text-primary);
 }
 
 /* Buttons - interactive glass */
 .glass-button {
-  background: rgba(255, 255, 255, 0.18);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-  backdrop-filter: blur(16px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 
-    0 4px 20px rgba(0, 0, 0, 0.3),
-    inset 0 1px 2px rgba(255, 255, 255, 0.15);
-  color: #ffffff;
-  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.2s ease;
+  background: var(--vassist-surface-elevated);
+  -webkit-backdrop-filter: blur(var(--vassist-backdrop-blur)) saturate(180%);
+  backdrop-filter: blur(var(--vassist-backdrop-blur)) saturate(180%);
+  border: 1px solid var(--vassist-border-strong-color);
+  box-shadow: var(--vassist-surface-shadow);
+  color: var(--vassist-text-primary);
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease,
+    box-shadow 0.2s ease;
   /* NO position transition - removed for instant follow */
 }
 
 .glass-button-dark {
-  background: rgba(0, 0, 0, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  box-shadow: 
-    0 4px 20px rgba(0, 0, 0, 0.4),
-    inset 0 1px 2px rgba(255, 255, 255, 0.1);
-  color: #ffffff;
+  background: var(--vassist-dark-glass-elevated);
+  -webkit-backdrop-filter: blur(var(--vassist-backdrop-blur)) contrast(94%);
+  backdrop-filter: blur(var(--vassist-backdrop-blur)) contrast(94%);
+  border: 1px solid var(--vassist-dark-glass-border-strong);
+  box-shadow: var(--vassist-surface-shadow);
+  color: var(--vassist-inverse-text-primary);
 }
 
 .glass-button:hover {
-  background: rgba(255, 255, 255, 0.28);
-  border-color: rgba(255, 255, 255, 0.45);
-  box-shadow: 
-    0 6px 24px rgba(0, 0, 0, 0.35),
-    inset 0 1px 3px rgba(255, 255, 255, 0.25);
+  background: var(--vassist-surface-interactive);
+  border-color: var(--vassist-border-strong-color);
+}
+
+.glass-button.glass-button-dark:hover {
+  background: color-mix(in srgb, var(--vassist-dark-glass-elevated) 90%, white);
+  border-color: var(--vassist-dark-glass-border-strong);
 }
 
 .glass-button:active {
-  box-shadow: 
-    0 2px 12px rgba(0, 0, 0, 0.3),
-    inset 0 1px 2px rgba(255, 255, 255, 0.1);
+  box-shadow: var(--vassist-surface-shadow);
+}
+
+/* Fade the edges of scrolling lists in transparent desktop windows. */
+.vassist-scroll-panel-fade {
+  padding-block: 16px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black 32px,
+    black calc(100% - 32px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black 32px,
+    black calc(100% - 32px),
+    transparent 100%
+  );
 }
 
 /* Input fields */
 .glass-input {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
-  -webkit-backdrop-filter: blur(12px) saturate(150%);
-  backdrop-filter: blur(12px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--vassist-surface-base);
+  color: var(--vassist-text-primary);
+  -webkit-backdrop-filter: blur(var(--vassist-backdrop-blur)) saturate(150%);
+  backdrop-filter: blur(var(--vassist-backdrop-blur)) saturate(150%);
+  border: 1px solid var(--vassist-border-color);
   border-radius: 0.5rem;
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
-  box-shadow: 
-    0 4px 20px rgba(0, 0, 0, 0.25),
-    inset 0 1px 2px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--vassist-surface-shadow);
   transition: all 0.2s ease;
 }
 
 .glass-input::placeholder {
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--vassist-input-placeholder-color);
 }
 
 .glass-input:focus {
   outline: none;
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.35);
-  box-shadow: 
-    0 6px 24px rgba(0, 0, 0, 0.3),
-    inset 0 1px 2px rgba(0, 0, 0, 0.05),
-    0 0 0 2px rgba(255, 255, 255, 0.1);
+  background: var(--vassist-surface-elevated);
+  border-color: var(--vassist-border-strong-color);
+  box-shadow: 0 0 0 2px var(--vassist-focus-ring-color);
 }
 
 /* Dark input variant (for light backgrounds) */
 .glass-input-dark {
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--vassist-dark-glass-base);
+  -webkit-backdrop-filter: blur(var(--vassist-backdrop-blur)) contrast(94%);
+  backdrop-filter: blur(var(--vassist-backdrop-blur)) contrast(94%);
+  border: 1px solid var(--vassist-dark-glass-border);
   border-radius: 0.5rem;
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
-  box-shadow: 
-    0 4px 20px rgba(0, 0, 0, 0.35),
-    inset 0 1px 2px rgba(255, 255, 255, 0.05);
-  color: #ffffff;
+  box-shadow: var(--vassist-surface-shadow);
+  color: var(--vassist-inverse-text-primary);
 }
 
 .glass-input-dark::placeholder {
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--vassist-inverse-input-placeholder-color);
 }
 
 .glass-input-dark:focus {
   outline: none;
-  background: rgba(0, 0, 0, 0.6);
-  border-color: rgba(255, 255, 255, 0.25);
-  box-shadow: 
-    0 6px 24px rgba(0, 0, 0, 0.4),
-    inset 0 1px 2px rgba(255, 255, 255, 0.1),
-    0 0 0 2px rgba(255, 255, 255, 0.1);
+  background: var(--vassist-dark-glass-elevated);
+  border-color: var(--vassist-dark-glass-border-strong);
+  box-shadow: 0 0 0 2px var(--vassist-inverse-focus-ring-color);
 }
 
 /* Text with enhanced readability */
 .glass-text {
-  color: #ffffff;
-  text-shadow: 
+  color: var(--vassist-text-primary);
+  text-shadow:
     0 1px 3px rgba(0, 0, 0, 0.8),
     0 0 10px rgba(0, 0, 0, 0.4);
-  transition: color 0.3s ease, text-shadow 0.3s ease;
+  transition:
+    color 0.3s ease,
+    text-shadow 0.3s ease;
 }
 
 /* Black text for light UI on dark backgrounds */
 .glass-text-black {
-  color: #ffffff;
-  text-shadow: 
+  color: var(--vassist-inverse-text-primary);
+  text-shadow:
     0 1px 2px rgba(0, 0, 0, 0.3),
     0 0 4px rgba(255, 255, 255, 0.8);
-  transition: color 0.3s ease, text-shadow 0.3s ease;
+  transition:
+    color 0.3s ease,
+    text-shadow 0.3s ease;
 }
 
 /* Kept for backwards compatibility - same as glass-text */
 .glass-text-dark {
-  color: #ffffff;
-  text-shadow: 
+  color: var(--vassist-inverse-text-primary);
+  text-shadow:
     0 1px 3px rgba(0, 0, 0, 0.9),
     0 0 8px rgba(0, 0, 0, 0.5);
 }
 
 /* Placeholder text */
 .glass-placeholder::placeholder {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--vassist-input-placeholder-color);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
 /* Dark placeholder (for light backgrounds) */
 .glass-placeholder-dark::placeholder {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--vassist-inverse-input-placeholder-color);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 /* Error messages */
 .glass-error {
-  background: rgba(239, 68, 68, 0.2);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.3);
+  background: var(--vassist-status-error);
+  -webkit-backdrop-filter: blur(var(--vassist-backdrop-blur));
+  backdrop-filter: blur(var(--vassist-backdrop-blur));
+  border: 1px solid var(--vassist-status-error);
+  box-shadow: var(--vassist-surface-shadow);
 }
 
 /* Success/Active states */
 .glass-success {
-  background: rgba(34, 197, 94, 0.2);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(34, 197, 94, 0.4);
-  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.3);
+  background: var(--vassist-status-success);
+  -webkit-backdrop-filter: blur(var(--vassist-backdrop-blur));
+  backdrop-filter: blur(var(--vassist-backdrop-blur));
+  border: 1px solid var(--vassist-status-success);
+  box-shadow: var(--vassist-surface-shadow);
 }
 
 /* Warning states */
 .glass-warning {
-  background: rgba(251, 191, 36, 0.2);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(251, 191, 36, 0.4);
-  box-shadow: 0 4px 16px rgba(251, 191, 36, 0.3);
+  background: var(--vassist-status-warning);
+  -webkit-backdrop-filter: blur(var(--vassist-backdrop-blur));
+  backdrop-filter: blur(var(--vassist-backdrop-blur));
+  border: 1px solid var(--vassist-status-warning);
+  box-shadow: var(--vassist-surface-shadow);
 }
 
 /* Bottom fade overlay for input area */
 .glass-fade-overlay {
   background: linear-gradient(
-    to top, 
-    rgba(0, 0, 0, 0.7) 0%, 
-    rgba(0, 0, 0, 0.4) 50%, 
+    to top,
+    color-mix(in srgb, var(--vassist-overlay-scrim) 100%, transparent 0%) 0%,
+    color-mix(in srgb, var(--vassist-overlay-scrim) 68%, transparent 32%) 50%,
     transparent 100%
   );
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
-  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--vassist-backdrop-blur)) saturate(150%);
+  backdrop-filter: blur(var(--vassist-backdrop-blur)) saturate(150%);
   transition: background 0.3s ease;
 }
 
 /* Dark fade overlay for input area (on light backgrounds) */
 .glass-fade-overlay-dark {
   background: linear-gradient(
-    to top, 
-    rgba(0, 0, 0, 0.85) 0%, 
-    rgba(0, 0, 0, 0.6) 50%, 
+    to top,
+    color-mix(
+        in srgb,
+        var(--vassist-inverse-surface-overlay) 100%,
+        transparent 0%
+      )
+      0%,
+    color-mix(
+        in srgb,
+        var(--vassist-inverse-surface-overlay) 72%,
+        transparent 28%
+      )
+      50%,
     transparent 100%
   );
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
-  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--vassist-backdrop-blur)) saturate(150%);
+  backdrop-filter: blur(var(--vassist-backdrop-blur)) saturate(150%);
   transition: background 0.3s ease;
 }
 
 /* Fade overlays for scrollable content (backdrop-filter compatible) */
 /* These sit ABOVE the content and create fade effect without using mask */
 .fade-overlay-top {
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.12) 0%, transparent 100%);
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.12) 0%,
+    transparent 100%
+  );
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   pointer-events: none;
 }
 
 .fade-overlay-bottom {
-  background: linear-gradient(to top, rgba(255, 255, 255, 0.12) 0%, transparent 100%);
+  background: linear-gradient(
+    to top,
+    rgba(255, 255, 255, 0.12) 0%,
+    transparent 100%
+  );
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   pointer-events: none;
@@ -272,7 +409,11 @@
 
 /* For dark backgrounds */
 .fade-overlay-top-dark {
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.15) 0%, transparent 100%);
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.15) 0%,
+    transparent 100%
+  );
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   pointer-events: none;
@@ -287,16 +428,52 @@
 
 /* Mask fade for messages container - light background (use dark mask) */
 .glass-messages-mask-dark {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.3) 4%, black 8%, black 92%, rgba(0,0,0,0.3) 96%, transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.3) 4%, black 8%, black 92%, rgba(0,0,0,0.3) 96%, transparent 100%);
-  transition: mask-image 0.3s ease, -webkit-mask-image 0.3s ease;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.3) 4%,
+    black 8%,
+    black 92%,
+    rgba(0, 0, 0, 0.3) 96%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.3) 4%,
+    black 8%,
+    black 92%,
+    rgba(0, 0, 0, 0.3) 96%,
+    transparent 100%
+  );
+  transition:
+    mask-image 0.3s ease,
+    -webkit-mask-image 0.3s ease;
 }
 
 /* Mask fade for messages container - dark background (use light mask) */
 .glass-messages-mask {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.3) 4%, white 8%, white 92%, rgba(255,255,255,0.3) 96%, transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.3) 4%, white 8%, white 92%, rgba(255,255,255,0.3) 96%, transparent 100%);
-  transition: mask-image 0.3s ease, -webkit-mask-image 0.3s ease;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 4%,
+    white 8%,
+    white 92%,
+    rgba(255, 255, 255, 0.3) 96%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 4%,
+    white 8%,
+    white 92%,
+    rgba(255, 255, 255, 0.3) 96%,
+    transparent 100%
+  );
+  transition:
+    mask-image 0.3s ease,
+    -webkit-mask-image 0.3s ease;
 }
 
 .fade-overlay-bottom-dark {
@@ -319,11 +496,7 @@
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   backdrop-filter: blur(20px) saturate(180%);
   pointer-events: none;
-  mask-image: linear-gradient(
-    to bottom,
-    black 0% 50%,
-    transparent 50% 100%
-  );
+  mask-image: linear-gradient(to bottom, black 0% 50%, transparent 50% 100%);
   -webkit-mask-image: linear-gradient(
     to bottom,
     black 0% 50%,
@@ -373,7 +546,7 @@
     -webkit-backdrop-filter: blur(10px) saturate(150%);
     backdrop-filter: blur(10px) saturate(150%);
   }
-  
+
   .glass-fade-overlay {
     -webkit-backdrop-filter: blur(12px) saturate(150%);
     backdrop-filter: blur(12px) saturate(150%);
@@ -381,26 +554,28 @@
 }
 
 /* Fallback for browsers without backdrop-filter support */
-@supports not ((backdrop-filter: blur(10px)) or (-webkit-backdrop-filter: blur(10px))) {
+@supports not (
+  (backdrop-filter: blur(10px)) or (-webkit-backdrop-filter: blur(10px))
+) {
   .glass-base,
   .glass-container {
     background: rgba(30, 30, 30, 0.85);
     border: 1px solid rgba(255, 255, 255, 0.15);
   }
-  
+
   .glass-message,
   .glass-message-user {
     background: rgba(40, 40, 40, 0.9);
   }
-  
+
   .glass-button {
     background: rgba(50, 50, 50, 0.85);
   }
-  
+
   .glass-input {
     background: rgba(20, 20, 20, 0.9);
   }
-  
+
   .glass-fade-overlay {
     background: linear-gradient(
       to top,
@@ -420,18 +595,18 @@
 }
 
 @media (prefers-color-scheme: light) {
-  .glass-base,
-  .glass-container {
+  .glass-base:not(.glass-base-dark),
+  .glass-container:not(.glass-container-dark) {
     background: rgba(255, 255, 255, 0.3);
     border-color: rgba(255, 255, 255, 0.5);
   }
-  
-  .glass-message,
-  .glass-message-user {
+
+  .glass-message:not(.glass-message-dark),
+  .glass-message-user:not(.glass-message-user-dark) {
     background: rgba(255, 255, 255, 0.4);
     border-color: rgba(255, 255, 255, 0.6);
   }
-  
+
   .glass-text-adaptive {
     color: #1a1a1a;
     text-shadow: 0 1px 3px rgba(255, 255, 255, 0.9);
@@ -444,24 +619,28 @@
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(
+    in srgb,
+    var(--vassist-surface-base) 60%,
+    transparent 40%
+  );
   border-radius: 4px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--vassist-border-color);
   border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--vassist-border-color);
   transition: background 0.2s ease;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.25);
+  background: var(--vassist-border-strong-color);
+  border-color: var(--vassist-border-strong-color);
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:active {
-  background: rgba(255, 255, 255, 0.4);
+  background: var(--vassist-surface-interactive);
 }
 
 /* Hover-only scrollbar - hidden by default, visible on hover */
@@ -472,7 +651,7 @@
 }
 
 .hover-scrollbar:hover {
-  scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
+  scrollbar-color: var(--vassist-border-color) transparent;
 }
 
 .hover-scrollbar::-webkit-scrollbar {
@@ -485,7 +664,11 @@
 }
 
 .hover-scrollbar:hover::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(
+    in srgb,
+    var(--vassist-surface-base) 60%,
+    transparent 40%
+  );
   border-radius: 4px;
 }
 
@@ -493,26 +676,29 @@
   background: transparent;
   border-radius: 4px;
   border: 1px solid transparent;
-  transition: background 0.3s ease, border-color 0.3s ease;
+  transition:
+    background 0.3s ease,
+    border-color 0.3s ease;
 }
 
 .hover-scrollbar:hover::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: var(--vassist-border-color);
+  border-color: var(--vassist-border-color);
 }
 
 .hover-scrollbar:hover::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.25);
+  background: var(--vassist-border-strong-color);
+  border-color: var(--vassist-border-strong-color);
 }
 
 .hover-scrollbar:hover::-webkit-scrollbar-thumb:active {
-  background: rgba(255, 255, 255, 0.4);
+  background: var(--vassist-surface-interactive);
 }
 
 /* Enhanced Loading Animation - Three Dots */
 @keyframes dot-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.3;
     transform: scale(0.8);
   }
@@ -532,7 +718,7 @@
 .loading-dot {
   width: 6px;
   height: 6px;
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--vassist-text-secondary);
   border-radius: 50%;
   animation: dot-pulse 1.4s infinite;
 }
@@ -551,7 +737,8 @@
 
 /* Alternative: Smooth wave loading */
 @keyframes wave-pulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0px);
     opacity: 0.5;
   }
@@ -679,4 +866,275 @@
 
 .animate-fade-in {
   animation: fade-in 0.3s ease-out;
+}
+
+.thinking-collapse-panel {
+  height: 0;
+  overflow: hidden;
+  transition: height 300ms ease-in-out;
+}
+
+.thinking-collapse-panel[data-open] {
+  height: var(--collapsible-panel-height);
+}
+
+.thinking-collapse-panel[data-starting-style] {
+  height: 0;
+}
+
+.thinking-chevron {
+  display: inline-flex;
+  transition: transform 300ms ease-in-out;
+}
+
+.thinking-chevron[data-panel-open],
+[data-panel-open] > .thinking-chevron {
+  transform: rotate(90deg);
+}
+.assistant-dock-controls > * {
+  translate: 0 0;
+  transition:
+    translate 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease 40ms,
+    transform 200ms ease,
+    background-color 300ms ease,
+    border-color 300ms ease,
+    color 300ms ease,
+    box-shadow 200ms ease;
+}
+
+.assistant-dock-controls[data-collapsed="true"] > * {
+  translate: 0 var(--dock-collapse-distance, 56px);
+  opacity: 0;
+  transition-delay: 0ms, 140ms, 0ms, 0ms, 0ms, 0ms, 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-dock-controls > * {
+    transition: none;
+  }
+}
+
+@keyframes dock-panel-enter {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes dock-panel-exit {
+  from {
+    opacity: 1;
+    translate: 0 0;
+  }
+  to {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+
+.dock-panel-enter {
+  animation: dock-panel-enter 180ms ease-out;
+}
+
+.dock-panel-exit {
+  animation: dock-panel-exit 180ms ease-in both;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock-panel-enter,
+  .dock-panel-exit {
+    animation-duration: 0ms;
+  }
+}
+
+/* Shared composer layout, including narrow and spatial HTML surfaces. */
+.composer-surface {
+  color: var(--vassist-text-primary);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.composer-surface.glass-container-dark {
+  color: var(--vassist-inverse-text-primary);
+}
+
+.composer-layout {
+  display: grid;
+  position: relative;
+  align-items: center;
+  min-height: 36px;
+}
+
+.composer-more,
+.composer-trailing {
+  position: absolute;
+  bottom: 0;
+  z-index: 1;
+}
+.composer-more {
+  left: 0;
+}
+.composer-trailing {
+  right: 0;
+}
+.composer-content {
+  grid-area: 1 / 1;
+}
+.composer-content:not(textarea) {
+  margin-inline: 36px;
+}
+
+.composer-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  height: calc(var(--composer-text-height, 24px) + 12px);
+  max-height: min(200px, 30dvh);
+  padding: 6px 44px;
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  resize: none;
+  background: transparent;
+  color: inherit;
+  font-size: 16px;
+  line-height: 24px;
+  transition:
+    min-height 240ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    height 240ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    padding 240ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.composer-textarea:focus,
+.composer-textarea:focus-visible {
+  outline: none;
+  border: 0;
+  box-shadow: none;
+}
+.composer-textarea::placeholder {
+  color: currentColor;
+  opacity: 0.5;
+}
+.composer-layout[data-expanded="true"] .composer-textarea {
+  min-height: 80px;
+  height: calc(var(--composer-text-height, 24px) + 50px);
+  padding: 8px 10px 42px;
+}
+
+.composer-icon {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  color: inherit;
+}
+
+.composer-icon:hover:not(:disabled),
+.composer-menu-item:hover:not(:disabled) {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .chat-message-actions {
+    opacity: 0;
+    transition: opacity 160ms ease;
+  }
+
+  .chat-message-row:hover .chat-message-actions,
+  .chat-message-row:focus-within .chat-message-actions,
+  .chat-message-actions[data-active="true"] {
+    opacity: 1;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .chat-message-actions {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+  }
+
+  .chat-message-row[data-touch-actions-visible="true"] .chat-message-actions,
+  .chat-message-row:focus-within .chat-message-actions,
+  .chat-message-actions[data-active="true"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@keyframes chat-recent-exit {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-chat-recent-exiting] {
+    animation-duration: 1ms !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-message-actions {
+    transition: none;
+  }
+}
+
+.composer-primary {
+  transition:
+    background-color 180ms ease,
+    scale 180ms ease;
+}
+
+.composer-primary:active:not(:disabled) {
+  scale: 0.94;
+}
+
+.composer-menu {
+  max-height: min(420px, var(--available-height, 70dvh));
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.composer-menu[data-starting-style],
+.composer-menu[data-ending-style] {
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
+}
+
+.composer-waveform[data-unavailable="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 50% 8%;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.4;
+}
+
+.composer-waveform {
+  color: inherit;
+  opacity: 0.8;
+  transition: opacity 300ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-textarea,
+  .composer-surface,
+  .composer-primary,
+  .composer-menu,
+  .composer-waveform {
+    transition: none;
+  }
 }

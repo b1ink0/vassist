@@ -1,0 +1,32 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "declarationMap": true,
+    "rootDir": "../..",
+    "outDir": "./dist/types",
+    "types": ["node", "vite/client"]
+  },
+  "files": [
+    "src/index.ts",
+    "src/full.ts",
+    "src/chat.ts",
+    "src/chat-toolbar.ts",
+    "src/toolbar.ts",
+    "../../src/env.d.ts",
+    "../../src/types/env.d.ts",
+    "../../src/types/android.d.ts",
+    "../../src/types/electron.d.ts",
+    "../../src/types/gpt-sovits-bootstrap.d.ts",
+    "../../src/types/headaudio.d.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "../../dist",
+    "../../build",
+    "../../node_modules"
+  ]
+}
