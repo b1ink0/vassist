@@ -5,11 +5,11 @@ VAssist repository tree and file metrics.
 ## Totals
 
 - Directories: 208
-- Files: 813
-- Text files counted for metrics: 669
-- Total text lines: 200964
+- Files: 815
+- Text files counted for metrics: 671
+- Total text lines: 201404
 - Code files counted for metrics: 533
-- Total code lines: 175704
+- Total code lines: 175734
 
 ## Line Counts by File Type
 
@@ -23,11 +23,11 @@ VAssist repository tree and file metrics.
 | JavaScript   | .js, .mjs, .cjs         |     1 |    32 |
 | Kotlin       | .kt                     |    22 | 11438 |
 | Shell Script | (no extension)          |     5 |   654 |
-| TSX          | .tsx                    |   156 | 62107 |
+| TSX          | .tsx                    |   156 | 62137 |
 | TypeScript   | .ts, .mts, .cts         |   324 | 95195 |
 | Gradle       | .gradle                 |     7 |   579 |
 | JSON         | .json                   |    19 |   642 |
-| Markdown     | .md                     |    40 |  7257 |
+| Markdown     | .md                     |    42 |  7667 |
 | Other Text   | mixed                   |    40 | 11717 |
 | Plain Text   | (no extension)          |    12 |  4264 |
 | Properties   | .properties             |     2 |    29 |
@@ -64,7 +64,9 @@ VAssist repository tree and file metrics.
 - LICENSE: file
 - package.json: file
 - playwright.config.ts: file
+- PRD_CONTEXT_AND_SETTINGS_UX.md: file
 - README.md: file
+- RELEASE_DRAFT_CONTEXT_AND_SETTINGS_UX.md: file
 - RELEASE_DRAFT_DETAILED.md: file
 - RELEASE_DRAFT.md: file
 - tsconfig.app.json: file
@@ -1090,7 +1092,9 @@ vassist/
 ├── LICENSE
 ├── package.json
 ├── playwright.config.ts
+├── PRD_CONTEXT_AND_SETTINGS_UX.md
 ├── README.md
+├── RELEASE_DRAFT_CONTEXT_AND_SETTINGS_UX.md
 ├── RELEASE_DRAFT_DETAILED.md
 ├── RELEASE_DRAFT.md
 ├── tsconfig.app.json
