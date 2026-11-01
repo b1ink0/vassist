@@ -56,6 +56,12 @@ export class PositionManager implements PositionManagerLike {
   private readonly canvas: HTMLCanvasElement;
 
   private readonly boundaryPadding: number;
+  private readonly preview: boolean;
+  private previewPreset: {
+    preset: string;
+    options: PositionPresetApplyOptions;
+  } | null = null;
+  private previewResizeObserver: ResizeObserver | null = null;
   private readonly allowPartialOffscreen: boolean;
   private readonly partialOffscreenAmount: number;
   private customBoundaries: CustomBoundaryInsets | null;
@@ -104,6 +110,7 @@ export class PositionManager implements PositionManagerLike {
     this.scene = scene;
     this.camera = camera;
     this.canvas = canvas;
+    this.preview = options.preview === true;
 
     // Boundary configuration (TUNE THESE!)
     this.boundaryPadding = options.boundaryPadding ?? 0; // Pixels from edge
@@ -163,6 +170,19 @@ export class PositionManager implements PositionManagerLike {
 
     this.updateCanvasDimensions();
     this.setupResizeHandler();
+    if (this.preview) {
+      this.previewPreset = { preset: savedPreset, options };
+      this.previewResizeObserver = new ResizeObserver(() => {
+        this.updateCanvasDimensions();
+        if (this.previewPreset && this.canvasWidth && this.canvasHeight) {
+          this.applyPreset(
+            this.previewPreset.preset,
+            this.previewPreset.options,
+          );
+        }
+      });
+      this.previewResizeObserver.observe(this.canvas);
+    }
 
     // Apply saved position preset from settings (or default bottom-right)
     // This will trigger modelPositionChange event
@@ -302,11 +322,13 @@ export class PositionManager implements PositionManagerLike {
     }
 
     const baseConfig = presetMap[preset] ?? centerConfig;
-    const platformOverride = isAndroid
-      ? AndroidPresetOverride
-      : isDesktop
-        ? DesktopPresetOverride
-        : null;
+    const platformOverride = this.preview
+      ? DesktopPresetOverride
+      : isAndroid
+        ? AndroidPresetOverride
+        : isDesktop
+          ? DesktopPresetOverride
+          : null;
     const config: PositionPresetLike = platformOverride
       ? { ...baseConfig, ...platformOverride }
       : baseConfig;
@@ -331,6 +353,11 @@ export class PositionManager implements PositionManagerLike {
     // Apply saved zoom from uiConfig if available
     let modelWidth = options.modelSizePx?.width || modelSize.width;
     let modelHeight = options.modelSizePx?.height || modelSize.height;
+
+    if (this.preview) {
+      modelHeight = Math.min(modelHeight, this.canvasHeight * 0.8);
+      modelWidth = modelHeight * (modelSize.width / modelSize.height);
+    }
 
     if (options.modelSizePx) {
       modelWidth = options.modelSizePx.width || modelWidth;
@@ -448,6 +475,19 @@ export class PositionManager implements PositionManagerLike {
         // Fallback to center
         pixelX = (this.canvasWidth - modelWidth) / 2;
         pixelY = (this.canvasHeight - effectiveHeight) / 2;
+    }
+
+    if (this.preview && isPortraitMode && this.canvasHeight > 0) {
+      const clipHeight = this.scene.metadata?.portraitClipPlaneY ?? 12;
+      const orthoHeight = (12 * this.canvasHeight) / cameraHeight;
+      const centerPixel = pixelY + effectiveHeight / 2;
+      const worldOffset =
+        ((centerPixel - this.canvasHeight / 2) * 2 * orthoHeight) /
+        this.canvasHeight;
+      offset = {
+        ...offset,
+        y: clipHeight - 10 + orthoHeight - worldOffset - 0.15,
+      };
     }
 
     Logger.log("PositionManager", `Applying preset: ${preset}`, {
@@ -835,6 +875,8 @@ export class PositionManager implements PositionManagerLike {
    * Cleanup - remove event listeners
    */
   dispose(): void {
+    this.previewResizeObserver?.disconnect();
+    this.previewResizeObserver = null;
     if (this.resizeHandler) {
       window.removeEventListener("resize", this.resizeHandler);
       this.resizeHandler = null;

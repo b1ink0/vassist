@@ -306,6 +306,8 @@ const VirtualAssistant = forwardRef<AssistantHandle, VirtualAssistantProps>(
             "Generated lip sync fallback is driving the speaking animation",
           );
           void animationManager.speak(text, bvmdUrl, "talking");
+        } else {
+          void animationManager.triggerAction("speak");
         }
       };
 
@@ -943,8 +945,8 @@ const VirtualAssistant = forwardRef<AssistantHandle, VirtualAssistantProps>(
             preset: previewPosition,
             ...(portraitMode
               ? {
-                  offset: { x: 0, y: 4.1 },
-                  portraitZoomMultiplier: 1.5,
+                  offset: { x: 0, y: 6 },
+                  portraitZoomMultiplier: 3,
                 }
               : {}),
           },
@@ -968,6 +970,7 @@ const VirtualAssistant = forwardRef<AssistantHandle, VirtualAssistantProps>(
     );
 
     const sceneBuildConfig: Partial<SceneBuildConfig> = {
+      ...(isPreview ? { positionConfig: { preview: true } } : {}),
       ...((isXR || xrEnabled) && !isPreview
         ? { presentation: "xr" as const }
         : {}),

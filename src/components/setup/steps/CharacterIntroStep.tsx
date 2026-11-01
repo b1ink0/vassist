@@ -177,10 +177,10 @@ const CharacterIntroStep = ({
                   data-testid="setup-display-mode-normal"
                 >
                   {displayMode === "normal" && (
-                    <div className="absolute top-3 right-3 z-10">
+                    <div className="absolute top-3 right-3 z-10 flex items-center">
                       <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/20 border border-white/30">
                         <Icon name="check" size={14} className="text-white" />
-                        <span className="text-xs text-white font-medium">
+                        <span className="whitespace-nowrap text-xs text-white font-medium leading-none">
                           Selected
                         </span>
                       </div>
@@ -188,7 +188,7 @@ const CharacterIntroStep = ({
                   )}
 
                   <div className="p-2 md:p-4">
-                    <div className="flex items-center gap-2 mb-3">
+                    <div className="flex items-center gap-2 mb-3 pr-28">
                       <Icon
                         name="maximize"
                         size={20}
@@ -244,10 +244,10 @@ const CharacterIntroStep = ({
                   data-testid="setup-display-mode-portrait"
                 >
                   {displayMode === "portrait" && (
-                    <div className="absolute top-3 right-3 z-10">
+                    <div className="absolute top-3 right-3 z-10 flex items-center">
                       <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/20 border border-white/30">
                         <Icon name="check" size={14} className="text-white" />
-                        <span className="text-xs text-white font-medium">
+                        <span className="whitespace-nowrap text-xs text-white font-medium leading-none">
                           Selected
                         </span>
                       </div>
@@ -255,7 +255,7 @@ const CharacterIntroStep = ({
                   )}
 
                   <div className="p-2 md:p-4">
-                    <div className="flex items-center gap-2 mb-3">
+                    <div className="flex items-center gap-2 mb-3 pr-28">
                       <Icon name="user" size={20} className="text-white/80" />
                       <h3 className="text-base font-semibold text-white">
                         Portrait Mode

@@ -1,6 +1,15 @@
 import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
-import { type ComponentProps, type ReactElement, type ReactNode } from "react";
+import {
+  useState,
+  type ComponentProps,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { cn } from "../../utils/cn";
+import { useEmbedHost } from "../../embed/EmbedHostContext";
+import { resolveConfiguredPortalContainer } from "../../embed/portalContainers";
+import { resolvePortalContainer } from "../../utils/resolvePortalContainer";
+import { useSpatialHtmlPanelHost } from "../xr/SpatialHtmlPanelContext";
 
 export type TooltipVariant = "default" | "dark";
 export type TooltipSide = ComponentProps<typeof BaseTooltip.Positioner>["side"];
@@ -29,6 +38,16 @@ export function Tooltip({
   delay = 500,
   closeDelay = 80,
 }: TooltipProps) {
+  const { embedConfig } = useEmbedHost();
+  const spatialHost = useSpatialHtmlPanelHost();
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const portalContainer =
+    spatialHost ??
+    resolveConfiguredPortalContainer(
+      embedConfig,
+      "popovers",
+      resolvePortalContainer(undefined, anchor),
+    );
   if (!content) {
     return children;
   }
@@ -38,11 +57,12 @@ export function Tooltip({
   return (
     <BaseTooltip.Root>
       <BaseTooltip.Trigger
+        ref={setAnchor}
         render={children}
         delay={delay}
         closeDelay={closeDelay}
       />
-      <BaseTooltip.Portal>
+      <BaseTooltip.Portal container={portalContainer}>
         <BaseTooltip.Positioner
           side={side}
           sideOffset={sideOffset}

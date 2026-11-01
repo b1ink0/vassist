@@ -5,6 +5,7 @@
  * All settings are editable via the Control Panel Config tab.
  */
 
+import type { SystemPromptProfile } from "./promptConfig";
 import {
   DEFAULT_ENDPOINTS,
   DEFAULT_SERVICE_PORTS,
@@ -47,7 +48,7 @@ export const AIProviders = {
   CHROME_AI: "chrome-ai",
   OPENAI: "openai",
   OLLAMA: "ollama",
-};
+} as const;
 
 /**
  * Available TTS Providers
@@ -232,11 +233,10 @@ export const TranslationLanguages = [
   { code: "hu", name: "Hungarian" },
 ];
 
-export type AIRemoteProfileProvider =
-  | "openai"
-  | "ollama"
-  | "android-local"
-  | "desktop-local";
+export type AIRemoteProfileProvider = Exclude<
+  AIProvider,
+  typeof AIProviders.CHROME_AI
+>;
 
 export interface AIRemoteProviderProfile extends LLMParameters {
   id: string;
@@ -262,6 +262,30 @@ export interface AIRemoteProviderProfile extends LLMParameters {
   llmBackend?: string;
   computeUnit?: string;
   apiFormat?: "openai" | "ollama";
+}
+
+export const thinkingEffortOptions = [
+  { value: "", label: "Auto" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "xhigh", label: "Max" },
+] satisfies {
+  value: NonNullable<AIRemoteProviderProfile["thinkingEffort"]> | "";
+  label: string;
+}[];
+
+/** One atomic selection for the composer's combined thinking control. */
+export function getThinkingSelection(mode: string) {
+  if (mode === "off") return { thinkingEnabled: false };
+  if (mode === "auto")
+    return { thinkingEnabled: true, thinkingEffort: undefined };
+  const option = thinkingEffortOptions.find(
+    (item) => item.value === mode && item.value !== "",
+  );
+  return option
+    ? { thinkingEnabled: true, thinkingEffort: option.value }
+    : undefined;
 }
 
 export interface AIRoutingModelConfig {
@@ -338,11 +362,11 @@ export interface STTRemoteProviderProfile {
  * Default AI Configuration
  */
 export const DefaultAIConfig = {
-  provider: isAndroidMode
+  provider: (isAndroidMode
     ? AIProviders.ANDROID_LOCAL
     : isDesktopMode
       ? AIProviders.DESKTOP_LOCAL
-      : AIProviders.CHROME_AI,
+      : AIProviders.CHROME_AI) as string,
   remoteProfiles: [] as AIRemoteProviderProfile[],
 
   // Generic decision API configuration. This is a platform capability and is
@@ -369,9 +393,9 @@ export const DefaultAIConfig = {
     systemPromptType: "default", // Personality type from PromptConfig.systemPrompts
     systemPrompt: "", // Custom system prompt (only used when systemPromptType is 'custom')
     selectedSystemPromptProfileId: "default",
-    systemPromptProfiles: [],
+    systemPromptProfiles: [] as SystemPromptProfile[],
     thinkingEnabled: false,
-    thinkingEffort: undefined,
+    thinkingEffort: undefined as AIRemoteProviderProfile["thinkingEffort"],
   },
 
   openai: {
@@ -383,13 +407,13 @@ export const DefaultAIConfig = {
     temperature: 0.7,
     maxTokens: 2000,
     thinkingEnabled: false,
-    thinkingEffort: undefined,
+    thinkingEffort: undefined as AIRemoteProviderProfile["thinkingEffort"],
     enableImageSupport: true, // Enable multi-modal image support
     enableAudioSupport: true, // Enable multi-modal audio support
     systemPromptType: "default", // Personality type from PromptConfig.systemPrompts
     systemPrompt: "", // Custom system prompt (only used when systemPromptType is 'custom')
     selectedSystemPromptProfileId: "default",
-    systemPromptProfiles: [],
+    systemPromptProfiles: [] as SystemPromptProfile[],
     routing: {
       enabled: false,
       visionModel: {
@@ -416,13 +440,13 @@ export const DefaultAIConfig = {
     temperature: 0.7,
     maxTokens: 2000,
     thinkingEnabled: false, // Let reasoning models emit <think> blocks (rendered collapsibly)
-    thinkingEffort: undefined,
+    thinkingEffort: undefined as AIRemoteProviderProfile["thinkingEffort"],
     enableImageSupport: true, // Enable multi-modal image support
     enableAudioSupport: true, // Enable multi-modal audio support
     systemPromptType: "default", // Personality type from PromptConfig.systemPrompts
     systemPrompt: "", // Custom system prompt (only used when systemPromptType is 'custom')
     selectedSystemPromptProfileId: "default",
-    systemPromptProfiles: [],
+    systemPromptProfiles: [] as SystemPromptProfile[],
     routing: {
       enabled: false,
       visionModel: {
@@ -451,11 +475,11 @@ export const DefaultAIConfig = {
     // "gpu" = Adreno OpenCL, "npu" = Hexagon HTP
     computeUnit: "auto",
     thinkingEnabled: false,
-    thinkingEffort: undefined,
+    thinkingEffort: undefined as AIRemoteProviderProfile["thinkingEffort"],
     systemPromptType: "default",
     systemPrompt: "",
     selectedSystemPromptProfileId: "default",
-    systemPromptProfiles: [],
+    systemPromptProfiles: [] as SystemPromptProfile[],
     routing: {
       enabled: false,
       visionModel: {
@@ -497,11 +521,11 @@ export const DefaultAIConfig = {
     gpuLayers: -1, // Automatic GPU offloading
     threads: 0, // Automatic thread selection
     thinkingEnabled: false,
-    thinkingEffort: undefined,
+    thinkingEffort: undefined as AIRemoteProviderProfile["thinkingEffort"],
     systemPromptType: "default",
     systemPrompt: "",
     selectedSystemPromptProfileId: "default",
-    systemPromptProfiles: [],
+    systemPromptProfiles: [] as SystemPromptProfile[],
     routing: {
       enabled: false,
       visionModel: {
@@ -718,6 +742,34 @@ export type AIConfig = WidenConfigValue<typeof DefaultAIConfig> & {
   "android-local": LLMSamplingParameters;
   "desktop-local": LLMParameters;
 };
+/** Provider identities and section keys come from the same configuration definition. */
+export function isAIProvider(value: unknown): value is AIProvider {
+  return Object.values(AIProviders).some((provider) => provider === value);
+}
+export function isRemoteAIProvider(
+  value: unknown,
+): value is AIRemoteProfileProvider {
+  return isAIProvider(value) && value !== AIProviders.CHROME_AI;
+}
+export function getAIProviderSection(provider: string) {
+  if (!isAIProvider(provider))
+    throw new Error(`Unknown AI provider: ${provider}`);
+  return provider === AIProviders.CHROME_AI ? "chromeAi" : provider;
+}
+export const AIProviderSections =
+  Object.values(AIProviders).map(getAIProviderSection);
+export function getAvailableAIProviders(platform: {
+  isAndroid: boolean;
+  isDesktop: boolean;
+}) {
+  return Object.values(AIProviders).filter(
+    (provider) =>
+      provider !== AIProviders.CHROME_AI &&
+      (provider !== AIProviders.ANDROID_LOCAL || platform.isAndroid) &&
+      (provider !== AIProviders.DESKTOP_LOCAL || platform.isDesktop),
+  );
+}
+
 export type TTSConfig = typeof DefaultTTSConfig;
 export type STTConfig = typeof DefaultSTTConfig;
 
@@ -1069,6 +1121,8 @@ export function getProviderDisplayName(provider: string): string {
       return "Android Local LLM";
     case AIProviders.DESKTOP_LOCAL:
       return "Desktop Local LLM";
+    case AIProviders.CHROME_AI:
+      return "Chrome AI";
     case AIProviders.OPENAI:
       return "OpenAI";
     case AIProviders.OLLAMA:

@@ -94,6 +94,16 @@ export default class OllamaClient {
       const item = JSON.parse(line);
       if (item.error) throw new Error(item.error);
       return {
+        ...(item.done &&
+        Number.isSafeInteger(item.prompt_eval_count) &&
+        Number.isSafeInteger(item.eval_count)
+          ? {
+              usage: {
+                prompt_tokens: item.prompt_eval_count,
+                completion_tokens: item.eval_count,
+              },
+            }
+          : {}),
         choices: [
           {
             delta: {

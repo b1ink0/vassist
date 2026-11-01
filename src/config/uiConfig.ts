@@ -617,7 +617,7 @@ export const DefaultUIConfig: UIConfig = {
   modelSizePx: null,
 
   camera: {
-    mode: "2D",
+    mode: "3D",
     locked: true,
     savePosition: false,
     saved3D: {

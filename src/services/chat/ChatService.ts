@@ -2,6 +2,7 @@
  * ChatService - chat conversation management
  */
 
+import type { ContextUsage } from "../../types/contextUsage";
 import Logger from "../common/LoggerService";
 
 export type ChatRole = "system" | "user" | "assistant";
@@ -18,6 +19,7 @@ export interface ChatNode {
   images?: ChatAttachment[];
   audios?: ChatAttachment[];
   thinking?: string;
+  contextUsage?: ContextUsage | undefined;
   imageFileIds?: string[];
   audioFileIds?: string[];
   isEdit?: boolean;
@@ -41,6 +43,7 @@ export interface FlatChatMessage {
   imageFileIds: string[];
   audioFileIds: string[];
   thinking?: string;
+  contextUsage?: ContextUsage | undefined;
   timestamp: number;
   parentId: string | null;
   branchInfo: BranchInfo | null;
@@ -200,6 +203,7 @@ export class ChatService {
           imageFileIds: node.imageFileIds || [],
           audioFileIds: node.audioFileIds || [],
           thinking: node.thinking || "",
+          contextUsage: node.contextUsage,
           timestamp: node.timestamp,
           parentId: node.parentId,
           branchInfo: this._getBranchInfo(node),
@@ -214,6 +218,12 @@ export class ChatService {
    * Update the content of the last message in the active path (for streaming)
    * @param {string} content - New content for the last message
    */
+  setLastContextUsage(usage: ContextUsage): void {
+    const lastId = this.activePath[this.activePath.length - 1];
+    const node = lastId ? this._findNode(lastId) : null;
+    if (node?.role === "assistant") node.contextUsage = usage;
+  }
+
   updateLastMessage(content: string, thinking?: string): void {
     if (this.activePath.length < 2) {
       Logger.warn("ChatService", "No messages to update");

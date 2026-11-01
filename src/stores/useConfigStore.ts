@@ -1416,13 +1416,13 @@ const saveAIConfigInternal = async (fromAutoSave = false) => {
   if (!validation.valid) {
     if (!fromAutoSave) {
       useConfigStore.setState({ aiConfigError: validation.errors.join(", ") });
+      return;
     }
-    return;
   }
 
   try {
     await StorageServiceProxy.configSave("aiConfig", aiConfig);
-    await configureAIAndFeatureServices(aiConfig);
+    if (validation.valid) await configureAIAndFeatureServices(aiConfig);
     markSavedFlag("ai");
     Logger.log("ConfigStore", "AI config saved successfully");
   } catch (error) {

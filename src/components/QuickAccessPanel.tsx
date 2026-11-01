@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { Tabs } from "@base-ui/react/tabs";
+import { ScrollArea } from "@base-ui/react/scroll-area";
 import type {
   ResolvedVAssistEmbedConfig,
   VAssistOpenSettingsOptions,
 } from "../embed/config";
 import { getBrandedLabel } from "../embed/branding";
 import {
-  AIProviders,
+  getAIProviderSection,
   TTSProviders,
   STTProviders,
-  type AIRemoteProviderProfile,
 } from "../config/aiConfig";
 import { BackgroundThemeModes } from "../config/uiConfig";
 import { PromptConfig } from "../config/promptConfig";
@@ -28,17 +29,9 @@ import { isAndroid, isDesktop } from "../utils/PlatformUtils";
 import { cn } from "../utils/cn";
 import Toggle from "./common/Toggle";
 import { Icon } from "./icons";
-import { Select, SettingsRow } from "./ui";
-import RemoteModelPicker from "./settings/shared/RemoteModelPicker";
+import { Button, Select } from "./ui";
 import DesktopModeSettings from "./settings/DesktopModeSettings";
 import { XrSettings } from "./settings/XrSettings";
-
-type ProviderValue =
-  | "openai"
-  | "ollama"
-  | "android-local"
-  | "desktop-local"
-  | "chrome-ai";
 
 interface QuickAccessPanelProps {
   onClose: () => void;
@@ -47,14 +40,6 @@ interface QuickAccessPanelProps {
   onOpenSettings?: (options?: VAssistOpenSettingsOptions) => void;
   animationClass?: string;
 }
-
-const LLM_PROVIDER_LABELS: Record<string, string> = {
-  [AIProviders.OPENAI]: "OpenAI",
-  [AIProviders.OLLAMA]: "OpenAI-Compatible / Ollama",
-  [AIProviders.DESKTOP_LOCAL]: "Desktop Local",
-  [AIProviders.ANDROID_LOCAL]: "Android Local",
-  [AIProviders.CHROME_AI]: "Chrome Built-in AI",
-};
 
 const TTS_PROVIDER_LABELS: Record<string, string> = {
   [TTSProviders.ANDROID_LOCAL]: "Android Local",
@@ -73,33 +58,6 @@ const STT_PROVIDER_LABELS: Record<string, string> = {
   [STTProviders.OPENAI_COMPATIBLE]: "OpenAI-Compatible",
 };
 
-const SectionHeader = ({
-  label,
-  toggle,
-  onMore,
-}: {
-  label: string;
-  toggle?: React.ReactNode;
-  onMore?: () => void;
-}) => (
-  <div className="flex items-center justify-between gap-2">
-    <span className="text-sm font-medium text-white leading-none">{label}</span>
-    <div className="flex items-center gap-2 shrink-0">
-      {toggle}
-      {onMore && (
-        <button
-          type="button"
-          onClick={onMore}
-          className="flex items-center gap-0.5 text-xs text-white/40 hover:text-white/70 transition-colors"
-          style={{ lineHeight: 1 }}
-        >
-          <span style={{ lineHeight: 1 }}>More</span>
-        </button>
-      )}
-    </div>
-  </div>
-);
-
 const QuickAccessPanel = ({
   onClose,
   isLightBackground,
@@ -107,6 +65,8 @@ const QuickAccessPanel = ({
   onOpenSettings,
   animationClass = "",
 }: QuickAccessPanelProps) => {
+  const [activeTab, setActiveTab] = useState("conversation");
+  const [pendingTab, setPendingTab] = useState<string | null>(null);
   const aiConfig = useAIConfig();
   const { updateAIConfig } = useConfigAIActions();
   const ttsConfig = useTTSConfig();
@@ -124,22 +84,6 @@ const QuickAccessPanel = ({
     "settings.title",
     "Quick Access",
   );
-
-  const availableProviders = useMemo(() => {
-    if (isAndroid) {
-      const { DESKTOP_LOCAL, CHROME_AI, ...androidProviders } = AIProviders;
-      return androidProviders;
-    }
-
-    if (isDesktop) {
-      const { ANDROID_LOCAL, CHROME_AI, ...desktopProviders } = AIProviders;
-      return desktopProviders;
-    }
-
-    const { ANDROID_LOCAL, DESKTOP_LOCAL, CHROME_AI, ...webProviders } =
-      AIProviders;
-    return webProviders;
-  }, []);
 
   const availableTTSProviders = useMemo(() => {
     if (isAndroid) {
@@ -173,148 +117,22 @@ const QuickAccessPanel = ({
     return webProviders;
   }, []);
 
-  const provider = aiConfig.provider as ProviderValue;
-  const modelProvider =
-    provider === AIProviders.CHROME_AI
-      ? null
-      : (provider as Exclude<ProviderValue, "chrome-ai">);
-
-  const selectedModel = useMemo(() => {
-    if (provider === AIProviders.OPENAI) {
-      return aiConfig.openai.model || "";
-    }
-    if (provider === AIProviders.OLLAMA) {
-      return aiConfig.ollama.model || "";
-    }
-    if (provider === AIProviders.ANDROID_LOCAL) {
-      return aiConfig["android-local"].model || "";
-    }
-    if (provider === AIProviders.DESKTOP_LOCAL) {
-      return aiConfig["desktop-local"].model || "";
-    }
-    return "";
-  }, [aiConfig, provider]);
-
-  const modelEndpoint = useMemo(() => {
-    if (provider === AIProviders.OPENAI) {
-      return undefined;
-    }
-    if (provider === AIProviders.OLLAMA) {
-      return aiConfig.ollama.endpoint;
-    }
-    if (provider === AIProviders.ANDROID_LOCAL) {
-      return aiConfig["android-local"].endpoint;
-    }
-    if (provider === AIProviders.DESKTOP_LOCAL) {
-      return aiConfig["desktop-local"].endpoint;
-    }
-    return undefined;
-  }, [aiConfig, provider]);
-
-  const modelApiKey = useMemo(() => {
-    if (provider === AIProviders.OPENAI) {
-      return aiConfig.openai.apiKey;
-    }
-    if (provider === AIProviders.OLLAMA) {
-      return (aiConfig.ollama as { apiKey?: string }).apiKey;
-    }
-    return undefined;
-  }, [aiConfig, provider]);
-
-  const setModelForProvider = (value: string) => {
-    if (provider === AIProviders.OPENAI) {
-      updateAIConfig("openai.model", value);
-      return;
-    }
-    if (provider === AIProviders.OLLAMA) {
-      updateAIConfig("ollama.model", value);
-      return;
-    }
-    if (provider === AIProviders.ANDROID_LOCAL) {
-      updateAIConfig("android-local.model", value);
-      return;
-    }
-    if (provider === AIProviders.DESKTOP_LOCAL) {
-      updateAIConfig("desktop-local.model", value);
-    }
-  };
-
-  // Per-provider config key (chrome-ai uses "chromeAi" as the config key)
-  const providerConfigKey =
-    provider === AIProviders.CHROME_AI ? "chromeAi" : provider;
-
-  const thinkingEnabled =
-    (aiConfig as Record<string, any>)[providerConfigKey]?.thinkingEnabled ===
-    true;
-
-  const thinkingEffort = (aiConfig as Record<string, any>)[providerConfigKey]
-    ?.thinkingEffort;
-
-  const providerConfig = useMemo(
-    () =>
-      (aiConfig as Record<string, unknown>)[providerConfigKey] as {
-        temperature?: number;
-        systemPromptType?: string;
-        systemPrompt?: string;
-        selectedSystemPromptProfileId?: string;
-        systemPromptProfiles?: Array<{
-          id: string;
-          name: string;
-          prompt?: string;
-          isBuiltIn?: boolean;
-        }>;
-      },
-    [aiConfig, providerConfigKey],
-  );
-
-  // Saved remote profiles for the current provider
-  const profilesForProvider = useMemo<AIRemoteProviderProfile[]>(() => {
-    if (provider === AIProviders.CHROME_AI) return [];
-    if (!Array.isArray(aiConfig.remoteProfiles)) return [];
-    return (aiConfig.remoteProfiles as AIRemoteProviderProfile[]).filter(
-      (p) => p.provider === provider,
-    );
-  }, [aiConfig.remoteProfiles, provider]);
-
-  const [selectedRemoteProfileId, setSelectedRemoteProfileId] = useState("");
-
-  // Reset selected backend when provider changes
-  useEffect(() => {
-    setSelectedRemoteProfileId("");
-  }, [provider]);
-
-  const applyRemoteProfile = (profileId: string) => {
-    // Empty selection = go back to defaults, show model picker again
-    if (!profileId) {
-      setSelectedRemoteProfileId("");
-      return;
-    }
-    const profile = profilesForProvider.find((p) => p.id === profileId);
-    if (!profile) return;
-    const base = (aiConfig as Record<string, unknown>)[
-      profile.provider
-    ] as Record<string, unknown>;
-    updateAIConfig(profile.provider, {
-      ...base,
-      ...(profile.endpoint !== undefined && { endpoint: profile.endpoint }),
-      ...(profile.apiKey !== undefined && { apiKey: profile.apiKey }),
-      model: profile.model,
-      ...(profile.temperature !== undefined && {
-        temperature: profile.temperature,
-      }),
-      ...(profile.maxTokens !== undefined && { maxTokens: profile.maxTokens }),
-    });
-    setSelectedRemoteProfileId(profileId);
-  };
+  const providerConfigKey = getAIProviderSection(aiConfig.provider);
+  const providerConfig = aiConfig[providerConfigKey];
 
   // System prompt options: built-in presets + user's custom profiles
   const systemPromptOptions = useMemo(() => {
     const builtIns = Object.entries(PromptConfig.systemPrompts).map(
-      ([id, val]) => ({ value: id, label: val.name }),
+      ([id, val]) => ({
+        value: id,
+        label:
+          providerConfig?.systemPromptProfiles?.find((p) => p.id === id)
+            ?.name || val.name,
+      }),
     );
     const customProfiles = Array.isArray(providerConfig?.systemPromptProfiles)
       ? providerConfig.systemPromptProfiles
-          .filter((p) => p && !p.isBuiltIn)
+          .filter((p) => p && !(p.id in PromptConfig.systemPrompts))
           .map((p) => ({ value: p.id, label: p.name || "Unnamed" }))
       : [];
     return [...builtIns, ...customProfiles];
@@ -332,7 +150,13 @@ const QuickAccessPanel = ({
       ];
     if (builtIn) {
       updateAIConfig(`${providerConfigKey}.systemPromptType`, profileId);
-      updateAIConfig(`${providerConfigKey}.systemPrompt`, builtIn.prompt);
+      const saved = providerConfig?.systemPromptProfiles?.find(
+        (p) => p.id === profileId,
+      );
+      updateAIConfig(
+        `${providerConfigKey}.systemPrompt`,
+        saved?.prompt ?? builtIn.prompt,
+      );
       updateAIConfig(
         `${providerConfigKey}.selectedSystemPromptProfileId`,
         profileId,
@@ -353,289 +177,302 @@ const QuickAccessPanel = ({
     }
   };
 
+  const selectVariant = isLightBackground ? "ghost-dark" : "ghost";
+  const selectClass = "max-w-[11rem] text-right";
+
   return (
-    <div
+    <Tabs.Root
+      value={activeTab}
+      onValueChange={(value) => {
+        if (typeof value !== "string" || value === activeTab) return;
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+          setActiveTab(value);
+        else setPendingTab(value);
+      }}
       role="dialog"
       aria-label="Quick access panel"
       data-testid="quick-access-panel"
       className={cn(
-        "absolute inset-0 flex flex-col glass-container rounded-2xl overflow-hidden",
-        isLightBackground && "glass-container-dark",
+        "quick-access-panel flex h-full flex-col overflow-hidden rounded-2xl border shadow-xl",
+        isLightBackground
+          ? "vassist-popup-surface-inverse vassist-inverse-text-primary"
+          : "vassist-popup-surface vassist-text-primary",
         animationClass,
       )}
     >
-      <div className="flex items-center justify-between px-4 md:px-6 py-2 md:py-4 border-b border-white/20">
-        <h2 className="text-lg font-semibold text-white">{settingsTitle}</h2>
-
-        <button
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-current/10 px-5 py-4">
+        <div className="flex flex-col gap-0.5">
+          <h2 className="text-sm font-semibold">{settingsTitle}</h2>
+          <p className="text-xs opacity-50">Conversation preferences</p>
+        </div>
+        <Button
+          variant="unstyled"
+          size="icon"
           onClick={onClose}
-          className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors"
           aria-label="Close quick access"
+          className="rounded-full hover:bg-current/10"
         >
-          <Icon name="close" size={16} />
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto scrollbar-glass px-4 md:px-6 py-3 md:py-4 space-y-4">
-        {isDesktop && desktopAPI?.window?.setDesktopMode ? (
-          <div className="space-y-4">
-            <SectionHeader
-              label="Mode"
-              onMore={() => onOpenSettings?.({ tab: "ui", subTab: "ui.mode" })}
-            />
-            <DesktopModeSettings
-              isLightBackground={isLightBackground}
-              compact
-            />
-          </div>
-        ) : null}
-
-        {embedConfig.features.liveAssistant3d && (
-          <SectionHeader
-            label="Enable Avatar"
-            onMore={() => onOpenSettings?.({ tab: "3d" })}
-            toggle={
-              <Toggle
-                aria-label="Enable Avatar"
-                data-testid="quick-enable-avatar-toggle"
-                checked={uiConfig.enableModelLoading}
-                onChange={(enabled) =>
-                  updateUIConfig("enableModelLoading", enabled)
-                }
-              />
-            }
-          />
-        )}
-
-        {isDesktop && desktopAPI?.xr && (
-          <div className="space-y-3">
-            <SectionHeader
-              label="XR"
-              onMore={() => onOpenSettings?.({ tab: "ui", subTab: "ui.mode" })}
-            />
-            <XrSettings isLightBackground={isLightBackground} compact />
-          </div>
-        )}
-
-        {/* LLM Provider */}
-        <div className="flex flex-col gap-4">
-          <SectionHeader
-            label="LLM Provider"
-            onMore={() =>
-              onOpenSettings?.({ tab: "llm", target: "llm.provider" })
-            }
-          />
-          <Select
-            data-testid="quick-provider-select"
-            value={provider}
-            onChange={(event) => updateAIConfig("provider", event.target.value)}
-            variant={isLightBackground ? "dark" : "default"}
-            options={Object.entries(availableProviders).map(([key, value]) => ({
-              value,
-              label: LLM_PROVIDER_LABELS[value] || key,
-            }))}
-          />
-          {profilesForProvider.length > 0 && (
-            <Select
-              value={selectedRemoteProfileId}
-              onChange={(event) => applyRemoteProfile(event.target.value)}
-              variant={isLightBackground ? "dark" : "default"}
-              options={[
-                { value: "", label: "Select saved backend" },
-                ...profilesForProvider.map((p) => ({
-                  value: p.id,
-                  label: p.name,
-                })),
-              ]}
-            />
-          )}
-          {modelProvider && !selectedRemoteProfileId && (
-            <RemoteModelPicker
-              inputTestId="quick-model-picker"
-              value={selectedModel}
-              onChange={setModelForProvider}
-              provider={modelProvider}
-              endpoint={modelEndpoint}
-              apiKey={modelApiKey}
-              placeholder="Search or type a model name"
-              isLightBackground={isLightBackground}
-            />
-          )}
-          <SettingsRow label="System Prompt" layout="stacked">
-            <Select
-              value={selectedPromptId}
-              onChange={(event) => setSystemPrompt(event.target.value)}
-              variant={isLightBackground ? "dark" : "default"}
-              options={systemPromptOptions}
-            />
-          </SettingsRow>
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-white leading-none flex items-center gap-1.5">
-              <Icon name="bulb" size={16} className="text-white/70" />
-              Thinking
+          <Icon name="close" size={17} />
+        </Button>
+      </header>
+      <Tabs.List
+        className="flex shrink-0 flex-col border-b border-current/15"
+        aria-label="Quick Access categories"
+      >
+        <div className="flex w-full">
+          {[
+            { id: "conversation", label: "Chat" },
+            { id: "voice", label: "Voice" },
+            { id: "appearance", label: "Appearance" },
+            ...(isDesktop &&
+            (desktopAPI?.window?.setDesktopMode || desktopAPI?.xr)
+              ? [{ id: "desktop", label: "Desktop" }]
+              : []),
+          ].map((tab) => (
+            <Tabs.Tab
+              key={tab.id}
+              value={tab.id}
+              className="flex min-w-0 flex-1 items-center justify-center px-3 py-2.5 text-xs font-medium opacity-55 transition-colors hover:bg-current/5 data-[active]:opacity-100 focus-visible:outline focus-visible:outline-1 focus-visible:outline-current"
+            >
+              {tab.label}
+            </Tabs.Tab>
+          ))}
+        </div>
+        <Tabs.Indicator className="quick-access-indicator" />
+      </Tabs.List>
+      <ScrollArea.Root className="flex min-h-0 flex-1 flex-col">
+        <ScrollArea.Viewport className="min-h-0 flex-1 outline-none">
+          <ScrollArea.Content
+            className="quick-access-content flex min-w-0 flex-col gap-4 p-4"
+            data-switching={pendingTab !== null}
+            onTransitionEnd={(event) => {
+              if (
+                event.target === event.currentTarget &&
+                event.propertyName === "opacity" &&
+                pendingTab
+              ) {
+                setActiveTab(pendingTab);
+                setPendingTab(null);
+              }
+            }}
+          >
+            <Tabs.Panel value="conversation" className="flex flex-col gap-3">
+              <h3 id="quick-conversation" className="quick-access-heading">
+                <Icon name="chat" size={14} />
+                Conversation
+              </h3>
+              <div className="quick-access-group">
+                <div className="quick-access-row">
+                  <div>
+                    <span className="text-sm font-medium">Personality</span>
+                    <p className="text-xs opacity-50">
+                      How your assistant responds
+                    </p>
+                  </div>
+                  <Select
+                    aria-label="System prompt"
+                    value={selectedPromptId}
+                    onChange={(event) => setSystemPrompt(event.target.value)}
+                    variant={selectVariant}
+                    className={selectClass}
+                    options={systemPromptOptions}
+                  />
+                </div>
+                {embedConfig.features.history && (
+                  <div className="quick-access-row">
+                    <div>
+                      <span className="text-sm font-medium">
+                        Temporary chat
+                      </span>
+                      <p className="text-xs opacity-50">
+                        Keep this chat out of history
+                      </p>
+                    </div>
+                    <Toggle
+                      aria-label="Temporary chat"
+                      checked={isTempChat}
+                      onChange={setIsTempChat}
+                    />
+                  </div>
+                )}
+                <div className="quick-access-row">
+                  <span className="text-sm">Expand thinking</span>
+                  <Toggle
+                    aria-label="Auto-expand thinking"
+                    data-testid="quick-thinking-autexpand-toggle"
+                    checked={uiConfig.thinkingPanelAutoExpand === true}
+                    onChange={(checked) =>
+                      updateUIConfig("thinkingPanelAutoExpand", checked)
+                    }
+                  />
+                </div>
+              </div>
+            </Tabs.Panel>
+            <Tabs.Panel value="voice" className="flex flex-col gap-3">
+              <h3 id="quick-voice" className="quick-access-heading">
+                <Icon name="microphone" size={14} />
+                Voice
+              </h3>
+              <div className="quick-access-group">
+                <div className="flex flex-col gap-2 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium">
+                      Read replies aloud
+                    </span>
+                    <Toggle
+                      aria-label="Enable voice output"
+                      checked={ttsConfig.enabled}
+                      onChange={(checked) =>
+                        updateTTSConfig("enabled", checked)
+                      }
+                    />
+                  </div>
+                  <Select
+                    aria-label="Voice output provider"
+                    value={ttsConfig.provider}
+                    disabled={!ttsConfig.enabled}
+                    onChange={(event) =>
+                      updateTTSConfig("provider", event.target.value)
+                    }
+                    variant={selectVariant}
+                    options={Object.entries(availableTTSProviders).map(
+                      ([key, value]) => ({
+                        value,
+                        label: TTS_PROVIDER_LABELS[value] || key,
+                      }),
+                    )}
+                  />
+                </div>
+                <div className="px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium">Voice input</span>
+                    <Toggle
+                      aria-label="Enable voice input"
+                      checked={sttConfig.enabled}
+                      onChange={(checked) =>
+                        updateSTTConfig("enabled", checked)
+                      }
+                    />
+                  </div>
+                  <Select
+                    aria-label="Voice input provider"
+                    value={sttConfig.provider}
+                    disabled={!sttConfig.enabled}
+                    onChange={(event) =>
+                      updateSTTConfig("provider", event.target.value)
+                    }
+                    variant={selectVariant}
+                    options={Object.entries(availableSTTProviders).map(
+                      ([key, value]) => ({
+                        value,
+                        label: STT_PROVIDER_LABELS[value] || key,
+                      }),
+                    )}
+                  />
+                </div>
+              </div>
+            </Tabs.Panel>
+            <Tabs.Panel value="appearance" className="flex flex-col gap-3">
+              <h3 id="quick-appearance" className="quick-access-heading">
+                <Icon name="settings" size={14} />
+                Appearance
+              </h3>
+              <div className="quick-access-group">
+                <div className="quick-access-row">
+                  <span className="text-sm">Theme</span>
+                  <Select
+                    aria-label="Theme"
+                    value={
+                      uiConfig.backgroundDetection?.mode ||
+                      BackgroundThemeModes.ADAPTIVE
+                    }
+                    onChange={(event) =>
+                      updateUIConfig(
+                        "backgroundDetection.mode",
+                        event.target.value,
+                      )
+                    }
+                    variant={selectVariant}
+                    className={selectClass}
+                    options={[
+                      {
+                        value: BackgroundThemeModes.ADAPTIVE,
+                        label: "Adaptive",
+                      },
+                      { value: "light", label: "Dark" },
+                      { value: "dark", label: "Light" },
+                    ]}
+                  />
+                </div>
+                {embedConfig.features.liveAssistant3d && (
+                  <div className="quick-access-row">
+                    <span className="text-sm">Show avatar</span>
+                    <Toggle
+                      aria-label="Enable Avatar"
+                      data-testid="quick-enable-avatar-toggle"
+                      checked={uiConfig.enableModelLoading}
+                      onChange={(enabled) =>
+                        updateUIConfig("enableModelLoading", enabled)
+                      }
+                    />
+                  </div>
+                )}
+                <div className="quick-access-row">
+                  <span className="text-sm">Selection toolbar</span>
+                  <Toggle
+                    aria-label="AI toolbar"
+                    checked={uiConfig.enableAIToolbar !== false}
+                    onChange={(checked) =>
+                      updateUIConfig("enableAIToolbar", checked)
+                    }
+                  />
+                </div>
+              </div>
+            </Tabs.Panel>
+            {isDesktop &&
+              (desktopAPI?.window?.setDesktopMode || desktopAPI?.xr) && (
+                <Tabs.Panel value="desktop" className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-4">
+                    {desktopAPI?.window && (
+                      <DesktopModeSettings
+                        isLightBackground={isLightBackground}
+                        compact
+                      />
+                    )}
+                    {desktopAPI?.xr && (
+                      <XrSettings
+                        isLightBackground={isLightBackground}
+                        compact
+                      />
+                    )}
+                  </div>
+                </Tabs.Panel>
+              )}
+          </ScrollArea.Content>
+        </ScrollArea.Viewport>
+        <ScrollArea.Scrollbar
+          orientation="vertical"
+          className="flex w-1.5 rounded-full p-px opacity-0 transition-opacity duration-200 data-[hovering]:opacity-100 data-[scrolling]:opacity-100 motion-reduce:transition-none"
+        >
+          <ScrollArea.Thumb className="w-full rounded-full bg-current/30" />
+        </ScrollArea.Scrollbar>
+      </ScrollArea.Root>
+      {onOpenSettings && embedConfig.features.settings && (
+        <footer className="shrink-0 border-t border-current/10 p-3">
+          <Button
+            variant="unstyled"
+            onClick={() => onOpenSettings()}
+            className="flex min-h-10 w-full justify-between rounded-xl px-3 text-sm hover:bg-current/10"
+          >
+            <span className="flex items-center gap-2">
+              <Icon name="settings" size={16} />
+              All settings
             </span>
-            <div className="flex items-center gap-2 shrink-0">
-              {thinkingEnabled && (
-                <Select
-                  data-testid="quick-thinking-effort-select"
-                  className="shrink-0 h-7 max-w-[7.5rem]"
-                  value={thinkingEffort ?? ""}
-                  onChange={(event) =>
-                    updateAIConfig(
-                      `${providerConfigKey}.thinkingEffort`,
-                      event.target.value || undefined,
-                    )
-                  }
-                  variant={isLightBackground ? "dark" : "default"}
-                  options={[
-                    { value: "", label: "Auto" },
-                    { value: "low", label: "Low" },
-                    { value: "medium", label: "Medium" },
-                    { value: "high", label: "High" },
-                    { value: "xhigh", label: "Max" },
-                  ]}
-                />
-              )}
-              <Toggle
-                data-testid="quick-thinking-toggle"
-                checked={thinkingEnabled}
-                className="shrink-0"
-                onChange={(checked) =>
-                  updateAIConfig(
-                    `${providerConfigKey}.thinkingEnabled`,
-                    checked,
-                  )
-                }
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Text-to-Speech */}
-        <div className="space-y-4">
-          <SectionHeader
-            label="Text-to-Speech"
-            toggle={
-              <Toggle
-                checked={ttsConfig.enabled}
-                onChange={(checked) => updateTTSConfig("enabled", checked)}
-              />
-            }
-            onMore={() =>
-              onOpenSettings?.({ tab: "tts", target: "tts.provider.select" })
-            }
-          />
-          {ttsConfig.enabled && (
-            <Select
-              value={ttsConfig.provider}
-              onChange={(event) =>
-                updateTTSConfig("provider", event.target.value)
-              }
-              variant={isLightBackground ? "dark" : "default"}
-              options={Object.entries(availableTTSProviders).map(
-                ([key, value]) => ({
-                  value,
-                  label: TTS_PROVIDER_LABELS[value] || key,
-                }),
-              )}
-            />
-          )}
-        </div>
-
-        {/* Speech-to-Text */}
-        <div className="space-y-4">
-          <SectionHeader
-            label="Speech-to-Text"
-            toggle={
-              <Toggle
-                checked={sttConfig.enabled}
-                onChange={(checked) => updateSTTConfig("enabled", checked)}
-              />
-            }
-            onMore={() =>
-              onOpenSettings?.({ tab: "stt", target: "stt.provider.select" })
-            }
-          />
-          {sttConfig.enabled && (
-            <Select
-              value={sttConfig.provider}
-              onChange={(event) =>
-                updateSTTConfig("provider", event.target.value)
-              }
-              variant={isLightBackground ? "dark" : "default"}
-              options={Object.entries(availableSTTProviders).map(
-                ([key, value]) => ({
-                  value,
-                  label: STT_PROVIDER_LABELS[value] || key,
-                }),
-              )}
-            />
-          )}
-        </div>
-
-        {/* Interface */}
-        {embedConfig.features.history ? (
-          <div className="space-y-4">
-            <SectionHeader
-              label="Interface"
-              onMore={() =>
-                onOpenSettings?.({ tab: "ui", target: "ui.appearance" })
-              }
-            />
-            <SettingsRow label="Theme" layout="stacked">
-              <Select
-                value={
-                  uiConfig.backgroundDetection?.mode ||
-                  BackgroundThemeModes.ADAPTIVE
-                }
-                onChange={(e) =>
-                  updateUIConfig("backgroundDetection.mode", e.target.value)
-                }
-                variant={isLightBackground ? "dark" : "default"}
-                options={[
-                  { value: BackgroundThemeModes.ADAPTIVE, label: "Adaptive" },
-                  { value: "light", label: "Dark" },
-                  { value: "dark", label: "Light" },
-                ]}
-              />
-            </SettingsRow>
-            <SettingsRow label="AI Toolbar">
-              <Toggle
-                checked={uiConfig.enableAIToolbar !== false}
-                onChange={(checked) =>
-                  updateUIConfig("enableAIToolbar", checked)
-                }
-              />
-            </SettingsRow>
-            <SettingsRow
-              label="Auto-expand Thinking"
-              description="Keep the thought panel open while reasoning streams"
-            >
-              <Toggle
-                data-testid="quick-thinking-autexpand-toggle"
-                checked={uiConfig.thinkingPanelAutoExpand === true}
-                onChange={(checked) =>
-                  updateUIConfig("thinkingPanelAutoExpand", checked)
-                }
-              />
-            </SettingsRow>
-            <SettingsRow
-              label="Temporary Chat"
-              description={
-                isTempChat
-                  ? "Messages are not persisted"
-                  : "Messages are saved in history"
-              }
-            >
-              <Toggle
-                checked={isTempChat}
-                onChange={(checked) => setIsTempChat(checked)}
-              />
-            </SettingsRow>
-          </div>
-        ) : null}
-      </div>
-    </div>
+            <Icon name="chevron-right" size={15} />
+          </Button>
+        </footer>
+      )}
+    </Tabs.Root>
   );
 };
 

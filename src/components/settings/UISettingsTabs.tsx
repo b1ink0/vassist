@@ -40,44 +40,31 @@ export const DisplayTab = ({
   onResetSetup,
 }: DisplayTabProps) => (
   <div className="space-y-6">
-    <div className="rounded-lg border border-white/20 bg-white/10 p-3">
-      <div className="flex items-start gap-3">
-        <Icon name="book" size={20} className="mt-0.5 flex-shrink-0" />
-        <div className="min-w-0 flex-1">
-          <h4 className="mb-1 text-sm font-semibold text-white">
-            Documentation
-          </h4>
-          <p className="mb-2 text-xs text-white/70">
-            Need help? Check out the full documentation for setup guides,
-            troubleshooting, and feature explanations.
-          </p>
-          <a
-            href="https://docs-vassist.vercel.app/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs font-medium transition-colors"
-          >
-            View Documentation
-            <Icon name="arrow-top-right" size={14} />
-          </a>
-        </div>
-      </div>
-    </div>
+    <SettingsRow label="Documentation" description="Setup guides and help">
+      <a
+        href="https://docs-vassist.vercel.app/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="vassist-ghost-button inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium"
+      >
+        Open <Icon name="arrow-top-right" size={14} />
+      </a>
+    </SettingsRow>
 
-    <Card variant="elevated">
+    <SettingsRow
+      label="Setup wizard"
+      description="Configure your assistant again"
+    >
       <Button
-        variant="default"
-        className="w-full font-semibold"
+        variant="ghost"
+        size="sm"
         onClick={onResetSetup}
         disabled={isResetting}
       >
         <Icon name="refresh" size={16} />
-        {isResetting ? "Resetting..." : "Start Setup Wizard Again"}
+        {isResetting ? "Resetting..." : "Start"}
       </Button>
-      <p className="text-xs">
-        Re-run the initial setup wizard to reconfigure your assistant
-      </p>
-    </Card>
+    </SettingsRow>
 
     {isExtension && (
       <SettingsRow

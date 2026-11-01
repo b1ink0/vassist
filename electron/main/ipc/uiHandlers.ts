@@ -802,6 +802,60 @@ export function registerUIIPCHandlers({
     },
   );
 
+  ipcMain.on(
+    "chatInput:modelSelection",
+    (event: IpcMainEvent, data: unknown) => {
+      if (
+        state.inputWindow &&
+        !state.inputWindow.isDestroyed() &&
+        event.sender === state.inputWindow.webContents &&
+        state.mainWindow &&
+        !state.mainWindow.isDestroyed()
+      )
+        state.mainWindow.webContents.send("chatInput:modelSelection", data);
+    },
+  );
+  ipcMain.on("chatInput:requestModelState", (event: IpcMainEvent) => {
+    if (
+      state.inputWindow &&
+      !state.inputWindow.isDestroyed() &&
+      event.sender === state.inputWindow.webContents &&
+      state.mainWindow &&
+      !state.mainWindow.isDestroyed()
+    )
+      state.mainWindow.webContents.send("chatInput:requestModelState");
+  });
+  ipcMain.on("chatInput:listModels", (event: IpcMainEvent, data: unknown) => {
+    if (
+      state.inputWindow &&
+      !state.inputWindow.isDestroyed() &&
+      event.sender === state.inputWindow.webContents &&
+      state.mainWindow &&
+      !state.mainWindow.isDestroyed()
+    )
+      state.mainWindow.webContents.send("chatInput:listModels", data);
+  });
+  ipcMain.on("state:chatModelList", (event: IpcMainEvent, data: unknown) => {
+    if (
+      state.mainWindow &&
+      !state.mainWindow.isDestroyed() &&
+      event.sender === state.mainWindow.webContents &&
+      state.inputWindow &&
+      !state.inputWindow.isDestroyed()
+    )
+      state.inputWindow.webContents.send("state:chatModelList", data);
+  });
+  ipcMain.on("state:chatModel", (event: IpcMainEvent, data: unknown) => {
+    if (
+      state.mainWindow &&
+      !state.mainWindow.isDestroyed() &&
+      event.sender === state.mainWindow.webContents &&
+      state.inputWindow &&
+      !state.inputWindow.isDestroyed()
+    )
+      state.inputWindow.webContents.send("state:chatModel", data);
+  });
+
   ipcMain.on("chatInput:send", (_event: IpcMainEvent, data: unknown) => {
     if (state.mainWindow && state.mainWindow.webContents) {
       state.mainWindow.webContents.send("chatInput:send", data);
@@ -861,6 +915,9 @@ export function registerUIIPCHandlers({
     if (state.mainWindow && state.mainWindow.webContents) {
       state.mainWindow.webContents.send("chatInput:toggleQuickPanel");
     }
+  });
+  ipcMain.on("chatInput:openContextSettings", () => {
+    state.mainWindow?.webContents.send("chatInput:openContextSettings");
   });
 
   ipcMain.on(

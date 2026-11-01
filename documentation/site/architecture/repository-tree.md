@@ -5,11 +5,11 @@ VAssist repository tree and file metrics.
 ## Totals
 
 - Directories: 208
-- Files: 788
-- Text files counted for metrics: 644
-- Total text lines: 197407
-- Code files counted for metrics: 511
-- Total code lines: 172548
+- Files: 800
+- Text files counted for metrics: 656
+- Total text lines: 199768
+- Code files counted for metrics: 520
+- Total code lines: 174523
 
 ## Line Counts by File Type
 
@@ -17,17 +17,17 @@ VAssist repository tree and file metrics.
 | ------------ | ----------------------- | ----: | ----: |
 | Batch Script | .bat                    |     1 |    94 |
 | C and C++    | .c, .cc, .cpp, .h, .hpp |     7 |  2003 |
-| CSS          | .css, .scss, .less      |     7 |  3220 |
+| CSS          | .css, .scss, .less      |     7 |  3384 |
 | HTML         | .html                   |     5 |   191 |
 | Java         | .java                   |     4 |   215 |
 | JavaScript   | .js, .mjs, .cjs         |     1 |    32 |
-| Kotlin       | .kt                     |    21 | 11403 |
+| Kotlin       | .kt                     |    22 | 11438 |
 | Shell Script | (no extension)          |     5 |   654 |
-| TSX          | .tsx                    |   142 | 60672 |
-| TypeScript   | .ts, .mts, .cts         |   318 | 94064 |
+| TSX          | .tsx                    |   146 | 61627 |
+| TypeScript   | .ts, .mts, .cts         |   322 | 94885 |
 | Gradle       | .gradle                 |     7 |   579 |
 | JSON         | .json                   |    19 |   642 |
-| Markdown     | .md                     |    37 |  6856 |
+| Markdown     | .md                     |    40 |  7242 |
 | Other Text   | mixed                   |    40 | 11717 |
 | Plain Text   | (no extension)          |    12 |  4264 |
 | Properties   | .properties             |     2 |    29 |
@@ -37,7 +37,7 @@ VAssist repository tree and file metrics.
 ## Top-Level Summary
 
 - .husky/: 1 directories, 1 files
-- android/: 64 directories, 93 files
+- android/: 64 directories, 94 files
 - android-src/: 1 directories, 3 files
 - documentation/: 16 directories, 67 files
 - electron/: 20 directories, 75 files
@@ -46,12 +46,13 @@ VAssist repository tree and file metrics.
 - licenses/: 1 directories, 1 files
 - packages/: 5 directories, 16 files
 - public/: 14 directories, 74 files
-- src/: 66 directories, 341 files
+- src/: 66 directories, 349 files
 - tests/: 9 directories, 57 files
 - tools/: 4 directories, 13 files
 - .gitignore: file
 - .prettierignore: file
 - .prettierrc.json: file
+- AGENTS.md: file
 - bun.lock: file
 - capacitor.config.json: file
 - CONTRIBUTING.md: file
@@ -64,6 +65,8 @@ VAssist repository tree and file metrics.
 - package.json: file
 - playwright.config.ts: file
 - README.md: file
+- RELEASE_DRAFT_DETAILED.md: file
+- RELEASE_DRAFT.md: file
 - tsconfig.app.json: file
 - tsconfig.base.json: file
 - tsconfig.electron.json: file
@@ -109,6 +112,7 @@ vassist/
 │   │   │   │   │               │   ├── LiteRtLmService.kt
 │   │   │   │   │               │   ├── LlamaService.kt
 │   │   │   │   │               │   ├── LLMModelManager.kt
+│   │   │   │   │               │   ├── LLMUsage.kt
 │   │   │   │   │               │   ├── LocalAIBridge.kt
 │   │   │   │   │               │   ├── LocalAIServer.kt
 │   │   │   │   │               │   ├── STTTTSModelManager.kt
@@ -613,6 +617,7 @@ vassist/
 │   │   ├── xr/
 │   │   │   ├── HtmlPanelHover.ts
 │   │   │   ├── HtmlPanelInput.ts
+│   │   │   ├── HtmlPanelRayInput.ts
 │   │   │   ├── SpatialPanel.ts
 │   │   │   ├── XrCapabilities.ts
 │   │   │   ├── XrSceneEditor.ts
@@ -637,6 +642,7 @@ vassist/
 │   │   │   │   ├── components/
 │   │   │   │   │   ├── AssistantControlPanels.tsx
 │   │   │   │   │   ├── AssistantControlStack.tsx
+│   │   │   │   │   ├── DockScrollPanel.tsx
 │   │   │   │   │   └── StageControlPanel.tsx
 │   │   │   │   ├── hooks/
 │   │   │   │   │   ├── useAssistantControlDrag.ts
@@ -657,7 +663,9 @@ vassist/
 │   │   │   ├── ChatInput.tsx
 │   │   │   ├── ChatMessage.tsx
 │   │   │   ├── ComposerMenu.tsx
+│   │   │   ├── ComposerModelPicker.tsx
 │   │   │   ├── ComposerPrimaryAction.tsx
+│   │   │   ├── ContextUsageIndicator.tsx
 │   │   │   ├── EmotePlaybackBar.tsx
 │   │   │   ├── floatingChatSize.ts
 │   │   │   ├── historyLayout.ts
@@ -669,6 +677,7 @@ vassist/
 │   │   │   ├── FlagCopyButton.tsx
 │   │   │   ├── LoadingIndicator.tsx
 │   │   │   ├── MarkdownText.tsx
+│   │   │   ├── ScrollEdgeBlur.tsx
 │   │   │   ├── ShortcutsConfig.tsx
 │   │   │   ├── StatusMessage.tsx
 │   │   │   ├── StreamdownMarkdown.tsx
@@ -785,6 +794,7 @@ vassist/
 │   │   └── SettingsPanel.tsx
 │   ├── config/
 │   │   ├── aiConfig.ts
+│   │   ├── aiProfiles.ts
 │   │   ├── androidTtsModels.ts
 │   │   ├── androidWhisperModels.ts
 │   │   ├── animationConfig.ts
@@ -829,6 +839,7 @@ vassist/
 │   │   │   ├── useConfigTTS.ts
 │   │   │   └── useConfigUI.ts
 │   │   ├── useAndroidStore.ts
+│   │   ├── useDesktopComposerModel.ts
 │   │   ├── useDesktopStore.ts
 │   │   ├── useDesktopWindowResize.ts
 │   │   ├── useVisibilityUnmount.ts
@@ -936,6 +947,7 @@ vassist/
 │   │   ├── android.d.ts
 │   │   ├── android.ts
 │   │   ├── assistant.ts
+│   │   ├── contextUsage.ts
 │   │   ├── electron.d.ts
 │   │   ├── env.d.ts
 │   │   ├── gpt-sovits-bootstrap.d.ts
@@ -1053,6 +1065,7 @@ vassist/
 ├── .gitignore
 ├── .prettierignore
 ├── .prettierrc.json
+├── AGENTS.md
 ├── bun.lock
 ├── capacitor.config.json
 ├── CONTRIBUTING.md
@@ -1065,6 +1078,8 @@ vassist/
 ├── package.json
 ├── playwright.config.ts
 ├── README.md
+├── RELEASE_DRAFT_DETAILED.md
+├── RELEASE_DRAFT.md
 ├── tsconfig.app.json
 ├── tsconfig.base.json
 ├── tsconfig.electron.json

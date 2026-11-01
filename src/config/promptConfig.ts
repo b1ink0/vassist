@@ -3,6 +3,13 @@
  * All AI prompts used throughout the application
  */
 
+export interface SystemPromptProfile {
+  id: string;
+  name: string;
+  prompt: string;
+  isBuiltIn?: boolean;
+}
+
 export const PromptConfig = {
   systemPrompts: {
     default: {

@@ -49,6 +49,7 @@ class LlamaService(private val context: Context) {
     
     // Chat template for formatting messages
     private var chatTemplate: String? = null
+    private var loadedContextSize: Int? = null
     
     /**
      * Initialize with a model from assets or external storage
@@ -94,6 +95,7 @@ class LlamaService(private val context: Context) {
                 "backends=${llama.backendsInfo()}")
 
             isInitialized = true
+            loadedContextSize = if (contextSize > 0) contextSize else DEFAULT_CONTEXT_SIZE
 
             return modelFile.absolutePath
 
@@ -150,7 +152,8 @@ class LlamaService(private val context: Context) {
         messages: List<ChatMessage>,
         maxTokens: Int = DEFAULT_MAX_TOKENS,
         images: List<ByteArray>? = null,
-        enableThinking: Boolean = false
+        enableThinking: Boolean = false,
+        onUsage: ((LLMUsage) -> Unit)? = null
     ): Flow<String> {
         if (!isInitialized) {
             throw IllegalStateException("LlamaService not initialized")
@@ -159,7 +162,9 @@ class LlamaService(private val context: Context) {
         val prompt = formatChatPrompt(messages, enableThinking)
         Log.d(TAG, "Chat prompt (${prompt.length} chars): ${prompt.take(200)}...")
         
-        return llama.complete(prompt, maxTokens, images)
+        return llama.complete(prompt, maxTokens, images) { input, output ->
+            onUsage?.invoke(LLMUsage(input + output, loadedContextSize, input, output))
+        }
     }
     
     /**
@@ -174,14 +179,17 @@ class LlamaService(private val context: Context) {
         messages: List<ChatMessage>,
         maxTokens: Int = DEFAULT_MAX_TOKENS,
         images: List<ByteArray>? = null,
-        enableThinking: Boolean = false
+        enableThinking: Boolean = false,
+        onUsage: ((LLMUsage) -> Unit)? = null
     ): String {
         if (!isInitialized) {
             throw IllegalStateException("LlamaService not initialized")
         }
         
         val prompt = formatChatPrompt(messages, enableThinking)
-        return llama.generate(prompt, maxTokens, images)
+        return llama.generate(prompt, maxTokens, images) { input, output ->
+            onUsage?.invoke(LLMUsage(input + output, loadedContextSize, input, output))
+        }
     }
     
     /**

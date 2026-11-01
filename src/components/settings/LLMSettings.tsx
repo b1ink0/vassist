@@ -11,6 +11,7 @@ import {
   useAIConfig,
   useAITesting,
   useConfigAIActions,
+  useApplyAIProfile,
 } from "../../hooks/config/useConfigAI";
 import {
   useChromeAIStatus,
@@ -18,6 +19,9 @@ import {
 } from "../../hooks/config/useConfigStatus";
 import {
   AIProviders,
+  thinkingEffortOptions,
+  getAvailableAIProviders,
+  getAIProviderSection,
   DefaultAIConfig,
   type AIConfig,
   type AIRemoteProviderProfile,
@@ -31,7 +35,11 @@ import {
   isSettingsTargetHidden,
   isSettingsTargetReadOnly,
 } from "../../embed/settingsPolicy";
-import { PromptConfig } from "../../config/promptConfig";
+import {
+  PromptConfig,
+  type SystemPromptProfile,
+} from "../../config/promptConfig";
+import { useConfigStore } from "../../stores/useConfigStore";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
 import { useAndroidApi } from "../../hooks/useAndroidStore";
 import ComputeUnitCard from "./llm/ComputeUnitCard";
@@ -40,10 +48,7 @@ import DesktopLLMConfig from "./llm/DesktopLLMConfig";
 import LLMParameterSettings, {
   NumberParameter,
 } from "./llm/LLMParameterSettings";
-import {
-  getLLMProfileParameters,
-  restoreLLMProfileParameters,
-} from "../../config/llmParameters";
+import { getLLMProfileParameters } from "../../config/llmParameters";
 import ChromeAIValidator from "../../services/ai/ChromeAIValidator";
 import LocalLLMModelManager from "./llm/LocalLLMModelManager";
 import {
@@ -147,13 +152,6 @@ interface SystemPromptSectionProps {
     options?: { debounceMs?: number },
   ) => void;
   aiConfig: AIConfigShape;
-}
-
-interface SystemPromptProfile {
-  id: string;
-  name: string;
-  prompt: string;
-  isBuiltIn?: boolean;
 }
 
 interface LLMSettingsProps {
@@ -270,8 +268,8 @@ const RemoteProfileManager = ({
   );
   const selectedProfile =
     profiles.find((profile) => profile.id === selectedProfileId) || null;
+  const selectedProfileName = selectedProfile?.name;
   const actionVariant = isLightBackground ? "dark" : "ghost";
-  const androidApi = useAndroidApi();
 
   React.useEffect(() => {
     if (
@@ -283,97 +281,17 @@ const RemoteProfileManager = ({
   }, [profiles, selectedProfileId, setSelectedProfileId]);
 
   React.useEffect(() => {
-    if (!selectedProfile) {
+    if (selectedProfileName === undefined) {
       if (!selectedProfileId) {
         setProfileName("");
       }
       return;
     }
 
-    setProfileName(selectedProfile.name);
-  }, [selectedProfile, selectedProfileId]);
+    setProfileName(selectedProfileName);
+  }, [selectedProfileName, selectedProfileId]);
 
-  const applyProfileToProvider = (profile: AIRemoteProviderProfile) => {
-    if (profile.provider === AIProviders.OPENAI) {
-      updateAIConfig("openai", {
-        ...aiConfig.openai,
-        selectedBackendProfileId: profile.id,
-        ...restoreLLMProfileParameters(profile, DefaultAIConfig.openai),
-        endpoint: profile.endpoint || DefaultAIConfig.openai.endpoint,
-        apiKey: profile.apiKey || "",
-        model: profile.model,
-        temperature: profile.temperature ?? DefaultAIConfig.openai.temperature,
-        maxTokens: profile.maxTokens ?? DefaultAIConfig.openai.maxTokens,
-        enableImageSupport: profile.enableImageSupport !== false,
-        enableAudioSupport: profile.enableAudioSupport !== false,
-      });
-      return;
-    }
-
-    if (profile.provider === AIProviders.ANDROID_LOCAL) {
-      updateAIConfig("android-local", {
-        ...aiConfig["android-local"],
-        selectedBackendProfileId: profile.id,
-        ...restoreLLMProfileParameters(
-          profile,
-          DefaultAIConfig["android-local"],
-        ),
-        endpoint: profile.endpoint || DefaultAIConfig["android-local"].endpoint,
-        model: profile.model,
-        temperature:
-          profile.temperature ?? DefaultAIConfig["android-local"].temperature,
-        maxTokens:
-          profile.maxTokens ?? DefaultAIConfig["android-local"].maxTokens,
-      });
-      void androidApi?.setLLMComputeUnit?.(profile.computeUnit || "auto");
-      return;
-    }
-
-    if (profile.provider === AIProviders.DESKTOP_LOCAL) {
-      updateAIConfig("desktop-local", {
-        ...aiConfig["desktop-local"],
-        selectedBackendProfileId: profile.id,
-        ...restoreLLMProfileParameters(
-          profile,
-          DefaultAIConfig["desktop-local"],
-        ),
-        endpoint: profile.endpoint || DefaultAIConfig["desktop-local"].endpoint,
-        model: profile.model,
-        customModelsPath:
-          profile.customModelsPath ??
-          DefaultAIConfig["desktop-local"].customModelsPath,
-        shareOnNetwork:
-          profile.shareOnNetwork ??
-          DefaultAIConfig["desktop-local"].shareOnNetwork,
-        serverPort:
-          profile.serverPort ?? DefaultAIConfig["desktop-local"].serverPort,
-        backend: profile.backend ?? DefaultAIConfig["desktop-local"].backend,
-        temperature:
-          profile.temperature ?? DefaultAIConfig["desktop-local"].temperature,
-        maxTokens:
-          profile.maxTokens ?? DefaultAIConfig["desktop-local"].maxTokens,
-        contextSize:
-          profile.contextSize ?? DefaultAIConfig["desktop-local"].contextSize,
-        gpuLayers:
-          profile.gpuLayers ?? DefaultAIConfig["desktop-local"].gpuLayers,
-        threads: profile.threads ?? DefaultAIConfig["desktop-local"].threads,
-      });
-      return;
-    }
-
-    updateAIConfig("ollama", {
-      ...aiConfig.ollama,
-      selectedBackendProfileId: profile.id,
-      apiKey: profile.apiKey || "",
-      ...restoreLLMProfileParameters(profile, DefaultAIConfig.ollama),
-      endpoint: profile.endpoint || DefaultAIConfig.ollama.endpoint,
-      model: profile.model,
-      temperature: profile.temperature ?? DefaultAIConfig.ollama.temperature,
-      maxTokens: profile.maxTokens ?? DefaultAIConfig.ollama.maxTokens,
-      enableImageSupport: profile.enableImageSupport !== false,
-      enableAudioSupport: profile.enableAudioSupport !== false,
-    });
-  };
+  const applyProfileToProvider = useApplyAIProfile();
 
   const handleProfileChange = (nextProfileId: string) => {
     setSelectedProfileId(nextProfileId);
@@ -676,6 +594,7 @@ const ModelConfigRemote = ({
                   }
                   provider={visionProfile?.provider || providerKey}
                   endpoint={visionProfile?.endpoint || endpoint}
+                  customModelsPath={visionProfile?.customModelsPath}
                   apiKey={visionProfile?.apiKey || apiKey}
                   placeholder={visionProfile?.model || examples.vision}
                   isLightBackground={isLightBackground}
@@ -738,6 +657,7 @@ const ModelConfigRemote = ({
                   }
                   provider={routerProfile?.provider || providerKey}
                   endpoint={routerProfile?.endpoint || endpoint}
+                  customModelsPath={routerProfile?.customModelsPath}
                   apiKey={routerProfile?.apiKey || apiKey}
                   placeholder={routerProfile?.model || examples.router}
                   isLightBackground={isLightBackground}
@@ -877,6 +797,7 @@ const ModelConfigLocal = ({
                       }
                       provider={visionProfile.provider}
                       endpoint={visionProfile.endpoint}
+                      customModelsPath={visionProfile.customModelsPath}
                       apiKey={visionProfile.apiKey}
                       placeholder={visionProfile.model || "Remote model"}
                       isLightBackground={isLightBackground}
@@ -1012,6 +933,7 @@ const ModelConfigLocal = ({
                       }
                       provider={routerProfile.provider}
                       endpoint={routerProfile.endpoint}
+                      customModelsPath={routerProfile.customModelsPath}
                       apiKey={routerProfile.apiKey}
                       placeholder={routerProfile.model || "Remote model"}
                       isLightBackground={isLightBackground}
@@ -1241,110 +1163,42 @@ const SystemPromptSection = ({
   const selectedProfileId = normalized.selectedId;
   const selectedProfile =
     profiles.find((profile) => profile.id === selectedProfileId) || profiles[0];
-  const [draftProfileName, setDraftProfileName] = React.useState(
-    selectedProfile?.name || "",
-  );
-  const [draftProfilePrompt, setDraftProfilePrompt] = React.useState(
-    selectedProfile?.prompt || "",
-  );
-
   const persistProfiles = React.useCallback(
-    (
-      nextProfiles: SystemPromptProfile[],
-      nextSelectedId: string,
-      options?: { debounceMs?: number },
-    ) => {
-      updateAIConfig(
-        `${providerKey}.systemPromptProfiles`,
-        nextProfiles,
-        options,
+    (nextProfiles: SystemPromptProfile[], nextSelectedId: string) => {
+      const current = useConfigStore.getState().aiConfig[providerKey] as Record<
+        string,
+        unknown
+      >;
+      const nextActive = nextProfiles.find(
+        (profile) => profile.id === nextSelectedId,
       );
-      updateAIConfig(
-        `${providerKey}.selectedSystemPromptProfileId`,
-        nextSelectedId,
-        options,
-      );
-
-      const nextActive =
-        nextProfiles.find((profile) => profile.id === nextSelectedId) ||
-        nextProfiles[0];
-      if (nextActive) {
-        updateAIConfig(
-          `${providerKey}.systemPromptType`,
-          nextActive.id,
-          options,
-        );
-        updateAIConfig(
-          `${providerKey}.systemPrompt`,
-          nextActive.prompt,
-          options,
-        );
-      }
+      updateAIConfig(providerKey, {
+        ...current,
+        systemPromptProfiles: nextProfiles,
+        selectedSystemPromptProfileId: nextSelectedId,
+        ...(nextActive
+          ? {
+              systemPromptType: nextActive.isBuiltIn ? nextActive.id : "custom",
+              systemPrompt: nextActive.prompt,
+            }
+          : {}),
+      });
     },
     [providerKey, updateAIConfig],
   );
-
-  const getProfilesWithDraftEdits = React.useCallback((): {
-    nextProfiles: SystemPromptProfile[];
-    changed: boolean;
-  } => {
-    if (!selectedProfile) {
-      return { nextProfiles: profiles, changed: false };
-    }
-
-    let changed = false;
-    const nextProfiles = profiles.map((profile) => {
-      if (profile.id !== selectedProfile.id) {
-        return profile;
-      }
-
-      const nextName =
-        draftProfileName.length > 0 ? draftProfileName : "Unnamed";
-      const nextPrompt = draftProfilePrompt;
-      if (profile.name === nextName && profile.prompt === nextPrompt) {
-        return profile;
-      }
-
-      changed = true;
-      return { ...profile, name: nextName, prompt: nextPrompt };
-    });
-
-    return { nextProfiles, changed };
-  }, [draftProfileName, draftProfilePrompt, profiles, selectedProfile]);
-
-  const commitDraftEdits = React.useCallback(
-    (options?: { debounceMs?: number }) => {
-      if (!selectedProfile) {
-        return;
-      }
-
-      const { nextProfiles, changed } = getProfilesWithDraftEdits();
-      if (changed) {
-        persistProfiles(nextProfiles, selectedProfile.id, options);
-      }
-    },
-    [getProfilesWithDraftEdits, persistProfiles, selectedProfile],
-  );
-
-  React.useEffect(() => {
-    setDraftProfileName(selectedProfile?.name || "");
-    setDraftProfilePrompt(selectedProfile?.prompt || "");
-  }, [selectedProfile?.id, selectedProfile?.name, selectedProfile?.prompt]);
-
-  React.useEffect(() => {
-    if (!selectedProfile) {
-      return;
-    }
-
-    if (
-      draftProfileName === selectedProfile.name &&
-      draftProfilePrompt === selectedProfile.prompt
-    ) {
-      return;
-    }
-
-    commitDraftEdits({ debounceMs: 250 });
-  }, [commitDraftEdits, draftProfileName, draftProfilePrompt, selectedProfile]);
+  const updateSelectedProfile = (
+    changes: Partial<Pick<SystemPromptProfile, "name" | "prompt">>,
+  ) => {
+    if (!selectedProfile) return;
+    persistProfiles(
+      profiles.map((profile) =>
+        profile.id === selectedProfile.id
+          ? { ...profile, ...changes }
+          : profile,
+      ),
+      selectedProfile.id,
+    );
+  };
 
   React.useEffect(() => {
     const rawProfiles = Array.isArray(providerConfig.systemPromptProfiles)
@@ -1372,23 +1226,21 @@ const SystemPromptSection = ({
   ]);
 
   const addProfile = (): void => {
-    const { nextProfiles: profilesWithDrafts } = getProfilesWithDraftEdits();
     const timestamp = Date.now();
     const nextProfile: SystemPromptProfile = {
       id: `custom-${timestamp}`,
-      name: `Custom ${profilesWithDrafts.filter((profile) => profile.id.startsWith("custom-")).length + 1}`,
+      name: `Custom ${profiles.filter((profile) => profile.id.startsWith("custom-")).length + 1}`,
       prompt: selectedProfile?.prompt || "",
       isBuiltIn: false,
     };
-    persistProfiles([...profilesWithDrafts, nextProfile], nextProfile.id);
+    persistProfiles([...profiles, nextProfile], nextProfile.id);
   };
 
   const deleteCurrentProfile = (): void => {
     if (!selectedProfile || profiles.length <= 1) {
       return;
     }
-    const { nextProfiles: profilesWithDrafts } = getProfilesWithDraftEdits();
-    const remaining = profilesWithDrafts.filter(
+    const remaining = profiles.filter(
       (profile) => profile.id !== selectedProfile.id,
     );
     const fallbackId = remaining[0]?.id || "default";
@@ -1415,8 +1267,7 @@ const SystemPromptSection = ({
               onChange={(e) => {
                 const nextId = e.target.value;
                 if (profiles.some((profile) => profile.id === nextId)) {
-                  const { nextProfiles } = getProfilesWithDraftEdits();
-                  persistProfiles(nextProfiles, nextId);
+                  persistProfiles(profiles, nextId);
                 }
               }}
               variant={isLightBackground ? "dark" : "default"}
@@ -1454,9 +1305,8 @@ const SystemPromptSection = ({
         </label>
         <Input
           data-testid="llm-system-profile-name-input"
-          value={draftProfileName}
-          onChange={(e) => setDraftProfileName(e.target.value)}
-          onBlur={() => commitDraftEdits()}
+          value={selectedProfile?.name ?? ""}
+          onChange={(e) => updateSelectedProfile({ name: e.target.value })}
           variant={isLightBackground ? "dark" : "default"}
           placeholder="Profile name"
           className="w-full"
@@ -1469,9 +1319,8 @@ const SystemPromptSection = ({
         </label>
         <textarea
           data-testid="llm-system-profile-prompt-input"
-          value={draftProfilePrompt}
-          onChange={(e) => setDraftProfilePrompt(e.target.value)}
-          onBlur={() => commitDraftEdits()}
+          value={selectedProfile?.prompt ?? ""}
+          onChange={(e) => updateSelectedProfile({ prompt: e.target.value })}
           placeholder="Enter system prompt..."
           rows={4}
           className={cn(
@@ -1520,12 +1369,8 @@ const LLMSettings = ({
   const { updateAIConfig, testAIConnection } = useConfigAIActions();
   const uiConfig = useUIConfig();
   const { updateUIConfig } = useConfigUIActions();
-  const activeSectionKey =
-    aiConfig.provider === AIProviders.CHROME_AI
-      ? "chromeAi"
-      : aiConfig.provider;
-  const thinkingEffort = (aiConfig as Record<string, any>)[activeSectionKey]
-    ?.thinkingEffort;
+  const activeSectionKey = getAIProviderSection(aiConfig.provider);
+  const thinkingEffort = aiConfig[activeSectionKey].thinkingEffort;
 
   const androidAPI = useAndroidApi();
   const desktopAPI = useDesktopApi();
@@ -1749,19 +1594,7 @@ const LLMSettings = ({
 
   // Filter providers based on platform
   const availableProviders = useMemo(() => {
-    if (isAndroid) {
-      const { DESKTOP_LOCAL, CHROME_AI, ...androidProviders } = AIProviders;
-      return androidProviders;
-    }
-
-    if (isDesktop) {
-      const { ANDROID_LOCAL, CHROME_AI, ...desktopProviders } = AIProviders;
-      return desktopProviders;
-    }
-
-    const { ANDROID_LOCAL, DESKTOP_LOCAL, CHROME_AI, ...webProviders } =
-      AIProviders;
-    return webProviders;
+    return getAvailableAIProviders({ isAndroid, isDesktop });
   }, []);
 
   const [activeSubTab, setActiveSubTab] = useState<LLMSubTabId>("provider");
@@ -1990,9 +1823,9 @@ const LLMSettings = ({
             value={aiConfig.provider}
             onChange={(e) => updateAIConfig("provider", e.target.value)}
             variant={isLightBackground ? "dark" : "default"}
-            options={Object.entries(availableProviders).map(([key, value]) => ({
+            options={availableProviders.map((value) => ({
               value,
-              label: PROVIDER_LABELS[value] || key,
+              label: PROVIDER_LABELS[value] || value,
             }))}
           />
         </SettingsRow>
@@ -2008,13 +1841,7 @@ const LLMSettings = ({
               )
             }
             variant={isLightBackground ? "dark" : "default"}
-            options={[
-              { value: "", label: "Auto (model default)" },
-              { value: "low", label: "Low" },
-              { value: "medium", label: "Medium" },
-              { value: "high", label: "High" },
-              { value: "xhigh", label: "Max" },
-            ]}
+            options={thinkingEffortOptions}
           />
         </SettingsRow>
 

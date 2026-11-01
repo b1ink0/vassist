@@ -296,10 +296,9 @@ function AndroidBackground() {
                 setIsNextVisible(true);
                 fadeTimer = setTimeout(() => {
                   if (cancelled) return;
-                  const previousImageIndex = activeImageIndex;
                   activeImageIndex = followingIndex;
                   setCurrentIndex(followingIndex);
-                  setNextIndex(previousImageIndex);
+                  setNextIndex(null);
                   setIsNextVisible(false);
                   scheduleNext();
                 }, fadeMs);

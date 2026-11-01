@@ -43,6 +43,7 @@ import BackgroundDetector from "../../utils/BackgroundDetector";
 import DragDropService from "../../services/media/DragDropService";
 import UtilService from "../../services/common/UtilService";
 import ChatMessage from "./ChatMessage";
+import { ScrollEdgeBlur } from "../common/ScrollEdgeBlur";
 import { ComposerMenu } from "./ComposerMenu";
 import DesktopModeSettings from "../settings/DesktopModeSettings";
 import { modelStorageService } from "../../services/storage/ModelStorageService";
@@ -74,7 +75,8 @@ import {
   usePlaybackActions,
   usePlayingMessageIndex,
 } from "../../hooks/app/usePlayback";
-import { usePositionManagerRef } from "../../hooks/app/useScene";
+import { usePositionManagerRef, useSceneRef } from "../../hooks/app/useScene";
+import { getAvatarScreenBounds } from "../../babylon/camera/getAvatarScreenBounds";
 import {
   useIsHistoryPanelOpen,
   useIsQuickPanelOpen,
@@ -145,6 +147,7 @@ interface ButtonPosition {
 interface ContainerPosition {
   x: number;
   y: number;
+  width?: number;
 }
 
 interface ChatMessageLike {
@@ -375,6 +378,7 @@ const ChatContainer = ({
   const reactCustomizations = useVAssistReactCustomizations(hostId);
   const { chatHistoryService } = useAppRuntimeServices();
   const positionManagerRef = usePositionManagerRef();
+  const sceneRef = useSceneRef();
   const messages = useChatMessages();
   const currentChatId = useCurrentChatId();
   const chatContainerVisible = useIsChatContainerVisible();
@@ -556,6 +560,7 @@ const ChatContainer = ({
   const localChatInputRef = useRef<HTMLDivElement | null>(null);
   const chatInputRef = externalChatInputRef ?? localChatInputRef;
   const [normalChatInputHeight, setNormalChatInputHeight] = useState(140);
+  const [androidKeyboardHeight, setAndroidKeyboardHeight] = useState(0);
   const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(
     null,
   );
@@ -563,6 +568,19 @@ const ChatContainer = ({
   const [isSettingsPanelClosing, setIsSettingsPanelClosing] = useState(false);
   const [isQuickPanelClosing, setIsQuickPanelClosing] = useState(false);
   const [isHistoryPanelClosing, setIsHistoryPanelClosing] = useState(false);
+
+  useEffect(() => {
+    if (!isAndroid) return;
+    const handleKeyboardHeight = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const height = event.detail?.height;
+      if (typeof height === "number")
+        setAndroidKeyboardHeight(Math.max(0, height));
+    };
+    window.addEventListener("keyboardHeightChange", handleKeyboardHeight);
+    return () =>
+      window.removeEventListener("keyboardHeightChange", handleKeyboardHeight);
+  }, []);
 
   useEffect(() => {
     if (!isDetachedChatWindow) return;
@@ -663,12 +681,12 @@ const ChatContainer = ({
   const historyEnabled = embedConfig.features.history;
   const attachedHistoryLayout = (isAndroid || normalDesktop) && !xr.active;
   const floatingDockChatControls =
-    isDesktop &&
+    !isAndroid &&
     !normalDesktop &&
     (!isDetachedDesktopWindow || isDetachedChatWindow) &&
     !xr.active;
   const resizableFloatingChat =
-    floatingDockChatControls && !isDetachedChatWindow;
+    isDesktop && floatingDockChatControls && !isDetachedChatWindow;
   const chatOnlyAttached = modelDisabled && attachedHistoryLayout;
   const attachedChatTop =
     attachedHistoryLayout && historyEnabled ? (isAppModeWindow ? 96 : 64) : 16;
@@ -897,7 +915,10 @@ const ChatContainer = ({
       };
     }
 
-    if (isSmallScreen) {
+    if (
+      isSmallScreen &&
+      (modelDisabled || isDesktop || window.innerWidth < 480)
+    ) {
       const containerWidth = Math.min(
         resizableFloatingChat ? floatingSize.width : 400,
         window.innerWidth - 16,
@@ -954,7 +975,12 @@ const ChatContainer = ({
       return { x: containerX, y: containerY };
     } else if (positionManagerRef?.current) {
       try {
-        const modelPos = positionManagerRef.current.getPositionPixels();
+        const scene = sceneRef.current;
+        const modelPos =
+          !isDesktop && scene?.metadata?.getCameraMode?.() === "3D"
+            ? (getAvatarScreenBounds(scene) ??
+              positionManagerRef.current.getPositionPixels())
+            : positionManagerRef.current.getPositionPixels();
         const containerWidth = Math.min(
           resizableFloatingChat ? floatingSize.width : 400,
           window.innerWidth - 16,
@@ -966,6 +992,33 @@ const ChatContainer = ({
         const windowWidth = window.innerWidth;
         const windowHeight = window.innerHeight;
         const availableHeight = windowHeight - chatInputHeight;
+
+        if (!isDesktop) {
+          const dockLeft =
+            buttonPosition.x >= 0 ? buttonPosition.x : modelPos.x;
+          const dockRight =
+            buttonPosition.x >= 0
+              ? buttonPosition.x + 48
+              : modelPos.x + modelPos.width;
+          const rightEdge =
+            Math.max(modelPos.x + modelPos.width, dockRight) + 15;
+          const leftEdge = Math.min(modelPos.x, dockLeft) - 15;
+          const rightSpace = Math.max(0, windowWidth - 8 - rightEdge);
+          const leftSpace = Math.max(0, leftEdge - 8);
+          const useLeft = leftSpace > rightSpace && rightSpace < containerWidth;
+          const space = useLeft ? leftSpace : rightSpace;
+          if (space >= 160) {
+            const width = Math.min(containerWidth, space);
+            return {
+              x: useLeft ? leftEdge - width : rightEdge,
+              y: Math.max(
+                10,
+                Math.min(modelPos.y, availableHeight - containerHeight - 10),
+              ),
+              width,
+            };
+          }
+        }
 
         const rightX = modelPos.x + modelPos.width + offsetX;
         const leftX = modelPos.x - containerWidth - offsetX;
@@ -1015,6 +1068,7 @@ const ChatContainer = ({
     normalDesktop,
     resizableFloatingChat,
     floatingSize,
+    buttonPosition.x,
     isDetachedChatWindow,
     uiConfig.desktopMode.appMode.chatSplitPercent,
   ]);
@@ -1066,7 +1120,7 @@ const ChatContainer = ({
     if (normalDesktop) return;
 
     const handleModelPosition = () => {
-      if (resizableFloatingChat) {
+      if (resizableFloatingChat || (!isDesktop && !isAndroid)) {
         setContainerPos(calculateContainerPosition());
         return;
       }
@@ -2544,8 +2598,12 @@ const ChatContainer = ({
   const androidChatInputHeight =
     chatInputRef?.current?.getBoundingClientRect().height || 140;
   const androidContainerHeight = Math.max(
-    320,
-    window.innerHeight - androidChatTop - androidChatInputHeight + 40,
+    80,
+    window.innerHeight -
+      androidChatTop -
+      androidChatInputHeight +
+      40 -
+      (isSettingsPanelOpen || isHistoryPanelOpen ? 0 : androidKeyboardHeight),
   );
   const historyDialogs = (
     <Suspense fallback={null}>
@@ -2684,6 +2742,9 @@ const ChatContainer = ({
         data-electron-interactive="true"
         style={{
           position: "fixed",
+          ...(isAndroid
+            ? { transition: "height 0.1s ease-out, max-height 0.1s ease-out" }
+            : {}),
           left: chatOnlyAttached
             ? "50%"
             : normalDesktop
@@ -2700,7 +2761,7 @@ const ChatContainer = ({
                 ? "16px"
                 : `${containerPos.y}px`,
           height: isAndroid
-            ? `max(320px, calc(${androidContainerHeight}px - ${ANDROID_SYSTEM_INSET_TOP}))`
+            ? `max(80px, calc(${androidContainerHeight}px - ${ANDROID_SYSTEM_INSET_TOP}))`
             : normalDesktop
               ? `calc(100vh - ${normalChatInputHeight + attachedChatTop + 16}px)`
               : isDetachedChatWindow
@@ -2709,7 +2770,7 @@ const ChatContainer = ({
                   ? `${floatingSize.height}px`
                   : undefined,
           maxHeight: isAndroid
-            ? `max(320px, calc(${androidContainerHeight}px - ${ANDROID_SYSTEM_INSET_TOP}))`
+            ? `max(80px, calc(${androidContainerHeight}px - ${ANDROID_SYSTEM_INSET_TOP}))`
             : normalDesktop
               ? `calc(100vh - ${normalChatInputHeight + attachedChatTop + 16}px)`
               : isDetachedChatWindow
@@ -2728,7 +2789,9 @@ const ChatContainer = ({
                 ? "calc(100vw - 32px)"
                 : resizableFloatingChat
                   ? `${floatingSize.width}px`
-                  : undefined,
+                  : !isDesktop && !isAndroid && !modelDisabled
+                    ? containerPos.width
+                    : undefined,
           maxWidth: chatOnlyAttached
             ? "768px"
             : normalDesktop || isDetachedChatWindow
@@ -3258,26 +3321,6 @@ const ChatContainer = ({
               : {}),
           }}
         >
-          {!(isDesktop || isAndroid) && (
-            <div
-              className={cn(
-                "absolute top-0 left-0 right-0 h-[10px] rounded-t-[10px] rounded-b-[1px] z-10 pointer-events-none glass-message",
-                isLightBackground && "glass-message-dark",
-                isClosing ? "animate-fade-out" : "animate-fade-in",
-              )}
-            />
-          )}
-
-          {!(isDesktop || isAndroid) && (
-            <div
-              className={cn(
-                "absolute bottom-0 left-0 right-0 h-[10px] rounded-t-[1px] rounded-b-[10px] z-10 pointer-events-none glass-message",
-                isLightBackground && "glass-message-dark",
-                isClosing ? "animate-fade-out" : "animate-fade-in",
-              )}
-            />
-          )}
-
           {/* Scrollable messages */}
           <div
             ref={scrollRef}
@@ -3435,6 +3478,15 @@ const ChatContainer = ({
               </div>
             )}
           </div>
+          {(!isDesktop || normalDesktop) &&
+            !xr.active &&
+            messages.length > 0 && (
+              <ScrollEdgeBlur
+                scrollRef={scrollRef}
+                fadeItems
+                itemSelector=".glass-message, .glass-message-user, .chat-message-actions"
+              />
+            )}
         </div>
 
         {/* Settings Panel - renders inside ChatContainer */}

@@ -42,11 +42,12 @@ const SettingsRow = ({
     targetId !== undefined && isSettingsTargetReadOnly(embedConfig, targetId);
 
   const labelContent = (
-    <div className="flex-1 min-w-0" data-settings-label-content>
+    <div
+      className="flex min-w-0 flex-1 flex-col gap-0.5"
+      data-settings-label-content
+    >
       <span className="text-sm text-white font-medium">{label}</span>
-      {description && (
-        <p className="text-xs text-white/50 mt-0.5">{description}</p>
-      )}
+      {description && <p className="text-xs text-white/50">{description}</p>}
     </div>
   );
 
@@ -61,10 +62,10 @@ const SettingsRow = ({
       <div
         {...rowAttributes}
         data-settings-target={targetId}
-        className={cn("space-y-2", className)}
+        className={cn("flex flex-col gap-2", className)}
       >
         {labelContent}
-        <div className="space-y-2" data-settings-control-group>
+        <div className="flex flex-col gap-2" data-settings-control-group>
           <div
             data-settings-control
             inert={isReadOnly}

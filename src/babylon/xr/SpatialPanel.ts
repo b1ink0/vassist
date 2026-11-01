@@ -86,12 +86,11 @@ export class SpatialPanel {
     this.follow.maxViewHorizontalDegrees = 20;
     this.follow.maxViewVerticalDegrees = 15;
     this.setAnchor(options.anchor);
-    const handle = MeshBuilder.CreateBox(
+    const handle = MeshBuilder.CreatePlane(
       `${options.id}-grab`,
       {
-        width: Math.min(options.widthMeters, 0.08) * units,
+        width: Math.min(options.widthMeters, 0.12) * units,
         height: 0.035 * units,
-        depth: 0.012 * units,
       },
       scene,
     );
@@ -106,6 +105,8 @@ export class SpatialPanel {
     );
     this.handleMaterial.disableLighting = true;
     this.handleMaterial.emissiveColor = Color3.White();
+    this.handleMaterial.backFaceCulling = false;
+    this.handleMaterial.useAlphaFromDiffuseTexture = true;
     this.handleTexture = new DynamicTexture(
       `${options.id}-grab-label`,
       { width: 256, height: 64 },
@@ -113,17 +114,24 @@ export class SpatialPanel {
       false,
     );
     const grip = this.handleTexture.getContext();
-    grip.fillStyle = "#25292c";
-    grip.fillRect(0, 0, 256, 64);
-    grip.fillStyle = "#d4d4d4";
-    for (let row = 0; row < 2; row++) {
-      for (let column = 0; column < 3; column++) {
-        grip.beginPath();
-        grip.arc(96 + column * 32, 20 + row * 24, 5, 0, Math.PI * 2);
-        grip.fill();
-      }
+    grip.clearRect(0, 0, 256, 64);
+    grip.fillStyle = "rgba(28, 28, 30, 0.72)";
+    grip.beginPath();
+    grip.moveTo(32, 2);
+    grip.lineTo(224, 2);
+    grip.arc(224, 32, 30, -Math.PI / 2, Math.PI / 2);
+    grip.lineTo(32, 62);
+    grip.arc(32, 32, 30, Math.PI / 2, (3 * Math.PI) / 2);
+    grip.closePath();
+    grip.fill();
+    grip.fillStyle = "rgba(255, 255, 255, 0.75)";
+    for (let column = 0; column < 4; column++) {
+      grip.beginPath();
+      grip.arc(86 + column * 28, 32, 5, 0, Math.PI * 2);
+      grip.fill();
     }
     this.handleTexture.update();
+    this.handleTexture.hasAlpha = true;
     this.handleMaterial.diffuseTexture = this.handleTexture;
     handle.material = this.handleMaterial;
     this.drag.draggableMeshes = [handle];

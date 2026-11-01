@@ -860,11 +860,13 @@ class LocalAIServer(
     ): Response {
         return runBlocking(aiDispatcher) {
             try {
+                var usage: LLMUsage? = null
+                val onUsage: (LLMUsage) -> Unit = { usage = it }
                 var response = if (activeRuntime == "litert") {
-                    getLiteRtService().chatCompletionSync(messages, maxTokens, images.ifEmpty { null }, audios.ifEmpty { null }, enableThinking)
+                    getLiteRtService().chatCompletionSync(messages, maxTokens, images.ifEmpty { null }, audios.ifEmpty { null }, enableThinking, onUsage)
                 } else {
                     if (audios.isNotEmpty()) Log.w(TAG, "Audio attachments require a .litertlm model - ignoring ${audios.size} audio(s)")
-                    getLlamaService().chatCompletionSync(messages, maxTokens, images.ifEmpty { null }, enableThinking)
+                    getLlamaService().chatCompletionSync(messages, maxTokens, images.ifEmpty { null }, enableThinking, onUsage)
                 }
                 
                 // Split reasoning into the standard message.reasoning_content
@@ -909,11 +911,7 @@ class LocalAIServer(
                             addProperty("finish_reason", "stop")
                         })
                     })
-                    add("usage", JsonObject().apply {
-                        addProperty("prompt_tokens", 0) // TODO: calculate
-                        addProperty("completion_tokens", 0)
-                        addProperty("total_tokens", 0)
-                    })
+                    usage?.let { add("usage", usageJson(it)) }
                 }
                 
                 jsonResponse(result)
@@ -945,11 +943,13 @@ class LocalAIServer(
         // Launch streaming in background — save job ref so we can cancel on client disconnect
         val streamingJob = scope.launch(aiDispatcher) {
             try {
+                var usage: LLMUsage? = null
+                val onUsage: (LLMUsage) -> Unit = { usage = it }
                 val tokenFlow = if (activeRuntime == "litert") {
-                    getLiteRtService().chatCompletion(messages, maxTokens, images.ifEmpty { null }, audios.ifEmpty { null }, enableThinking)
+                    getLiteRtService().chatCompletion(messages, maxTokens, images.ifEmpty { null }, audios.ifEmpty { null }, enableThinking, onUsage)
                 } else {
                     if (audios.isNotEmpty()) Log.w(TAG, "Audio attachments require a .litertlm model - ignoring ${audios.size} audio(s)")
-                    getLlamaService().chatCompletion(messages, maxTokens, images.ifEmpty { null }, enableThinking)
+                    getLlamaService().chatCompletion(messages, maxTokens, images.ifEmpty { null }, enableThinking, onUsage)
                 }
                 
                 // Buffer for detecting and stripping <think> blocks
@@ -1074,6 +1074,7 @@ class LocalAIServer(
                         })
                     })
                 }
+                usage?.let { finalChunk.add("usage", usageJson(it)) }
                 val finalData = "data: ${gson.toJson(finalChunk)}\n\ndata: [DONE]\n\n".toByteArray(Charsets.UTF_8)
                 chunkQueue.put(finalData)
                 chunkQueue.put(END_MARKER) // Signal end of stream
@@ -1165,6 +1166,16 @@ class LocalAIServer(
     /**
      * Create JSON response
      */
+    private fun usageJson(usage: LLMUsage): JsonObject = JsonObject().apply {
+        addProperty("context_tokens", usage.contextTokens)
+        usage.contextSize?.let { addProperty("context_size", it) }
+        usage.inputTokens?.let { addProperty("prompt_tokens", it) }
+        usage.outputTokens?.let { addProperty("completion_tokens", it) }
+        if (usage.inputTokens != null && usage.outputTokens != null) {
+            addProperty("total_tokens", usage.inputTokens + usage.outputTokens)
+        }
+    }
+
     private fun jsonResponse(json: JsonObject): Response {
         return newFixedLengthResponse(
             Response.Status.OK,

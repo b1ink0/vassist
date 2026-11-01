@@ -989,7 +989,7 @@ async function registerHandlers() {
 
       // Only provide streaming callback if actually needed
       const sendToken = (token: string, channel?: string) => {
-        chrome.tabs
+        return chrome.tabs
           .sendMessage(requireSenderTabId(sender), {
             type: MessageTypes.AI_STREAM_TOKEN,
             requestId: message.requestId,
@@ -1025,8 +1025,14 @@ async function registerHandlers() {
         options,
       );
 
+      if (isStreamingRequest && result.contextUsage)
+        await sendToken(JSON.stringify(result.contextUsage), "context-usage");
       return result.success
-        ? { response: result.response, thinking: result.thinking }
+        ? {
+            response: result.response,
+            thinking: result.thinking,
+            contextUsage: result.contextUsage,
+          }
         : result;
     },
   );

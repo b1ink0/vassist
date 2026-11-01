@@ -20,6 +20,7 @@ const Toggle = ({
   size: _size,
   isLightBackground: _isLightBackground,
   title,
+  className,
   ...props
 }: ToggleProps) => {
   return (
@@ -33,11 +34,12 @@ const Toggle = ({
         onClick={() => !disabled && onChange(!checked)}
         className={cn(
           "relative inline-flex h-4 w-8 items-center rounded-full shrink-0",
-          "transition-all duration-300 ease-in-out border border-white/20",
-          "bg-white/10 backdrop-blur-xl",
+          "transition-all duration-300 ease-in-out border border-current/20",
+          checked ? "bg-current/20" : "bg-current/5",
           disabled
             ? "opacity-30 cursor-not-allowed"
-            : "cursor-pointer hover:bg-white/15",
+            : "cursor-pointer hover:bg-current/15",
+          className,
         )}
       >
         <span
@@ -45,8 +47,8 @@ const Toggle = ({
             "inline-block h-2.5 w-2.5 transform rounded-full",
             "transition-all duration-300 ease-in-out",
             checked
-              ? "translate-x-[18px] bg-white/80"
-              : "translate-x-[2px] bg-white/40",
+              ? "translate-x-[18px] bg-current"
+              : "translate-x-[2px] bg-current opacity-45",
           )}
         />
       </button>

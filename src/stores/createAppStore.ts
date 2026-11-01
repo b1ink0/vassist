@@ -292,6 +292,7 @@ export const toChatMessageItems = (
       imageFileIds: message.imageFileIds,
       audioFileIds: message.audioFileIds,
       thinking: (message as any).thinking || "",
+      contextUsage: message.contextUsage,
     };
 
     if (images && images.length > 0) {

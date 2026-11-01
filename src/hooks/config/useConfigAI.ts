@@ -1,3 +1,10 @@
+import { useCallback } from "react";
+import {
+  AIProviders,
+  type AIRemoteProviderProfile,
+} from "../../config/aiConfig";
+import { getAppliedAIProfile } from "../../config/aiProfiles";
+import { useAndroidApi } from "../useAndroidStore";
 import { useShallow } from "zustand/react/shallow";
 import { useConfigStore } from "../../stores/useConfigStore";
 
@@ -26,3 +33,20 @@ export const useConfigAIActions = () =>
       testWriter: state.testWriter,
     })),
   );
+
+/** Apply saved backends consistently from Settings, chat, and desktop selection. */
+export const useApplyAIProfile = () => {
+  const { updateAIConfig } = useConfigAIActions();
+  const androidApi = useAndroidApi();
+  return useCallback(
+    (profile: AIRemoteProviderProfile) => {
+      updateAIConfig(
+        profile.provider,
+        getAppliedAIProfile(useConfigStore.getState().aiConfig, profile),
+      );
+      if (profile.provider === AIProviders.ANDROID_LOCAL)
+        androidApi?.setLLMComputeUnit?.(profile.computeUnit || "auto");
+    },
+    [updateAIConfig, androidApi],
+  );
+};

@@ -5,12 +5,18 @@
  * Extension mode: Message bridge to background worker
  */
 
+import { readContextUsage, type ContextUsage } from "../../types/contextUsage";
 import { ServiceProxy } from "./ServiceProxy";
+import { isDesktop } from "../../utils/PlatformUtils";
 import AIService from "../ai/AIService";
 import { MessageTypes } from "../../../extension/shared/MessageTypes";
 import Logger from "../common/LoggerService";
 import StorageServiceProxy from "./StorageServiceProxy";
-import { DefaultAIConfig } from "../../config/aiConfig";
+import {
+  AIProviders,
+  DefaultAIConfig,
+  type AIRemoteProfileProvider,
+} from "../../config/aiConfig";
 
 interface AIServiceLike {
   configure(config: unknown): Promise<unknown> | unknown;
@@ -27,7 +33,7 @@ interface AIServiceLike {
   isGenerating(): boolean;
   testConnection(): Promise<boolean>;
   listRemoteModels(config: {
-    provider: "openai" | "ollama" | "android-local" | "desktop-local";
+    provider: AIRemoteProfileProvider;
     endpoint?: string;
     apiKey?: string;
   }): Promise<{ models: string[]; error?: string }>;
@@ -51,10 +57,12 @@ interface AIServiceResponse {
   cancelled: boolean;
   error: unknown;
   thinking?: string;
+  contextUsage?: ContextUsage | undefined;
 }
 
 interface BridgeAIResponse {
   thinking?: string;
+  contextUsage?: ContextUsage | undefined;
   success?: boolean;
   response?: string;
   text?: string;
@@ -258,6 +266,7 @@ class AIServiceProxy extends ServiceProxy {
         // (functions cannot cross the bridge)
         const wantsThinking = typeof options.onReasoning === "function";
         let fullThinking = "";
+        let contextUsage: ContextUsage | undefined;
         await bridge.sendStreamingMessage(
           MessageTypes.AI_SEND_MESSAGE,
           {
@@ -269,6 +278,14 @@ class AIServiceProxy extends ServiceProxy {
             },
           }, // Mark as streaming request
           (chunk: string, channel?: string) => {
+            if (channel === "context-usage") {
+              try {
+                contextUsage = readContextUsage(JSON.parse(chunk));
+              } catch {
+                /* Ignore malformed optional metadata. */
+              }
+              return;
+            }
             if (channel === "reasoning") {
               fullThinking += chunk;
               (options.onReasoning as ((c: string) => void) | undefined)?.(
@@ -289,6 +306,7 @@ class AIServiceProxy extends ServiceProxy {
           cancelled: false,
           error: null,
           ...(fullThinking ? { thinking: fullThinking } : {}),
+          ...(contextUsage ? { contextUsage } : {}),
         };
       } else {
         // Non-streaming mode - explicitly mark as non-streaming
@@ -308,12 +326,14 @@ class AIServiceProxy extends ServiceProxy {
           };
         }
 
+        const contextUsage = readContextUsage(response?.contextUsage);
         return {
           success: true,
           response: response?.response || "",
           cancelled: false,
           error: null,
           ...(response?.thinking ? { thinking: response.thinking } : {}),
+          ...(contextUsage ? { contextUsage } : {}),
         };
       }
     } catch (error: unknown) {
@@ -428,9 +448,10 @@ class AIServiceProxy extends ServiceProxy {
   }
 
   async listRemoteModels(config: {
-    provider: "openai" | "ollama" | "android-local" | "desktop-local";
+    provider: AIRemoteProfileProvider;
     endpoint?: string;
     apiKey?: string;
+    customModelsPath?: string | null | undefined;
   }): Promise<{ models: string[]; error?: string }> {
     const hostBridge = this.getHostTransportBridge()?.ai;
     if (hostBridge) {
@@ -442,6 +463,50 @@ class AIServiceProxy extends ServiceProxy {
       }
 
       return await hostBridge.listModels(config);
+    }
+
+    if (isDesktop && config.provider === AIProviders.DESKTOP_LOCAL) {
+      const listModels = window.electron?.llm?.listModels;
+      if (!listModels)
+        return {
+          models: [],
+          error: "Desktop LLM catalog unavailable. Restart the desktop app.",
+        };
+      try {
+        const result = await listModels(config.customModelsPath ?? null);
+        if (!result || typeof result !== "object")
+          return { models: [], error: "Invalid desktop LLM catalog response" };
+        if ("success" in result && result.success === false)
+          return {
+            models: [],
+            error:
+              "error" in result && typeof result.error === "string"
+                ? result.error
+                : "Unable to list installed LLMs",
+          };
+        const models =
+          "models" in result && Array.isArray(result.models)
+            ? result.models.flatMap((entry: unknown) =>
+                entry &&
+                typeof entry === "object" &&
+                "name" in entry &&
+                typeof entry.name === "string"
+                  ? [entry.name]
+                  : [],
+              )
+            : [];
+        return {
+          models: models.sort((left, right) => left.localeCompare(right)),
+        };
+      } catch (error) {
+        return {
+          models: [],
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unable to list installed LLMs",
+        };
+      }
     }
 
     if (this.isExtension) {

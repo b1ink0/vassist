@@ -31,12 +31,11 @@ const DesktopModeSettings = ({
   const mode = uiConfig.desktopMode.mode;
   const interaction = uiConfig.desktopMode.liveWallpaper.interaction;
   const placement = uiConfig.desktopMode.controlPlacement;
-  const variant = isLightBackground ? "dark" : "default";
 
   if (menu) {
     const menuVariant = isLightBackground ? "ghost-dark" : "ghost";
     return (
-      <div className="min-w-40 space-y-0.5">
+      <div className="min-w-40 flex flex-col gap-0.5">
         <Select
           value={mode}
           onChange={(event) =>
@@ -72,125 +71,72 @@ const DesktopModeSettings = ({
     );
   }
 
-  if (compact) {
-    return (
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="text-xs font-medium text-white/80">Mode</span>
-          <Select
-            className="min-w-[140px]"
-            value={mode}
-            onChange={(event) =>
-              updateUIConfig("desktopMode.mode", event.target.value)
-            }
-            variant={variant}
-            options={[
-              { value: "app", label: "App" },
-              { value: "floating-app", label: "Floating" },
-              { value: "live-wallpaper", label: "Wallpaper" },
-            ]}
-          />
-        </div>
-        {mode !== "app" && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-white/80">
-              Separate chat
-            </span>
-            <Toggle
-              checked={placement === "detached"}
-              isLightBackground={isLightBackground}
-              aria-label="Separate chat window"
-              onChange={(checked) =>
-                updateUIConfig(
-                  "desktopMode.controlPlacement",
-                  checked ? "detached" : "attached",
-                )
-              }
-            />
-          </div>
-        )}
-        {mode === "live-wallpaper" && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-white/80">
-              Interactive
-            </span>
-            <Toggle
-              checked={interaction === "interactive"}
-              isLightBackground={isLightBackground}
-              aria-label="Interactive wallpaper"
-              onChange={(checked) =>
-                updateUIConfig(
-                  "desktopMode.liveWallpaper.interaction",
-                  checked ? "interactive" : "non-interactive",
-                )
-              }
-            />
-          </div>
-        )}
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-base font-semibold text-white">Mode</h3>
-        <p className="mt-1 text-xs text-white/60">
-          Choose how the desktop app is shown.
-        </p>
-      </div>
-
-      <SettingsRow label="Mode">
-        <Select
-          className="min-w-[150px]"
-          value={mode}
-          onChange={(event) =>
-            updateUIConfig("desktopMode.mode", event.target.value)
-          }
-          variant={variant}
-          options={[
-            { value: "app", label: "App" },
-            { value: "floating-app", label: "Floating" },
-            { value: "live-wallpaper", label: "Wallpaper" },
-          ]}
-        />
-      </SettingsRow>
-
-      {mode !== "app" && (
-        <SettingsRow
-          label="Separate chat window"
-          description="Show chat and input separately from the avatar."
-        >
-          <Toggle
-            checked={placement === "detached"}
-            isLightBackground={isLightBackground}
-            aria-label="Separate chat window"
-            onChange={(checked) =>
-              updateUIConfig(
-                "desktopMode.controlPlacement",
-                checked ? "detached" : "attached",
-              )
-            }
-          />
-        </SettingsRow>
-      )}
-
-      {mode === "live-wallpaper" && (
-        <SettingsRow label={compact ? "Interactive" : "Interact"}>
-          <Toggle
-            checked={interaction === "interactive"}
-            isLightBackground={isLightBackground}
-            aria-label="Interactive wallpaper"
-            onChange={(checked) =>
-              updateUIConfig(
-                "desktopMode.liveWallpaper.interaction",
-                checked ? "interactive" : "non-interactive",
-              )
-            }
-          />
-        </SettingsRow>
-      )}
-      <XrSettings isLightBackground={isLightBackground} />
+    <div className="flex flex-col gap-4">
+      <section className="flex flex-col gap-3">
+        <h3 className="settings-group-heading">
+          <Icon name="desktop-mode" size={14} />
+          Desktop
+        </h3>
+        <div className="settings-control-group">
+          <SettingsRow label="Mode" className="settings-control-row">
+            <Select
+              aria-label="Desktop mode"
+              className="max-w-[11rem] text-right"
+              value={mode}
+              onChange={(event) =>
+                updateUIConfig("desktopMode.mode", event.target.value)
+              }
+              variant={isLightBackground ? "ghost-dark" : "ghost"}
+              options={[
+                { value: "app", label: "App" },
+                { value: "floating-app", label: "Floating" },
+                { value: "live-wallpaper", label: "Wallpaper" },
+              ]}
+            />
+          </SettingsRow>
+          {mode !== "app" && (
+            <SettingsRow
+              label="Separate chat"
+              description={
+                compact ? "" : "Show chat and input separately from the avatar."
+              }
+              className="settings-control-row"
+            >
+              <Toggle
+                checked={placement === "detached"}
+                isLightBackground={isLightBackground}
+                aria-label="Separate chat window"
+                onChange={(checked) =>
+                  updateUIConfig(
+                    "desktopMode.controlPlacement",
+                    checked ? "detached" : "attached",
+                  )
+                }
+              />
+            </SettingsRow>
+          )}
+          {mode === "live-wallpaper" && (
+            <SettingsRow
+              label="Interactive wallpaper"
+              className="settings-control-row"
+            >
+              <Toggle
+                checked={interaction === "interactive"}
+                isLightBackground={isLightBackground}
+                aria-label="Interactive wallpaper"
+                onChange={(checked) =>
+                  updateUIConfig(
+                    "desktopMode.liveWallpaper.interaction",
+                    checked ? "interactive" : "non-interactive",
+                  )
+                }
+              />
+            </SettingsRow>
+          )}
+        </div>
+      </section>
+      {!compact && <XrSettings isLightBackground={isLightBackground} />}
     </div>
   );
 };
