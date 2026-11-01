@@ -23,9 +23,9 @@ export default function BuiltInBackgroundGallery({
   onMakeDefault,
 }: BuiltInBackgroundGalleryProps) {
   const desktopApi = useDesktopApi();
-  const [desktopPreviews, setDesktopPreviews] = useState<Record<string, string>>(
-    {},
-  );
+  const [desktopPreviews, setDesktopPreviews] = useState<
+    Record<string, string>
+  >({});
   const effectiveSelectedIds = multipleSelection
     ? selectedIds
     : selectedIds.slice(0, 1);
@@ -36,10 +36,7 @@ export default function BuiltInBackgroundGallery({
 
   useEffect(() => {
     const backgroundApi = desktopApi?.desktopBackground;
-    if (
-      !isDesktop ||
-      typeof backgroundApi?.readBuiltInPreview !== "function"
-    ) {
+    if (!isDesktop || typeof backgroundApi?.readBuiltInPreview !== "function") {
       return;
     }
     let active = true;
@@ -68,10 +65,10 @@ export default function BuiltInBackgroundGallery({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
-        <h5 className="text-xs font-semibold text-white/85">
+        <h5 className="text-xs font-semibold vassist-text-primary">
           Included backgrounds ({effectiveSelectedIds.length})
         </h5>
-        <span className="text-[11px] text-white/50">
+        <span className="text-[11px] vassist-text-muted">
           First selected opens first
         </span>
       </div>

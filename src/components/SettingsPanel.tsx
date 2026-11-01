@@ -1,8 +1,9 @@
 /**
- * @fileoverview Settings panel component with tabbed interface for UI, LLM, TTS, STT, and AI features configuration.
+ * @fileoverview Settings panel with searchable navigation and scoped configuration pages.
  */
 
 import { lazy, Suspense, useState, useEffect, useMemo, useRef } from "react";
+import SettingsLoading from "./settings/shared/SettingsLoading";
 import type {
   VAssistOpenSettingsOptions,
   ResolvedVAssistEmbedConfig,
@@ -13,15 +14,20 @@ import { getBrandedLabel } from "../embed/branding";
 import { useEmbedHost } from "../embed/EmbedHostContext";
 import { useVAssistReactCustomizations } from "../embed/reactHostCustomizations";
 import { Icon } from "./icons";
-import { cn } from "../utils/cn";
-import TabBar from "./ui/TabBar";
+import { useAppStore } from "../stores/useAppStore";
+import { isSettingsTargetHidden } from "../embed/settingsPolicy";
+import SettingsLayout from "./settings/SettingsLayout";
+import {
+  settingsPages,
+  getSettingsPage,
+  defaultSettingsPage,
+  type SettingsPage,
+  type SettingsPageId,
+} from "../config/settingsNavigation";
+import { isDesktop, isAndroid } from "../utils/PlatformUtils";
+import { useAIConfig } from "../hooks/config/useConfigAI";
+import { AIProviders } from "../config/aiConfig";
 import ChromeAIValidator from "../services/ai/ChromeAIValidator";
-const UISettings = lazy(() => import("./settings/UISettings"));
-const ThreeDSettings = lazy(() => import("./settings/ThreeDSettings"));
-const LLMSettings = lazy(() => import("./settings/LLMSettings"));
-const TTSSettings = lazy(() => import("./settings/TTSSettings"));
-const STTSettings = lazy(() => import("./settings/STTSettings"));
-const AIFeaturesSettings = lazy(() => import("./settings/AIFeaturesSettings"));
 import {
   useAIConfigError,
   useAIConfigSaved,
@@ -40,8 +46,17 @@ import {
   useTTSConfigSaved,
   useTTSTesting,
 } from "../hooks/config/useConfigTTS";
-import { useUIConfigSaved } from "../hooks/config/useConfigUI";
+import { useXrRuntime } from "../contexts/XrRuntimeContext";
+import { canConfigureStages } from "../babylon/stages/stageAvailability";
+import { useUIConfig, useUIConfigSaved } from "../hooks/config/useConfigUI";
 import Logger from "../services/common/LoggerService";
+
+const UISettings = lazy(() => import("./settings/UISettings"));
+const ThreeDSettings = lazy(() => import("./settings/ThreeDSettings"));
+const LLMSettings = lazy(() => import("./settings/LLMSettings"));
+const TTSSettings = lazy(() => import("./settings/TTSSettings"));
+const STTSettings = lazy(() => import("./settings/STTSettings"));
+const AIFeaturesSettings = lazy(() => import("./settings/AIFeaturesSettings"));
 
 type SettingsTabId = VAssistSettingsTabId;
 
@@ -152,23 +167,35 @@ const SettingsPanel = ({
 }: SettingsPanelProps) => {
   const { hostId } = useEmbedHost();
   const reactCustomizations = useVAssistReactCustomizations(hostId);
-  const appliedRequest = useRef<string | null>(null);
-  const [activeTab, setActiveTab] = useState<SettingsTabId>("ui");
-  const [activeNestedTarget, setActiveNestedTarget] =
-    useState<VAssistSettingsTargetId | null>(null);
+  const appliedRequest = useRef<VAssistOpenSettingsOptions | null>(null);
   const [hasChromeAI, setHasChromeAI] = useState(false);
-  const [tabIndicatorStyle, setTabIndicatorStyle] = useState({
-    left: 0,
-    width: 0,
-  });
-  const tabsRef = useRef<Record<SettingsTabId, HTMLButtonElement | null>>({
-    ui: null,
-    "3d": null,
-    llm: null,
-    tts: null,
-    stt: null,
-    "ai-plus": null,
-  });
+  const activePage = useAppStore((state) => state.settingsPage);
+  const setActivePage = useAppStore((state) => state.setSettingsPage);
+  const [keptPages, setKeptPages] = useState<SettingsPageId[]>([]);
+  const [searchTarget, setSearchTarget] = useState<VAssistSettingsTargetId>();
+  const [targetRevision, setTargetRevision] = useState(0);
+  const aiConfig = useAIConfig();
+  const uiConfig = useUIConfig();
+  const xr = useXrRuntime();
+  const pageDefinition = settingsPages.find((page) => page.id === activePage)!;
+  const activeTab = pageDefinition.tab;
+  const activeNestedTarget =
+    activeTab === "llm"
+      ? (("llm." +
+          (["routing", "decision", "profiles"].includes(pageDefinition.view)
+            ? pageDefinition.view
+            : "provider")) as VAssistSettingsTargetId)
+      : null;
+  useEffect(() => {
+    if (
+      ["runtime", "models", "voice-output", "voice-input", "data"].includes(
+        activePage,
+      )
+    )
+      setKeptPages((pages) =>
+        pages.includes(activePage) ? pages : [...pages, activePage],
+      );
+  }, [activePage]);
 
   const uiConfigSaved = useUIConfigSaved();
   const aiConfigSaved = useAIConfigSaved();
@@ -198,32 +225,6 @@ const SettingsPanel = ({
     }
   }, []);
 
-  useEffect(() => {
-    const updateTabIndicator = () => {
-      const activeTabElement = tabsRef.current[activeTab];
-      if (!activeTabElement) return;
-
-      setTabIndicatorStyle({
-        left: activeTabElement.offsetLeft,
-        width: activeTabElement.offsetWidth,
-      });
-    };
-
-    updateTabIndicator();
-    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-    const handleResize = () => {
-      if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(updateTabIndicator, 150);
-    };
-
-    window.addEventListener("resize", handleResize);
-
-    return () => {
-      if (resizeTimer) clearTimeout(resizeTimer);
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [activeTab]);
-
   const visibleTabs = useMemo(
     () =>
       [
@@ -232,12 +233,12 @@ const SettingsPanel = ({
           label: "UI",
           className:
             "flex-shrink-0 w-full h-full overflow-hidden scrollbar-glass",
-          render: () => (
+          render: (pageDefinition: SettingsPage) => (
             <UISettings
-              isLightBackground={isLightBackground}
-              requestedSubTab={
-                activeTab === "ui" ? (requestedView?.subTab ?? null) : null
+              page={
+                pageDefinition.tab === "ui" ? pageDefinition.view : undefined
               }
+              isLightBackground={isLightBackground}
               {...(onRequestResetSetupDialog
                 ? { onRequestResetSetupDialog }
                 : {})}
@@ -252,8 +253,11 @@ const SettingsPanel = ({
           label: "3D",
           className:
             "flex-shrink-0 w-full overflow-y-auto scrollbar-glass relative",
-          render: () => (
+          render: (pageDefinition: SettingsPage) => (
             <ThreeDSettings
+              page={
+                pageDefinition.tab === "3d" ? pageDefinition.view : undefined
+              }
               isLightBackground={isLightBackground}
               {...(onRequestDeleteModelDialog
                 ? { onRequestDeleteModelDialog }
@@ -279,18 +283,15 @@ const SettingsPanel = ({
           label: "LLM",
           className:
             "flex-shrink-0 w-full overflow-y-auto scrollbar-glass relative",
-          render: () => (
+          render: (pageDefinition: SettingsPage) => (
             <LLMSettings
+              page={
+                pageDefinition.tab === "llm" ? pageDefinition.view : undefined
+              }
               isLightBackground={isLightBackground}
               hasChromeAI={hasChromeAI}
               onRequestDeleteLLMModel={onRequestDeleteLLMModel}
               refreshTrigger={refreshTrigger}
-              requestedSubTab={
-                activeTab === "llm" ? (requestedView?.subTab ?? null) : null
-              }
-              onActiveTargetChange={
-                activeTab === "llm" ? setActiveNestedTarget : undefined
-              }
             />
           ),
         },
@@ -299,7 +300,7 @@ const SettingsPanel = ({
           label: "TTS",
           className:
             "flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4 relative",
-          render: () => (
+          render: (_pageDefinition: SettingsPage) => (
             <TTSSettings
               isLightBackground={isLightBackground}
               onRequestDeleteVoiceDialog={onRequestDeleteVoiceDialog}
@@ -314,7 +315,7 @@ const SettingsPanel = ({
           label: "STT",
           className:
             "flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4 relative",
-          render: () => (
+          render: (_pageDefinition: SettingsPage) => (
             <STTSettings
               isLightBackground={isLightBackground}
               hasChromeAI={hasChromeAI}
@@ -328,13 +329,12 @@ const SettingsPanel = ({
           label: "AI+",
           className:
             "flex-shrink-0 w-full overflow-y-auto scrollbar-glass px-4 md:px-6 py-2 md:py-4 relative",
-          render: () => (
+          render: (_pageDefinition: SettingsPage) => (
             <AIFeaturesSettings isLightBackground={isLightBackground} />
           ),
         },
       ].filter((tab) => !embedConfig.settings.hiddenTabs.includes(tab.id)),
     [
-      activeTab,
       embedConfig.settings.hiddenTabs,
       hasChromeAI,
       isLightBackground,
@@ -348,7 +348,6 @@ const SettingsPanel = ({
       onRequestDeleteTtsPack,
       onRequestResetSetupDialog,
       onRequestSettingsErrorDialog,
-      requestedView?.subTab,
       refreshTrigger,
       sttExternalDeleteTick,
       ttsExternalDeleteTick,
@@ -364,12 +363,13 @@ const SettingsPanel = ({
       return;
     }
 
-    setActiveTab(visibleTabs[0]?.id ?? "ui");
-  }, [activeTab, visibleTabs]);
+    setActivePage(defaultSettingsPage(visibleTabs[0]?.id ?? "ui"));
+  }, [activeTab, visibleTabs, setActivePage]);
 
   useEffect(() => {
     const requestedTab =
-      requestedView?.tab ?? getSettingsTabFromTarget(requestedView?.target);
+      requestedView?.tab ??
+      getSettingsTabFromTarget(requestedView?.target ?? requestedView?.subTab);
 
     if (!requestedTab) {
       appliedRequest.current = null;
@@ -380,17 +380,12 @@ const SettingsPanel = ({
       return;
     }
 
-    const key = JSON.stringify(requestedView);
-    if (appliedRequest.current === key) return;
-    appliedRequest.current = key;
-    setActiveTab(requestedTab);
-  }, [requestedView, visibleTabs]);
-
-  useEffect(() => {
-    if (activeTab !== "llm") {
-      setActiveNestedTarget(null);
-    }
-  }, [activeTab]);
+    if (appliedRequest.current === requestedView) return;
+    appliedRequest.current = requestedView;
+    setActivePage(getSettingsPage(requestedView ?? {}));
+    setSearchTarget(requestedView?.target);
+    setTargetRevision((revision) => revision + 1);
+  }, [requestedView, visibleTabs, setActivePage]);
 
   useEffect(() => {
     onActiveTargetChange?.(activeNestedTarget ?? activeTab);
@@ -413,65 +408,34 @@ const SettingsPanel = ({
   });
 
   const getActiveStatus = () => {
-    if (activeTab === "ui") {
-      if (uiConfigSaved)
-        return {
-          type: "success",
-          message: "Auto-saved successfully",
-          dismissible: false,
-        };
-    } else if (activeTab === "llm") {
-      if (aiTesting)
-        return {
-          type: "testing",
-          message: "Testing connection...",
-          dismissible: false,
-        };
-      if (aiConfigSaved)
-        return {
-          type: "success",
-          message: "Auto-saved successfully",
-          dismissible: false,
-        };
-      if (aiConfigError) {
-        const parsed = parseStatusMessage(aiConfigError);
-        return { type: parsed.type, message: parsed.text, dismissible: true };
-      }
-    } else if (activeTab === "tts") {
-      if (ttsTesting)
-        return {
-          type: "testing",
-          message: "Testing TTS...",
-          dismissible: false,
-        };
-      if (ttsConfigSaved)
-        return {
-          type: "success",
-          message: "Auto-saved successfully",
-          dismissible: false,
-        };
-      if (ttsConfigError) {
-        const parsed = parseStatusMessage(ttsConfigError);
-        return { type: parsed.type, message: parsed.text, dismissible: true };
-      }
-    } else if (activeTab === "stt") {
-      if (sttTesting)
-        return {
-          type: "testing",
-          message: "Testing STT...",
-          dismissible: false,
-        };
-      if (sttConfigSaved)
-        return {
-          type: "success",
-          message: "Auto-saved successfully",
-          dismissible: false,
-        };
-      if (sttConfigError) {
-        const parsed = parseStatusMessage(sttConfigError);
-        return { type: parsed.type, message: parsed.text, dismissible: true };
-      }
+    const service =
+      activeTab === "llm"
+        ? { testing: aiTesting, error: aiConfigError, saved: aiConfigSaved }
+        : activeTab === "tts"
+          ? {
+              testing: ttsTesting,
+              error: ttsConfigError,
+              saved: ttsConfigSaved,
+            }
+          : activeTab === "stt"
+            ? {
+                testing: sttTesting,
+                error: sttConfigError,
+                saved: sttConfigSaved,
+              }
+            : null;
+    if (service?.testing)
+      return {
+        type: "testing",
+        message: "Testing connection…",
+        dismissible: false,
+      };
+    if (service?.error) {
+      const parsed = parseStatusMessage(service.error);
+      return { type: parsed.type, message: parsed.text, dismissible: true };
     }
+    if (service?.saved || (activeTab === "ui" && uiConfigSaved))
+      return { type: "saved", message: "Saved", dismissible: false };
     return null;
   };
 
@@ -482,8 +446,9 @@ const SettingsPanel = ({
    * @returns {Object} Parsed status with type and text
    */
   const parseStatusMessage = (msg: string) => {
+    msg = msg.replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, "");
     const prefixMatch = msg.match(
-      /^(success|warning|error|hourglass|error-status):\s*(.+)$/i,
+      /^(success|warning|error|hourglass|error-status):\s*([\s\S]+)$/i,
     );
     if (!prefixMatch) {
       return { type: "info", text: msg };
@@ -501,7 +466,6 @@ const SettingsPanel = ({
   };
 
   const activeStatus = getActiveStatus();
-  const activeTabDefinition = visibleTabs.find((tab) => tab.id === activeTab);
 
   /**
    * Handles dismissal of status messages for LLM, TTS, or STT tabs.
@@ -516,129 +480,90 @@ const SettingsPanel = ({
     }
   };
 
+  const availablePages = settingsPages.filter(
+    (page) =>
+      !isSettingsTargetHidden(
+        embedConfig,
+        page.tab === "llm"
+          ? (("llm." +
+              (["routing", "decision", "profiles"].includes(page.view)
+                ? page.view
+                : "provider")) as VAssistSettingsTargetId)
+          : page.tab,
+      ) &&
+      visibleTabs.some((tab) => tab.id === page.tab) &&
+      (page.id !== "desktop" || isDesktop) &&
+      (page.id !== "scenes" ||
+        xr.enabled ||
+        canConfigureStages(uiConfig.desktopMode.mode)) &&
+      (!["models", "runtime"].includes(page.id) ||
+        (isDesktop && aiConfig.provider === AIProviders.DESKTOP_LOCAL) ||
+        (isAndroid && aiConfig.provider === AIProviders.ANDROID_LOCAL)),
+  );
+  useEffect(() => {
+    if (
+      availablePages.length &&
+      !availablePages.some((page) => page.id === activePage)
+    ) {
+      setActivePage(
+        availablePages.find((page) => page.tab === activeTab)?.id ??
+          availablePages[0]!.id,
+      );
+      setSearchTarget(undefined);
+    }
+  }, [activePage, activeTab, availablePages, setActivePage]);
   return (
-    <div
-      role="dialog"
-      aria-label="Settings panel"
-      data-testid="settings-panel"
-      className={cn(
-        "absolute inset-0 flex flex-col glass-container rounded-2xl overflow-hidden",
-        isLightBackground && "glass-container-dark",
-        animationClass,
-      )}
+    <SettingsLayout
+      title={settingsTitle}
+      pages={availablePages}
+      activePage={activePage}
+      target={searchTarget}
+      targetRevision={targetRevision}
+      onNavigate={(id, target) => {
+        setActivePage(id);
+        setSearchTarget(target);
+        setTargetRevision((revision) => revision + 1);
+      }}
+      onClose={onClose}
+      isLightBackground={isLightBackground}
+      animationClass={animationClass}
+      status={activeStatus}
+      onDismissStatus={handleDismissStatus}
     >
-      <div className="flex justify-between items-center px-4 md:px-6 py-2 md:py-4 border-b border-white/20">
-        <div className="flex items-center gap-4 flex-1 min-w-0">
-          <h2 className="text-lg font-semibold text-white shrink-0">
-            {settingsTitle}
-          </h2>
-
-          {activeStatus && (
-            <div
-              className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-lg animate-in fade-in max-w-md min-w-0",
-                activeStatus.type === "success"
-                  ? "bg-emerald-500/10"
-                  : activeStatus.type === "testing"
-                    ? "bg-blue-500/10"
-                    : activeStatus.type === "warning"
-                      ? "bg-amber-500/10"
-                      : "bg-red-500/10",
-              )}
-              title={activeStatus.message}
-            >
-              <span className="text-xs text-white truncate break-all overflow-hidden min-w-0 flex-1">
-                {activeStatus.message}
-              </span>
-              {activeStatus.dismissible && (
-                <button
-                  onClick={handleDismissStatus}
-                  className="shrink-0 w-4 h-4 flex items-center justify-center rounded hover:bg-white/20 text-white/60 hover:text-white transition-colors text-xs"
-                  aria-label="Dismiss"
+      {visibleTabs.length === 0 ? (
+        <p>{managedByHostLabel}</p>
+      ) : (
+        settingsPages
+          .filter(
+            (page) => page.id === activePage || keptPages.includes(page.id),
+          )
+          .filter((page) =>
+            availablePages.some((available) => available.id === page.id),
+          )
+          .map((page) => {
+            const owner = visibleTabs.find((tab) => tab.id === page.tab);
+            return (
+              owner && (
+                <div
+                  key={page.id}
+                  hidden={page.id !== activePage}
+                  data-testid={"settings-tab-" + page.tab}
+                  inert={embedConfig.settings.readOnlyTabs.includes(page.tab)}
+                  className="min-w-0"
                 >
-                  <Icon name="close" size={16} />
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        <button
-          onClick={onClose}
-          className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors shrink-0"
-          aria-label="Close settings"
-        >
-          <Icon name="close" size={16} />
-        </button>
-      </div>
-
-      <div className="relative">
-        <div
-          data-vassist-tab-indicator
-          className="absolute bottom-0 z-10 h-0.5 bg-white transition-all duration-300 ease-out"
-          style={{
-            left: `${tabIndicatorStyle.left}px`,
-            width: `${tabIndicatorStyle.width}px`,
-          }}
-        />
-        <TabBar
-          tabs={visibleTabs.map(({ id, label }) => ({ id, label }))}
-          activeTab={activeTab}
-          onTabChange={(tabId) => setActiveTab(tabId as SettingsTabId)}
-          tabsRef={tabsRef}
-          ariaLabel="Settings sections"
-        />
-      </div>
-
-      <div className="flex-1 overflow-hidden relative">
-        {visibleTabs.length === 0 ? (
-          <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-white/70">
-            {managedByHostLabel}
-          </div>
-        ) : activeTabDefinition ? (
-          <div className="absolute inset-0">
-            <Suspense
-              fallback={
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Icon
-                    name="loading-2"
-                    size={32}
-                    className="animate-spin text-white/75"
-                  />
+                  <Suspense fallback={<SettingsLoading />}>
+                    {owner.render(page)}
+                  </Suspense>
                 </div>
-              }
-            >
-              <div
-                key={activeTabDefinition.id}
-                data-testid={`settings-tab-${activeTabDefinition.id}`}
-                className={cn("relative h-full", activeTabDefinition.className)}
-              >
-                {activeTabDefinition.render()}
-              </div>
-            </Suspense>
-            <div
-              className={cn(
-                "absolute inset-0 z-10 flex items-start justify-end bg-slate-950/35 backdrop-blur-[1px] pointer-events-auto",
-                !embedConfig.settings.readOnlyTabs.includes(
-                  activeTabDefinition.id,
-                ) && "hidden",
-              )}
-            >
-              <div className="m-4 rounded-lg border border-white/15 bg-slate-950/80 px-3 py-2 text-xs text-white/80 shadow-lg">
-                Managed by host
-              </div>
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      {settingsExtension ? (
-        <div className="border-t border-white/10 px-4 py-3">
-          {settingsExtension}
-        </div>
-      ) : null}
-    </div>
+              )
+            );
+          })
+      )}
+      {embedConfig.settings.readOnlyTabs.includes(activeTab) && (
+        <p className="text-xs opacity-60">Managed by host</p>
+      )}
+      {settingsExtension}
+    </SettingsLayout>
   );
 };
-
 export default SettingsPanel;

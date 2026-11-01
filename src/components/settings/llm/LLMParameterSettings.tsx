@@ -3,6 +3,8 @@ import type { LLMParameters } from "../../../config/llmParameters";
 import type { VAssistSettingsTargetId } from "../../../embed/config";
 import { Input, Select, SettingsRow } from "../../ui";
 import Toggle from "../../common/Toggle";
+import RangeSlider from "../../ui/RangeSlider";
+import SettingsDisclosure from "../shared/SettingsDisclosure";
 
 interface NumberParameterProps {
   label: string;
@@ -39,15 +41,14 @@ export function NumberParameter({
       layout="stacked"
     >
       <div className="flex items-center gap-3">
-        <input
-          type="range"
-          aria-label={`${label} slider`}
+        <RangeSlider
           min={min}
           max={rangeMax}
           step={step}
           value={value ?? min}
-          onChange={(event) => onChange(Number(event.target.value))}
-          className="min-w-0 flex-1 accent-current"
+          onValueChange={(nextValue) => onChange(nextValue)}
+          aria-label={label + " slider"}
+          className="flex-1"
         />
         <Input
           id={id}
@@ -132,7 +133,7 @@ export default function LLMParameterSettings({
     />
   );
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <SettingsRow
         label="Sampling parameters"
         targetId={target("samplingEnabled")}
@@ -162,15 +163,15 @@ export default function LLMParameterSettings({
             "0 uses runtime defaults. Larger contexts require more memory and model support; the numeric field has no upper cap.",
         })
       ) : (
-        <p className="text-xs text-white/55">
+        <p className="text-xs vassist-text-muted">
           Context capacity is controlled by the remote server and model.
         </p>
       )}
-      <details className="group" open={openAdvanced}>
-        <summary className="cursor-pointer text-sm font-medium text-white/90 py-2">
-          Advanced parameters
-        </summary>
-        <div className="mt-2 space-y-4">
+      <SettingsDisclosure
+        title={<>Advanced parameters</>}
+        defaultOpen={openAdvanced}
+      >
+        <div className="pt-2 flex flex-col gap-4">
           {config.samplingEnabled !== false && (
             <>
               {number("topP", "Top P", { max: 1, step: 0.01 })}
@@ -283,7 +284,7 @@ export default function LLMParameterSettings({
                 })}
               <SettingsRow
                 label="Flash attention"
-                description="Auto lets the runtime select supported acceleration. On forces it; Off disables it."
+                description="Auto lets the runtime select supported acceleration. On forces it and Off disables it."
                 targetId={target("flashAttention")}
                 layout="stacked"
               >
@@ -356,7 +357,7 @@ export default function LLMParameterSettings({
             </>
           )}
         </div>
-      </details>
+      </SettingsDisclosure>
     </div>
   );
 }

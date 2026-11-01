@@ -4,6 +4,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  useRef,
   type ChangeEvent,
   type ChangeEventHandler,
   type FocusEventHandler,
@@ -74,27 +75,36 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
 
     const initialValue = value ?? defaultValue ?? "";
     const [localValue, setLocalValue] = useState(String(initialValue));
+    const changeHandler = useRef(onChange);
+    const emittedValue = useRef(String(initialValue));
+    useEffect(() => {
+      changeHandler.current = onChange;
+    }, [onChange]);
 
     useEffect(() => {
       if (!shouldDebounce) {
         return;
       }
-      setLocalValue(String(value ?? ""));
+      const next = String(value ?? "");
+      setLocalValue((current) =>
+        next === emittedValue.current ? current : next,
+      );
     }, [shouldDebounce, value]);
 
     const debouncedNotifyChange = useMemo(
       () =>
         createDebouncedFunction((nextValue: string) => {
-          if (!onChange) {
+          if (!changeHandler.current) {
             return;
           }
 
-          onChange({
+          emittedValue.current = nextValue;
+          changeHandler.current({
             target: { value: nextValue },
             currentTarget: { value: nextValue },
           } as unknown as ChangeEvent<HTMLInputElement>);
         }, debounceMs),
-      [debounceMs, onChange],
+      [debounceMs],
     );
 
     useEffect(

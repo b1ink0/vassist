@@ -45,15 +45,7 @@ const AIFeaturesSettings = ({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-1">
-        <h3 className="text-base font-semibold text-white">AI Features</h3>
-        <p className="text-xs text-white/50">
-          Advanced AI capabilities that work with all LLM providers (Chrome AI,
-          OpenAI, Ollama)
-        </p>
-      </div>
-
+    <div className="flex min-w-0 flex-col gap-4">
       {/* Shared AI Features Config Component */}
       <AIFeaturesConfig
         features={aiConfig.aiFeatures || {}}

@@ -45,16 +45,13 @@ import {
   useToolingActions,
 } from "../../hooks/app/useTooling";
 import { useUIConfig } from "../../hooks/config/useConfigUI";
-import {
-  useAIConfig,
-  useConfigAIActions,
-} from "../../hooks/config/useConfigAI";
 import { useConfigStore } from "../../stores/useConfigStore";
 import {
   ComposerPrimaryAction,
   type ComposerAction,
 } from "./ComposerPrimaryAction";
 import { ComposerMenu, type ComposerMenuItem } from "./ComposerMenu";
+import { ComposerModelPicker } from "./ComposerModelPicker";
 import { VoiceWaveform } from "./VoiceWaveform";
 import { Icon } from "../icons";
 import { Button, Select } from "../ui";
@@ -163,7 +160,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
     const sessionProcessing = useIsProcessing();
     const [remoteProcessing, setRemoteProcessing] = useState(false);
     const [inputFocused, setInputFocused] = useState(false);
-    const [composerMenuOpen, setComposerMenuOpen] = useState(false);
+
     const discardRecordingRef = useRef(false);
     const { setPendingDropData, setChatDraft: setMessage } = useChatActions();
     const isSettingsPanelOpen = useIsSettingsPanelOpen();
@@ -175,9 +172,22 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       setIsHistoryPanelOpen,
     } = useToolingActions();
 
+    const [composerTrailing, setComposerTrailing] =
+      useState<HTMLDivElement | null>(null);
+    useEffect(() => {
+      if (!composerTrailing) return;
+      const layout = composerTrailing.parentElement;
+      const measure = () =>
+        layout?.style.setProperty(
+          "--composer-trailing-width",
+          `${composerTrailing.getBoundingClientRect().width}px`,
+        );
+      const observer = new ResizeObserver(measure);
+      observer.observe(composerTrailing);
+      measure();
+      return () => observer.disconnect();
+    }, [composerTrailing]);
     const uiConfig = useUIConfig();
-    const aiConfig = useAIConfig();
-    const { updateAIConfig } = useConfigAIActions();
     const api = useDesktopApi();
     const resolvedEmbedConfig =
       embedConfig ?? contextEmbedConfig ?? normalizeVAssistEmbedConfig();
@@ -189,33 +199,6 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
       voiceCallEnabled &&
       resolvedEmbedConfig.features.screenShare &&
       !isAndroid;
-
-    const activeSectionKey =
-      aiConfig.provider === "chrome-ai" ? "chromeAi" : aiConfig.provider;
-    const configuredThinkingEnabled =
-      (aiConfig as Record<string, any>)[activeSectionKey]?.thinkingEnabled ===
-      true;
-    const [inputThinkingOverride, setInputThinkingOverride] = useState<
-      boolean | null
-    >(null);
-    useEffect(() => {
-      setInputThinkingOverride(null);
-    }, [activeSectionKey]);
-    const thinkingEnabled =
-      isInputWindow && inputThinkingOverride !== null
-        ? inputThinkingOverride
-        : configuredThinkingEnabled;
-    const toggleThinking = (checked: boolean) => {
-      if (isInputWindow && isDesktop && api?.ipc) {
-        setInputThinkingOverride(checked);
-        api.ipc.send("chatInput:thinkingChanged", {
-          section: activeSectionKey,
-          enabled: checked,
-        });
-        return;
-      }
-      updateAIConfig(`${activeSectionKey}.thinkingEnabled`, checked);
-    };
 
     // Local state for input window (synced from main window)
     const [localPendingDropData, setLocalPendingDropData] =
@@ -714,7 +697,14 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
     );
 
     useEffect(() => {
-      if (effectiveIsVisible && textareaRef.current && !isVoiceMode) {
+      if (
+        effectiveIsVisible &&
+        textareaRef.current &&
+        !isVoiceMode &&
+        !isSettingsPanelOpen &&
+        !isHistoryPanelOpen &&
+        !isQuickPanelOpen
+      ) {
         textareaRef.current.focus();
         adjustTextareaHeight();
         Logger.log("ChatInput", "Focused textarea");
@@ -723,7 +713,14 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
         setAttachedAudios([]);
         setMessage("");
       }
-    }, [effectiveIsVisible, isVoiceMode, setMessage]);
+    }, [
+      effectiveIsVisible,
+      isVoiceMode,
+      setMessage,
+      isSettingsPanelOpen,
+      isHistoryPanelOpen,
+      isQuickPanelOpen,
+    ]);
 
     useEffect(() => {
       adjustTextareaHeight();
@@ -2107,13 +2104,6 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
               testId: "chat-attach-audio-button",
               disabled: isRecording || isProcessingRecording,
             },
-            {
-              label: "Thinking",
-              icon: "bulb",
-              onClick: () => toggleThinking(!thinkingEnabled),
-              active: thinkingEnabled,
-              testId: "chat-thinking-toggle",
-            },
           ]
         : []),
       ...(isVoiceMode && cameraEnabled
@@ -2142,36 +2132,26 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
             },
           ]
         : []),
-      ...(!isVoiceMode && voiceCallEnabled
-        ? [
-            {
-              label: "Voice conversation",
-              icon: "waveform",
-              onClick: () => {
-                void handleVoiceModeToggle();
-              },
-              testId: "chat-start-voice-conversation",
-              disabled: isRecording || isProcessingRecording,
-            },
-          ]
-        : []),
-      ...(resolvedEmbedConfig.features.settings
-        ? [
-            {
-              label: "Quick Access",
-              icon: "tools",
-              onClick: handleQuickPanelToggle,
-              testId: "chat-quick-panel-button",
-              active: isQuickPanelOpen,
-            },
-          ]
-        : []),
+    ];
+    const composerControlItems: ComposerMenuItem[] = [
       {
         label: "Close chat",
         icon: "close",
         onClick: wrappedOnClose,
         testId: "chat-close-button",
       },
+
+      ...(resolvedEmbedConfig.features.settings
+        ? [
+            {
+              label: "Quick Access",
+              icon: "settings",
+              onClick: handleQuickPanelToggle,
+              testId: "chat-quick-panel-button",
+              active: isQuickPanelOpen,
+            },
+          ]
+        : []),
     ];
     const shouldFollowKeyboard =
       isAndroid &&
@@ -2300,15 +2280,6 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
 
             <div
               data-electron-interactive="true"
-              onFocusCapture={() => setInputFocused(true)}
-              onBlurCapture={(event) => {
-                if (
-                  !event.currentTarget.contains(
-                    event.relatedTarget as Node | null,
-                  )
-                )
-                  setInputFocused(false);
-              }}
               className={cn(
                 "composer-surface glass-container min-w-0 flex-1 rounded-[28px] p-2",
                 isLightBackground && "glass-container-dark",
@@ -2379,8 +2350,7 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                   (hasAttachments ||
                     message.includes("\n") ||
                     hasContent ||
-                    inputFocused ||
-                    composerMenuOpen)
+                    inputFocused)
                 }
               >
                 <div className="composer-more">
@@ -2404,54 +2374,10 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                   ) : (
                     <ComposerMenu
                       items={composerMenuItems}
-                      onOpenChange={(open) => {
-                        setComposerMenuOpen(open);
-                        if (!open || (!voiceInputEnabled && !voiceCallEnabled))
-                          return;
-                        if (isDesktopInputWindow)
-                          api?.ipc?.send("mic:requestState");
-                        else void MicrophoneService.refreshDevices();
-                      }}
                       isLightBackground={isLightBackground}
                       disabled={isProcessingRecording}
-                    >
-                      {(voiceInputEnabled || voiceCallEnabled) && (
-                        <>
-                          <Select
-                            value={selectedMicId || ""}
-                            onChange={(event) =>
-                              handleMicSelect(event.target.value || null)
-                            }
-                            options={micDeviceOptions}
-                            icon={<Icon name="microphone" size={19} />}
-                            variant={isLightBackground ? "ghost-dark" : "ghost"}
-                            side="top"
-                            tooltip="Microphone"
-                            aria-label="Microphone"
-                            data-testid="chat-voice-mic-select"
-                          />
-                          {isVoiceMode && cameraEnabled && (
-                            <Select
-                              value={selectedCameraId || ""}
-                              onChange={(event) => {
-                                void handleCameraSelect(
-                                  event.target.value || null,
-                                );
-                              }}
-                              options={cameraDeviceOptions}
-                              icon={<Icon name="camera" size={19} />}
-                              variant={
-                                isLightBackground ? "ghost-dark" : "ghost"
-                              }
-                              side="top"
-                              tooltip="Camera"
-                              aria-label="Camera"
-                              data-testid="chat-voice-camera-select"
-                            />
-                          )}
-                        </>
-                      )}
-                    </ComposerMenu>
+                      triggerLabel="Add attachments"
+                    />
                   )}
                 </div>
                 {isVoiceMode || isRecording || isProcessingRecording ? (
@@ -2477,6 +2403,8 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                 <textarea
                   ref={textareaRef}
                   data-testid="chat-input-textarea"
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setInputFocused(false)}
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
                   onTransitionEnd={(event) => {
@@ -2489,12 +2417,74 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
                   aria-label="Message"
                   className={cn(
                     "composer-content composer-textarea custom-scrollbar",
+                    !isVoiceMode &&
+                      !isRecording &&
+                      !isProcessingRecording &&
+                      "composer-has-model",
                     (isVoiceMode || isRecording || isProcessingRecording) &&
                       "hidden",
                   )}
                   rows={1}
                 />
-                <div className="composer-trailing flex items-center gap-1">
+                <div
+                  ref={setComposerTrailing}
+                  className="composer-trailing flex items-center gap-1"
+                >
+                  {!isVoiceMode && !isRecording && !isProcessingRecording && (
+                    <ComposerModelPicker
+                      isLightBackground={isLightBackground}
+                    />
+                  )}
+                  <ComposerMenu
+                    items={composerControlItems}
+                    triggerIcon="chat-controls"
+                    triggerLabel="Chat controls"
+                    triggerTestId="chat-controls-button"
+                    align="end"
+                    isLightBackground={isLightBackground}
+                    onOpenChange={(open) => {
+                      if (open && (voiceInputEnabled || voiceCallEnabled)) {
+                        if (isDesktopInputWindow)
+                          api?.ipc?.send("mic:requestState");
+                        else void MicrophoneService.refreshDevices();
+                      }
+                    }}
+                  >
+                    {(voiceInputEnabled || voiceCallEnabled) && (
+                      <>
+                        <Select
+                          value={selectedMicId || ""}
+                          onChange={(event) =>
+                            handleMicSelect(event.target.value || null)
+                          }
+                          options={micDeviceOptions}
+                          icon={<Icon name="microphone" size={19} />}
+                          variant={isLightBackground ? "ghost-dark" : "ghost"}
+                          side="top"
+                          tooltip="Microphone"
+                          aria-label="Microphone"
+                          data-testid="chat-voice-mic-select"
+                        />
+                        {isVoiceMode && cameraEnabled && (
+                          <Select
+                            value={selectedCameraId || ""}
+                            onChange={(event) => {
+                              void handleCameraSelect(
+                                event.target.value || null,
+                              );
+                            }}
+                            options={cameraDeviceOptions}
+                            icon={<Icon name="camera" size={19} />}
+                            variant={isLightBackground ? "ghost-dark" : "ghost"}
+                            side="top"
+                            tooltip="Camera"
+                            aria-label="Camera"
+                            data-testid="chat-voice-camera-select"
+                          />
+                        )}
+                      </>
+                    )}
+                  </ComposerMenu>
                   {isVoiceMode ? (
                     <Button
                       type="button"

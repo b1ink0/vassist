@@ -4,12 +4,11 @@ import { BackgroundThemeModes, PositionPresets } from "../../config/uiConfig";
 import Icon from "../icons/Icon";
 import Toggle from "../common/Toggle";
 import ShortcutsConfig from "../common/ShortcutsConfig";
-import { Button, Card, Input, Select, SettingsRow } from "../ui";
-import StageSettings from "./StageSettings";
-import { canConfigureStages } from "../../babylon/stages/stageAvailability";
+import { Button, Input, Select, SettingsRow } from "../ui";
 import BackgroundSettings from "./BackgroundSettings";
 import DesktopBackgroundSettings from "./DesktopBackgroundSettings";
 import type { BackupSelection } from "../../services/storage/AppDataBackupService";
+import SettingsGroup from "./shared/SettingsGroup";
 
 export type UpdateUIConfig = (path: string, value: unknown) => void;
 
@@ -28,56 +27,39 @@ export interface DisplayTabProps extends SharedProps {
   onResetSetup: () => void;
 }
 
-export const DisplayTab = ({
-  uiConfig,
-  updateUIConfig,
-  isLightBackground,
-  isAndroid,
-  isDesktop,
-  isExtension,
-  allowPositionSelection,
+export const HelpSettings = ({
   isResetting,
   onResetSetup,
+  isExtension,
+  uiConfig,
+  updateUIConfig,
 }: DisplayTabProps) => (
-  <div className="space-y-6">
-    <div className="rounded-lg border border-white/20 bg-white/10 p-3">
-      <div className="flex items-start gap-3">
-        <Icon name="book" size={20} className="mt-0.5 flex-shrink-0" />
-        <div className="min-w-0 flex-1">
-          <h4 className="mb-1 text-sm font-semibold text-white">
-            Documentation
-          </h4>
-          <p className="mb-2 text-xs text-white/70">
-            Need help? Check out the full documentation for setup guides,
-            troubleshooting, and feature explanations.
-          </p>
-          <a
-            href="https://docs-vassist.vercel.app/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs font-medium transition-colors"
-          >
-            View Documentation
-            <Icon name="arrow-top-right" size={14} />
-          </a>
-        </div>
-      </div>
-    </div>
+  <div className="flex flex-col gap-4">
+    <SettingsRow label="Documentation" description="Setup guides and help">
+      <a
+        href="https://docs-vassist.vercel.app/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="vassist-ghost-button inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium"
+      >
+        Open <Icon name="arrow-top-right" size={14} />
+      </a>
+    </SettingsRow>
 
-    <Card variant="elevated">
+    <SettingsRow
+      label="Setup wizard"
+      description="Configure your assistant again"
+    >
       <Button
-        variant="default"
-        className="w-full font-semibold"
+        variant="ghost"
+        size="sm"
         onClick={onResetSetup}
         disabled={isResetting}
       >
         <Icon name="refresh" size={16} />
-        {isResetting ? "Resetting..." : "Start Setup Wizard Again"}
+        {isResetting ? "Resetting..." : "Start"}
       </Button>
-      <p className="text-xs">
-        Re-run the initial setup wizard to reconfigure your assistant
-      </p>
-    </Card>
+    </SettingsRow>
 
     {isExtension && (
       <SettingsRow
@@ -94,48 +76,22 @@ export const DisplayTab = ({
         />
       </SettingsRow>
     )}
+  </div>
+);
 
-    <div className="space-y-2">
-      <SettingsRow
-        label="Use Colored Icons"
-        description={
-          uiConfig.enableColoredIcons
-            ? "Icons are displayed in color"
-            : "Icons are displayed in monochrome gray"
-        }
-      >
-        <Toggle
-          checked={uiConfig.enableColoredIcons || false}
-          data-testid="toggle-use-colored-icons"
-          onChange={(checked) => updateUIConfig("enableColoredIcons", checked)}
-        />
-      </SettingsRow>
-
-      {uiConfig.enableColoredIcons && (
-        <div className="ml-4 mt-2">
-          <SettingsRow
-            label="Toolbar Only"
-            description={
-              uiConfig.enableColoredIconsToolbarOnly
-                ? "Colored icons only in AI toolbar"
-                : "Colored icons everywhere"
-            }
-          >
-            <Toggle
-              checked={uiConfig.enableColoredIconsToolbarOnly || false}
-              onChange={(checked) =>
-                updateUIConfig("enableColoredIconsToolbarOnly", checked)
-              }
-            />
-          </SettingsRow>
-        </div>
-      )}
-    </div>
-
+export const DisplayTab = ({
+  uiConfig,
+  updateUIConfig,
+  isLightBackground,
+  isAndroid,
+  isDesktop,
+  allowPositionSelection,
+}: DisplayTabProps) => (
+  <div className="flex min-w-0 flex-col gap-4">
     {!uiConfig.enableModelLoading && allowPositionSelection && (
-      <div className="space-y-2 border-t border-white/10 pt-4">
-        <h4 className="mb-3 text-sm font-semibold text-white">Chat Position</h4>
-        <label className="block text-sm font-medium text-white/90">
+      <div className="flex flex-col gap-2">
+        <h4 className="settings-group-heading">Chat Position</h4>
+        <label className="block text-sm font-medium vassist-text-primary">
           Chat Window Position
         </label>
         <Select
@@ -157,45 +113,48 @@ export const DisplayTab = ({
       </div>
     )}
 
-    <div className="space-y-4 border-t border-white/10 pt-4">
-      <h4 className="mb-3 text-sm font-semibold text-white">Appearance</h4>
-      <label className="block text-sm font-medium text-white/90">
-        Application Theme
-      </label>
-      <Select
-        value={
-          uiConfig.backgroundDetection?.mode || BackgroundThemeModes.ADAPTIVE
-        }
-        onChange={(event) =>
-          updateUIConfig("backgroundDetection.mode", event.target.value)
-        }
-        variant={isLightBackground ? "dark" : "default"}
-        options={[
-          { value: BackgroundThemeModes.ADAPTIVE, label: "Adaptive" },
-          { value: "light", label: "Dark" },
-          { value: "dark", label: "Light" },
-        ]}
-      />
-      <p className="text-xs text-white/50">
-        Choose the color theme for the assistant UI.
-      </p>
+    <div className="flex flex-col gap-3">
+      <SettingsGroup>
+        <SettingsRow
+          targetId="ui.appearance"
+          label="Application theme"
+          layout="stacked"
+        >
+          <Select
+            value={
+              uiConfig.backgroundDetection?.mode ||
+              BackgroundThemeModes.ADAPTIVE
+            }
+            onChange={(event) =>
+              updateUIConfig("backgroundDetection.mode", event.target.value)
+            }
+            variant={isLightBackground ? "dark" : "default"}
+            options={[
+              { value: BackgroundThemeModes.ADAPTIVE, label: "Adaptive" },
+              { value: "light", label: "Dark" },
+              { value: "dark", label: "Light" },
+            ]}
+          />
+        </SettingsRow>
+      </SettingsGroup>
 
       {(uiConfig.backgroundDetection?.mode || BackgroundThemeModes.ADAPTIVE) ===
         BackgroundThemeModes.ADAPTIVE && (
         <>
           <div className="rounded-lg border border-blue-400/20 bg-blue-500/10 p-3">
             <p className="flex items-start gap-1.5 text-xs text-blue-200/90">
-              <Icon name="idea" size={14} className="mt-0.5 flex-shrink-0" />
+              <Icon name="idea" size={14} className="pt-0.5 flex-shrink-0" />
               <span>
                 <strong>Adaptive Mode:</strong> Automatically detects the page
                 background and adjusts the assistant theme for contrast.
               </span>
             </p>
           </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">
-              Detection Accuracy
-            </label>
+          <SettingsRow
+            label="Detection Accuracy"
+            description="Sample grid size (3–10). Higher values are more accurate."
+            layout="stacked"
+          >
             <Input
               type="number"
               min="3"
@@ -209,30 +168,59 @@ export const DisplayTab = ({
               }
               variant={isLightBackground ? "dark" : "default"}
             />
-            <p className="text-xs text-white/50">
-              Sample grid size (3–10). Higher values are more accurate.
-            </p>
-          </div>
+          </SettingsRow>
         </>
       )}
     </div>
 
-    {canConfigureStages(uiConfig.desktopMode.mode) && <StageSettings />}
     {isAndroid && <BackgroundSettings isLightBackground={isLightBackground} />}
     {isDesktop && (
       <DesktopBackgroundSettings isLightBackground={isLightBackground} />
     )}
+
+    <SettingsGroup>
+      <SettingsRow
+        label="Use Colored Icons"
+        description={
+          uiConfig.enableColoredIcons
+            ? "Icons are displayed in color"
+            : "Icons are displayed in monochrome gray"
+        }
+      >
+        <Toggle
+          checked={uiConfig.enableColoredIcons || false}
+          data-testid="toggle-use-colored-icons"
+          onChange={(checked) => updateUIConfig("enableColoredIcons", checked)}
+        />
+      </SettingsRow>
+
+      {uiConfig.enableColoredIcons && (
+        <div className="pl-4 pt-2">
+          <SettingsRow
+            label="Toolbar Only"
+            description={
+              uiConfig.enableColoredIconsToolbarOnly
+                ? "Colored icons only in AI toolbar"
+                : "Colored icons everywhere"
+            }
+          >
+            <Toggle
+              checked={uiConfig.enableColoredIconsToolbarOnly || false}
+              onChange={(checked) =>
+                updateUIConfig("enableColoredIconsToolbarOnly", checked)
+              }
+            />
+          </SettingsRow>
+        </div>
+      )}
+    </SettingsGroup>
   </div>
 );
 
 export interface ChatTabProps extends SharedProps {}
 
-export const ChatTab = ({
-  uiConfig,
-  updateUIConfig,
-  isLightBackground,
-}: ChatTabProps) => (
-  <div className="space-y-4">
+export const ChatTab = ({ uiConfig, updateUIConfig }: ChatTabProps) => (
+  <div className="flex flex-col gap-4">
     <SettingsRow
       label="Fade chat messages"
       description="Show the latest message briefly. Open Chat options to show the full conversation."
@@ -251,20 +239,18 @@ export const ChatTab = ({
         onChange={(checked) => updateUIConfig("animateStreamingText", checked)}
       />
     </SettingsRow>
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex-1">
-          <label className="text-sm font-medium text-white">
-            Smooth Response Animation
-          </label>
-          <p className="mt-0.5 flex items-start gap-1.5 text-xs text-yellow-400/80">
-            <Icon name="warning" size={14} className="mt-0.5 flex-shrink-0" />
+    <div className="flex flex-col gap-2">
+      <SettingsRow
+        label="Smooth Response Animation"
+        description={
+          <>
             <span>
               Performance impact: smooth height animation may affect lower-end
               devices.
             </span>
-          </p>
-        </div>
+          </>
+        }
+      >
         <Toggle
           checked={uiConfig.smoothStreamingAnimation || false}
           data-testid="toggle-smooth-streaming-animation"
@@ -272,60 +258,19 @@ export const ChatTab = ({
             updateUIConfig("smoothStreamingAnimation", checked)
           }
         />
-      </div>
+      </SettingsRow>
     </div>
 
     <SettingsRow
-      label="Show Emote Duration Bar"
-      description={
-        uiConfig.emotePlayback?.showDurationBar !== false
-          ? "Displays a playback scrub bar while an emote is active"
-          : "Hides the emote playback scrub bar"
-      }
+      label="Expand thinking"
+      description="Open reasoning while a reply streams"
     >
       <Toggle
-        checked={uiConfig.emotePlayback?.showDurationBar !== false}
+        data-testid="llm-thinking-autoexpand-toggle"
+        checked={uiConfig.thinkingPanelAutoExpand === true}
         onChange={(checked) =>
-          updateUIConfig("emotePlayback.showDurationBar", checked)
+          updateUIConfig("thinkingPanelAutoExpand", checked)
         }
-      />
-    </SettingsRow>
-
-    {uiConfig.emotePlayback?.showDurationBar !== false && (
-      <div className="ml-4 mt-2">
-        <SettingsRow
-          label="Show Emote Time Labels"
-          description={
-            uiConfig.emotePlayback?.showTime !== false
-              ? "Shows playback time in the hover popover"
-              : "Hides playback time from the hover popover"
-          }
-        >
-          <Toggle
-            checked={uiConfig.emotePlayback?.showTime !== false}
-            onChange={(checked) =>
-              updateUIConfig("emotePlayback.showTime", checked)
-            }
-          />
-        </SettingsRow>
-      </div>
-    )}
-
-    <SettingsRow
-      label="Emote Button Progress"
-      description="Choose where emote playback progress is displayed"
-    >
-      <Select
-        value={uiConfig.emotePlayback?.buttonProgress || "none"}
-        onChange={(event) =>
-          updateUIConfig("emotePlayback.buttonProgress", event.target.value)
-        }
-        options={[
-          { value: "none", label: "Bottom bar only" },
-          { value: "ring", label: "Emotes button ring only" },
-          { value: "both", label: "Bottom bar and button ring" },
-        ]}
-        variant={isLightBackground ? "dark" : "default"}
       />
     </SettingsRow>
   </div>
@@ -337,9 +282,9 @@ export const ToolsTab = ({
   isAndroid,
   isLightBackground,
 }: SharedProps) => (
-  <div className="space-y-6">
-    <div className="space-y-2">
-      <h4 className="mb-3 text-sm font-semibold text-white">AI Toolbar</h4>
+  <div className="flex min-w-0 flex-col gap-4">
+    <div className="flex flex-col gap-2">
+      <h4 className="settings-group-heading">AI Toolbar</h4>
       <SettingsRow
         targetId="ui.aiToolbar.enabled"
         label="Enable AI Toolbar"
@@ -355,7 +300,7 @@ export const ToolsTab = ({
         <>
           <SettingsRow
             targetId="ui.aiToolbar.showOnInputFocus"
-            className="mt-3"
+            className="pt-3"
             label="Show on Input Focus"
             description="Show toolbar actions when focusing an editable field"
           >
@@ -368,7 +313,7 @@ export const ToolsTab = ({
           </SettingsRow>
           <SettingsRow
             targetId="ui.aiToolbar.showOnImageHover"
-            className="mt-3"
+            className="pt-3"
             label="Show on Image Hover"
             description="Show image analysis actions when hovering over images"
           >
@@ -384,10 +329,8 @@ export const ToolsTab = ({
     </div>
 
     {!isAndroid && (
-      <div className="space-y-4 border-t border-white/10 pt-4">
-        <h4 className="mb-3 text-sm font-semibold text-white">
-          Keyboard Shortcuts
-        </h4>
+      <div className="flex flex-col gap-3">
+        <h4 className="settings-group-heading">Keyboard Shortcuts</h4>
         <ShortcutsConfig
           shortcuts={
             uiConfig.shortcuts || {
@@ -436,9 +379,12 @@ export const MoreTab = ({
   onImportButtonClick,
   onImportBackup,
 }: MoreTabProps) => (
-  <div className="space-y-6">
-    <div className="space-y-3">
-      <h4 className="mb-1 text-sm font-semibold text-white">
+  <div className="flex min-w-0 flex-col gap-4">
+    <div className="flex flex-col gap-3">
+      <h4
+        data-settings-target="ui.storage"
+        className="settings-group-heading pb-1"
+      >
         Backup & Restore
       </h4>
       <SettingsRow
@@ -453,7 +399,7 @@ export const MoreTab = ({
       </SettingsRow>
 
       {useSelectiveBackup && (
-        <div className="ml-4 grid grid-cols-1 gap-2 md:grid-cols-2">
+        <div className="pl-4 flex flex-col gap-2">
           {(
             [
               ["config", "Config", "UI/AI/TTS/STT config keys"],
@@ -507,12 +453,14 @@ export const MoreTab = ({
         />
       </div>
       {backupStatus ? (
-        <p className="text-xs text-white/70">{backupStatus}</p>
+        <p className="text-xs vassist-text-secondary">{backupStatus}</p>
       ) : null}
     </div>
 
-    <div className="space-y-2 border-t border-white/10 pt-4">
-      <h4 className="mb-3 text-sm font-semibold text-white">Developer</h4>
+    <div className="flex flex-col gap-2">
+      <h4 className="settings-group-heading">
+        <span data-settings-target="ui.developer">Developer</span>
+      </h4>
       {isDesktop && (
         <SettingsRow
           label="Enable Native Electron DevTools"

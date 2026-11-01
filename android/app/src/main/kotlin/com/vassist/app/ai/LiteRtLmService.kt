@@ -147,7 +147,8 @@ class LiteRtLmService(private val context: Context) {
         maxTokens: Int = 2048,
         images: List<ByteArray>? = null,
         audios: List<Pair<ByteArray, String>>? = null,
-        enableThinking: Boolean = false
+        enableThinking: Boolean = false,
+        onUsage: ((LLMUsage) -> Unit)? = null
     ): Flow<String> = flow {
         val e = engine ?: throw IllegalStateException("LiteRT-LM not initialized")
 
@@ -236,6 +237,7 @@ class LiteRtLmService(private val context: Context) {
                 .joinToString("") { it.text }
             if (text.isNotEmpty()) emit(text)
         }
+        onUsage?.invoke(LLMUsage(conversation.getTokenCount(), maxContextTokens))
     }.flowOn(engineDispatcher)
 
     suspend fun chatCompletionSync(
@@ -243,10 +245,11 @@ class LiteRtLmService(private val context: Context) {
         maxTokens: Int = 2048,
         images: List<ByteArray>? = null,
         audios: List<Pair<ByteArray, String>>? = null,
-        enableThinking: Boolean = false
+        enableThinking: Boolean = false,
+        onUsage: ((LLMUsage) -> Unit)? = null
     ): String {
         val sb = StringBuilder()
-        chatCompletion(messages, maxTokens, images, audios, enableThinking).collect { sb.append(it) }
+        chatCompletion(messages, maxTokens, images, audios, enableThinking, onUsage).collect { sb.append(it) }
         return sb.toString()
     }
 

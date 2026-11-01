@@ -1,3 +1,4 @@
+import SettingsScrollArea from "./shared/SettingsScrollArea";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BUILT_IN_STAGES,
@@ -22,6 +23,9 @@ import Icon from "../icons/Icon";
 import { isAndroid } from "../../utils/PlatformUtils";
 import resourceLoader from "../../utils/ResourceLoader";
 import { useXrRuntime } from "../../contexts/XrRuntimeContext";
+import RangeSlider from "../ui/RangeSlider";
+import SettingsDisclosure from "./shared/SettingsDisclosure";
+import SettingsRow from "../ui/SettingsRow";
 
 type StageItem = Awaited<
   ReturnType<typeof stageStorageService.getStagesList>
@@ -273,7 +277,7 @@ export function StageSelectionControls({
       title={!avatarEnabled ? "Turn on the avatar to use stages" : undefined}
     >
       {!avatarEnabled && (
-        <p className="text-xs text-white/50">
+        <p className="text-xs vassist-text-muted">
           Turn on the avatar to use stages.
         </p>
       )}
@@ -281,8 +285,7 @@ export function StageSelectionControls({
         disabled={!avatarEnabled}
         className="flex min-w-0 flex-col gap-4 disabled:opacity-45"
       >
-        <div className="flex items-center justify-between gap-3">
-          <h4 className="text-sm font-semibold text-white">Stages</h4>
+        <SettingsRow label="Show stage">
           <Toggle
             aria-label="Enable stages"
             checked={selected.kind !== "none"}
@@ -290,7 +293,7 @@ export function StageSelectionControls({
               void select(enabled ? lastSelection.current : { kind: "none" })
             }
           />
-        </div>
+        </SettingsRow>
         {selected.kind !== "none" && (
           <div className="flex flex-wrap gap-2">
             {BUILT_IN_STAGES.map((stage) => (
@@ -302,7 +305,7 @@ export function StageSelectionControls({
                   selected.kind === "builtin" && selected.id === stage.id
                 }
                 onClick={() => void select({ kind: "builtin", id: stage.id })}
-                className="relative flex h-24 min-w-[min(120px,100%)] flex-[1_1_30%] items-end overflow-hidden rounded-lg border border-white/15 p-2 text-left hover:border-white/40 aria-pressed:border-white/70"
+                className="relative flex h-24 min-w-[min(120px,100%)] flex-[1_1_30%] items-end overflow-hidden rounded-lg border border-current/15 p-2 text-left hover:border-current/40 aria-pressed:border-current/70"
               >
                 {previews[stage.id] && (
                   <img
@@ -313,14 +316,14 @@ export function StageSelectionControls({
                   />
                 )}
                 <span className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/65 to-transparent" />
-                <span className="relative truncate text-xs font-medium text-white">
+                <span className="relative truncate text-xs font-medium vassist-text-primary">
                   {stage.name}
                 </span>
                 {selected.kind === "builtin" && selected.id === stage.id && (
                   <Icon
                     name="check"
                     size={16}
-                    className="absolute right-2 top-2 text-white"
+                    className="absolute right-2 top-2 vassist-text-primary"
                   />
                 )}
               </button>
@@ -329,66 +332,62 @@ export function StageSelectionControls({
         )}
         {selected.kind !== "none" && (
           <div className="flex flex-col gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setAdvanced(!advanced)}
-              aria-expanded={advanced}
+            <SettingsDisclosure
+              title="Stage options"
+              open={advanced}
+              onOpenChange={setAdvanced}
             >
-              {advanced ? "Show less" : "Stage options"}
-              <Icon name={advanced ? "chevron-up" : "chevron-down"} size={14} />
-            </Button>
-            {advanced && (
-              <div className="flex flex-col gap-3 rounded-lg border border-white/10 p-3">
-                <label className="flex flex-col gap-2 text-xs text-white/70">
-                  <span className="flex items-center justify-between gap-3">
-                    <span>Environment brightness</span>
-                    <span className="tabular-nums text-white/90">
-                      {Math.round(options.brightness * 100)}%
-                    </span>
-                  </span>
-                  <input
-                    type="range"
+              <div className="flex min-w-0 flex-col gap-3">
+                <SettingsRow
+                  label={
+                    <>
+                      <span className="flex items-center justify-between gap-3">
+                        <span>Environment brightness</span>
+                        <span className="tabular-nums vassist-text-primary">
+                          {Math.round(options.brightness * 100)}%
+                        </span>
+                      </span>
+                    </>
+                  }
+                  layout="stacked"
+                >
+                  <RangeSlider
                     min="0.35"
                     max="1.5"
                     step="0.05"
                     value={options.brightness}
                     aria-label="Environment brightness"
-                    onChange={(event) =>
+                    onValueChange={(nextValue) =>
                       setOptions({
                         ...options,
-                        brightness: Number(event.target.value),
+                        brightness: nextValue,
                       })
                     }
-                    className="w-full accent-current"
                   />
-                  <span className="flex justify-between text-[10px] text-white/45">
+                  <span className="flex justify-between text-[10px] vassist-text-muted">
                     <span>Dim</span>
                     <span>Bright</span>
                   </span>
-                </label>
+                </SettingsRow>
                 {onParallaxChange && (
-                  <div className="flex items-center justify-between gap-3 text-sm text-white/80">
-                    Stage parallax
+                  <SettingsRow label={<>Stage parallax</>}>
                     <Toggle
                       checked={parallaxEnabled !== false}
                       onChange={onParallaxChange}
                     />
-                  </div>
+                  </SettingsRow>
                 )}
                 {onShadowChange && (
-                  <div className="flex items-center justify-between gap-3 text-sm text-white/80">
-                    Avatar shadow
+                  <SettingsRow label={<>Avatar shadow</>}>
                     <Toggle
                       checked={shadowEnabled !== false}
                       onChange={onShadowChange}
                     />
-                  </div>
+                  </SettingsRow>
                 )}
                 {supportsSeason && (
                   <div className="flex flex-col gap-3">
-                    <label className="flex flex-col gap-1 text-xs text-white/70">
-                      Season
+                    <SettingsRow label={<>Season</>} layout="stacked">
                       <Select
                         value={options.season}
                         options={[
@@ -405,25 +404,23 @@ export function StageSelectionControls({
                           })
                         }
                       />
-                    </label>
+                    </SettingsRow>
                     {definition?.seasonalEffects !== false && (
-                      <div className="flex items-center justify-between gap-3 text-sm text-white/80">
-                        Seasonal effects
+                      <SettingsRow label={<>Seasonal effects</>}>
                         <Toggle
                           checked={options.seasonalEffects}
                           onChange={(seasonalEffects) =>
                             setOptions({ ...options, seasonalEffects })
                           }
                         />
-                      </div>
+                      </SettingsRow>
                     )}
                   </div>
                 )}
                 {definition?.time && (
                   <div className="flex flex-col gap-3">
                     {definition.moods && (
-                      <label className="flex flex-col gap-1 text-xs text-white/70">
-                        Lighting
+                      <SettingsRow label={<>Lighting</>} layout="stacked">
                         <Select
                           value={lightingMode}
                           options={[
@@ -438,11 +435,10 @@ export function StageSelectionControls({
                             });
                           }}
                         />
-                      </label>
+                      </SettingsRow>
                     )}
                     {lightingMode === "mood" && definition.moods ? (
-                      <label className="flex flex-col gap-1 text-xs text-white/70">
-                        Mood
+                      <SettingsRow label={<>Mood</>} layout="stacked">
                         <Select
                           value={options.mood}
                           options={[
@@ -453,44 +449,47 @@ export function StageSelectionControls({
                             setOptions({ ...options, mood: event.target.value })
                           }
                         />
-                      </label>
+                      </SettingsRow>
                     ) : (
                       <>
-                        <div className="flex items-center justify-between gap-3 text-sm text-white/80">
-                          Use local time
+                        <SettingsRow label={<>Use local time</>}>
                           <Toggle
                             checked={options.localTime}
                             onChange={(localTime) =>
                               setOptions({ ...options, localTime })
                             }
                           />
-                        </div>
+                        </SettingsRow>
                         {!options.localTime && (
-                          <label className="flex flex-col gap-2 text-xs text-white/70">
-                            <span className="flex items-center justify-between gap-3">
-                              <span>Time of day</span>
-                              <span className="tabular-nums text-white/90">
-                                {formatHour(options.hour)}
-                              </span>
-                            </span>
-                            <input
-                              type="range"
+                          <SettingsRow
+                            label={
+                              <>
+                                <span className="flex items-center justify-between gap-3">
+                                  <span>Time of day</span>
+                                  <span className="tabular-nums vassist-text-primary">
+                                    {formatHour(options.hour)}
+                                  </span>
+                                </span>
+                              </>
+                            }
+                            layout="stacked"
+                          >
+                            <RangeSlider
                               min={0}
                               max={24}
                               step={0.25}
                               value={options.hour}
                               aria-label="Time of day"
                               aria-valuetext={formatHour(options.hour)}
-                              onChange={(event) =>
+                              onValueChange={(nextValue) =>
                                 setOptions({
                                   ...options,
-                                  hour: Number(event.target.value),
+                                  hour: nextValue,
                                 })
                               }
-                              className="w-full accent-current"
                             />
                             <span
-                              className="flex justify-between text-[10px] text-white/45"
+                              className="flex justify-between text-[10px] vassist-text-muted"
                               aria-hidden="true"
                             >
                               <span>00:00</span>
@@ -499,27 +498,28 @@ export function StageSelectionControls({
                               <span>18:00</span>
                               <span>24:00</span>
                             </span>
-                          </label>
+                          </SettingsRow>
                         )}
                       </>
                     )}
                   </div>
                 )}
                 {definition?.animated && (
-                  <div className="flex items-center justify-between gap-3 text-sm text-white/80">
-                    Animate environment
+                  <SettingsRow label={<>Animate environment</>}>
                     <Toggle
                       checked={options.animate}
                       onChange={(animate) =>
                         setOptions({ ...options, animate })
                       }
                     />
-                  </div>
+                  </SettingsRow>
                 )}
                 {supportsAlignment && (
                   <>
-                    <label className="flex flex-col gap-1 text-xs text-white/70">
-                      Avatar height in meters
+                    <SettingsRow
+                      label={<>Avatar height in meters</>}
+                      layout="stacked"
+                    >
                       <Input
                         type="number"
                         min={0.25}
@@ -536,9 +536,11 @@ export function StageSelectionControls({
                           })
                         }
                       />
-                    </label>
-                    <label className="flex flex-col gap-1 text-xs text-white/70">
-                      Floor adjustment in meters
+                    </SettingsRow>
+                    <SettingsRow
+                      label={<>Floor adjustment in meters</>}
+                      layout="stacked"
+                    >
                       <Input
                         type="number"
                         min={-1}
@@ -555,26 +557,21 @@ export function StageSelectionControls({
                           })
                         }
                       />
-                    </label>
-                    <p className="text-xs text-white/45">
-                      Alignment is saved for this avatar. Adjust the room size
-                      or floor contact without changing the avatar's physics.
-                    </p>
+                    </SettingsRow>
                   </>
                 )}
                 <Button size="sm" onClick={apply}>
                   Apply
                 </Button>
               </div>
-            )}
+            </SettingsDisclosure>
           </div>
         )}
-        <details>
-          <summary className="cursor-pointer text-xs text-white/60">
-            Custom stages
-          </summary>
+        <SettingsDisclosure title={<>Custom stages</>}>
           <div className="flex items-center justify-between gap-3">
-            <h4 className="text-sm font-semibold text-white">Custom stages</h4>
+            <span className="text-xs vassist-text-muted">
+              GLB, Babylon or PMX ZIP
+            </span>
             <input
               ref={input}
               type="file"
@@ -597,11 +594,9 @@ export function StageSelectionControls({
               Import
             </Button>
           </div>
-          <p className="text-xs text-white/50">
-            GLB, Babylon scenes with embedded textures, or PMX stage ZIPs.
-          </p>
+
           {progress && (
-            <p className="text-xs text-white/70" role="status">
+            <p className="text-xs vassist-text-secondary" role="status">
               {progress}
             </p>
           )}
@@ -613,11 +608,11 @@ export function StageSelectionControls({
               {error}
             </p>
           )}
-          <div className="flex max-h-[360px] flex-col gap-2 overflow-y-auto scrollbar-glass">
+          <SettingsScrollArea className="flex max-h-[360px] flex-col gap-2 overflow-y-auto scrollbar-glass">
             {stages.map((stage) => (
               <div
                 key={stage.id}
-                className="flex items-center gap-2 rounded-lg border border-white/10 p-2"
+                className="settings-list-row settings-list-row-inline"
               >
                 {editing === stage.id ? (
                   <Input
@@ -637,10 +632,10 @@ export function StageSelectionControls({
                     }
                     className="flex min-w-0 flex-1 flex-col text-left"
                   >
-                    <span className="w-full truncate text-sm text-white">
+                    <span className="w-full truncate text-sm vassist-text-primary">
                       {stage.name}
                     </span>
-                    <span className="text-xs text-white/45">
+                    <span className="text-xs vassist-text-muted">
                       {((stage.metadata.fileSize ?? 0) / 1048576).toFixed(1)} MB
                     </span>
                   </button>
@@ -699,8 +694,8 @@ export function StageSelectionControls({
                 )}
               </div>
             ))}
-          </div>
-        </details>
+          </SettingsScrollArea>
+        </SettingsDisclosure>
       </fieldset>
     </div>
   );

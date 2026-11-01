@@ -372,12 +372,10 @@ export function createLocalServerManager({
         } = {
           llm: {
             modelPath: null,
-            defaultModelsDir: getModelsDir(),
+            defaultModelsDir: getModelsDir(config.customModelsPath),
             backend: config.backend || "auto",
             engine:
-              config.llmEngine === "node-llama"
-                ? "node-llama"
-                : "llama-server",
+              config.llmEngine === "node-llama" ? "node-llama" : "llama-server",
             llmServerBackend: config.llmBackend || "auto",
             temperature: config.temperature ?? 0.7,
             maxTokens: config.maxTokens ?? 2048,

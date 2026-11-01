@@ -1,3 +1,4 @@
+import SettingsScrollArea from "./shared/SettingsScrollArea";
 import { useEffect, useRef, useState } from "react";
 import {
   useConfigUIActions,
@@ -44,10 +45,7 @@ function CustomImageThumbnail({
 
   useEffect(() => {
     const api = desktopAPI?.desktopBackground;
-    if (
-      !shouldLoad ||
-      typeof api?.readImagePreview !== "function"
-    ) {
+    if (!shouldLoad || typeof api?.readImagePreview !== "function") {
       setPreview(undefined);
       return;
     }
@@ -68,14 +66,10 @@ function CustomImageThumbnail({
   return (
     <div
       ref={elementRef}
-      className="flex h-full w-full items-center justify-center text-white/40"
+      className="flex h-full w-full items-center justify-center vassist-text-muted"
     >
       {preview ? (
-        <img
-          src={preview}
-          alt=""
-          className="h-full w-full object-cover"
-        />
+        <img src={preview} alt="" className="h-full w-full object-cover" />
       ) : (
         <Icon name="image" size={16} />
       )}
@@ -251,14 +245,8 @@ export default function DesktopBackgroundSettings({
   };
 
   return (
-    <div className="flex flex-col gap-3 border-t border-white/10 pt-4">
-      <h4 className="text-sm font-semibold text-white">Desktop Background</h4>
-      <p className="text-xs text-white/55">
-        App and Wallpaper modes show these images. Floating mode stays clear.
-        Images remain in their original folder. Missing or unsupported files are
-        skipped.
-      </p>
-
+    <div className="flex flex-col gap-3">
+      <h4 className="settings-group-heading">Desktop Background</h4>
       <BackgroundSelectionControls
         platform="desktop"
         enabled={background.enabled}
@@ -308,182 +296,192 @@ export default function DesktopBackgroundSettings({
 
       {background.mode === "images" && (
         <>
-      <SettingsRow
-        label="Background parallax"
-        description="Gently pan the image. The desktop app and interactive wallpaper also follow the mouse."
-      >
-        <Toggle
-          checked={background.parallaxEnabled}
-          isLightBackground={isLightBackground}
-          onChange={(checked) =>
-            updateUIConfig("desktopBackground.parallaxEnabled", checked)
-          }
-        />
-      </SettingsRow>
-
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant={variant}
-          size="sm"
-          onClick={() => void handleChooseImages()}
-          disabled={busy || !desktopAPI?.desktopBackground}
-        >
-          <Icon name="image" size={15} />
-          Choose Images
-        </Button>
-        <Button
-          variant={variant}
-          size="sm"
-          onClick={() => void handleChooseFolder()}
-          disabled={busy || !desktopAPI?.desktopBackground}
-        >
-          <Icon name="folder" size={15} />
-          Choose Folder
-        </Button>
-      </div>
-
-      {background.folderPath && (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 p-2">
-          <span
-            className="min-w-0 truncate text-xs text-white/70"
-            title={background.folderPath}
+          <SettingsRow
+            label="Background parallax"
+            description="Gently pans the image."
           >
-            {background.folderPath}
-          </span>
-          <Button
-            variant={variant}
-            size="sm"
-            onClick={() => void handleRefreshFolder()}
-            disabled={busy}
-          >
-            Refresh
-          </Button>
-        </div>
-      )}
-
-      {images.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-[11px] font-medium text-white/80">
-              Selected custom images ({images.length})
-            </div>
-            <div className="flex items-center gap-1 rounded-md border border-white/10 bg-black/15 p-0.5">
-              {(["grid", "list"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  aria-pressed={imageViewMode === mode}
-                  onClick={() => setImageViewMode(mode)}
-                  className={`rounded px-2 py-0.5 text-[10px] capitalize ${
-                    imageViewMode === mode
-                      ? "bg-white/15 text-white"
-                      : "text-white/55 hover:text-white/85"
-                  }`}
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div
-            ref={imageListRef}
-            className={`flex max-h-40 overflow-y-auto rounded-md border border-white/10 bg-black/15 p-1 ${
-              imageViewMode === "grid"
-                ? "flex-wrap content-start gap-1.5"
-                : "flex-col gap-0.5"
-            }`}
-          >
-            {images.map((image) => {
-              const displayName = image.name?.trim() || image.path;
-              return imageViewMode === "grid" ? (
-                <div
-                  key={image.path}
-                  className="relative aspect-video min-w-[100px] flex-1 basis-[calc(33.333%_-_0.5rem)] overflow-hidden rounded border border-white/10 bg-white/5"
-                  title={image.path}
-                >
-                  <CustomImageThumbnail
-                    path={image.path}
-                    observerRoot={imageListRef.current}
-                  />
-                  <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/80 to-transparent px-1.5 pb-1 pt-4 text-[10px] text-white">
-                    {displayName}
-                  </span>
-                </div>
-              ) : (
-                <div
-                  key={image.path}
-                  className="flex min-h-5 w-full min-w-0 items-center gap-1.5 rounded px-1 text-[11px] leading-4 text-white/90 hover:bg-white/10"
-                  title={image.path}
-                >
-                  <Icon
-                    name="image"
-                    size={11}
-                    className="shrink-0 text-white/70"
-                  />
-                  <span className="min-w-0 flex-1 truncate">{displayName}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {(images.length > 0 ||
-        background.folderPath ||
-        builtInIds.length > 0) && (
-        <Button
-          variant="ghost"
-          className="w-full"
-          onClick={handleClear}
-          disabled={busy}
-        >
-          Clear selected backgrounds
-        </Button>
-      )}
-
-      {totalImageCount > 1 && (
-        <div className="flex flex-wrap gap-3">
-          <label className="flex min-w-[120px] flex-1 flex-col gap-1 text-xs text-white/80">
-            <span>Time per image (seconds)</span>
-            <Input
-              type="number"
-              min={5}
-              max={3600}
-              step={5}
-              value={background.slideshowIntervalSeconds}
-              onChange={(event) =>
-                updateUIConfig(
-                  "desktopBackground.slideshowIntervalSeconds",
-                  Math.min(3600, Math.max(5, Number(event.target.value) || 30)),
-                )
+            <Toggle
+              checked={background.parallaxEnabled}
+              isLightBackground={isLightBackground}
+              onChange={(checked) =>
+                updateUIConfig("desktopBackground.parallaxEnabled", checked)
               }
-              variant={isLightBackground ? "dark" : "default"}
-              disableDebounce
             />
-          </label>
-          <label className="flex min-w-[120px] flex-1 flex-col gap-1 text-xs text-white/80">
-            <span>Fade duration (seconds)</span>
-            <Input
-              type="number"
-              min={0}
-              max={15}
-              step={0.5}
-              value={background.fadeDurationSeconds}
-              onChange={(event) =>
-                updateUIConfig(
-                  "desktopBackground.fadeDurationSeconds",
-                  Math.min(15, Math.max(0, Number(event.target.value) || 0)),
-                )
-              }
-              variant={isLightBackground ? "dark" : "default"}
-              disableDebounce
-            />
-          </label>
-        </div>
-      )}
+          </SettingsRow>
 
-      {message && <p className="text-xs text-white/60">{message}</p>}
-      {error && <p className="text-xs text-red-300">{error}</p>}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              className="flex-1"
+              variant={variant}
+              size="sm"
+              onClick={() => void handleChooseImages()}
+              disabled={busy || !desktopAPI?.desktopBackground}
+            >
+              <Icon name="image" size={15} />
+              Choose Images
+            </Button>
+            <Button
+              className="flex-1"
+              variant={variant}
+              size="sm"
+              onClick={() => void handleChooseFolder()}
+              disabled={busy || !desktopAPI?.desktopBackground}
+            >
+              <Icon name="folder" size={15} />
+              Choose Folder
+            </Button>
+          </div>
+
+          {background.folderPath && (
+            <div className="flex items-center justify-between gap-2 settings-section">
+              <span
+                className="min-w-0 truncate text-xs vassist-text-secondary"
+                title={background.folderPath}
+              >
+                {background.folderPath}
+              </span>
+              <Button
+                variant={variant}
+                size="sm"
+                onClick={() => void handleRefreshFolder()}
+                disabled={busy}
+              >
+                Refresh
+              </Button>
+            </div>
+          )}
+
+          {images.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[11px] font-medium vassist-text-primary">
+                  Selected custom images ({images.length})
+                </div>
+                <div className="flex items-center gap-1 rounded-md border border-current/10 bg-black/15 p-0.5">
+                  {(["grid", "list"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      aria-pressed={imageViewMode === mode}
+                      onClick={() => setImageViewMode(mode)}
+                      className={`rounded px-2 py-0.5 text-[10px] capitalize ${
+                        imageViewMode === mode
+                          ? "bg-current/15 vassist-text-primary"
+                          : "vassist-text-muted hover:vassist-text-primary"
+                      }`}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <SettingsScrollArea
+                ref={imageListRef}
+                className={`flex max-h-40 overflow-y-auto rounded-md border border-current/10 bg-black/15 p-1 ${
+                  imageViewMode === "grid"
+                    ? "flex-wrap content-start gap-1.5"
+                    : "flex-col gap-0.5"
+                }`}
+              >
+                {images.map((image) => {
+                  const displayName = image.name?.trim() || image.path;
+                  return imageViewMode === "grid" ? (
+                    <div
+                      key={image.path}
+                      className="relative aspect-video min-w-[100px] flex-1 basis-[calc(33.333%_-_0.5rem)] overflow-hidden settings-section"
+                      title={image.path}
+                    >
+                      <CustomImageThumbnail
+                        path={image.path}
+                        observerRoot={imageListRef.current}
+                      />
+                      <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/80 to-transparent px-1.5 pb-1 pt-4 text-[10px] vassist-text-primary">
+                        {displayName}
+                      </span>
+                    </div>
+                  ) : (
+                    <div
+                      key={image.path}
+                      className="flex min-h-5 w-full min-w-0 items-center gap-1.5 rounded px-1 text-[11px] leading-4 vassist-text-primary hover:bg-current/10"
+                      title={image.path}
+                    >
+                      <Icon
+                        name="image"
+                        size={11}
+                        className="shrink-0 vassist-text-secondary"
+                      />
+                      <span className="min-w-0 flex-1 truncate">
+                        {displayName}
+                      </span>
+                    </div>
+                  );
+                })}
+              </SettingsScrollArea>
+            </div>
+          )}
+
+          {(images.length > 0 ||
+            background.folderPath ||
+            builtInIds.length > 0) && (
+            <Button
+              variant="default"
+              className="w-full"
+              onClick={handleClear}
+              disabled={busy}
+            >
+              Clear selected backgrounds
+            </Button>
+          )}
+
+          {totalImageCount > 1 && (
+            <div className="flex flex-wrap gap-3">
+              <label className="flex min-w-[120px] flex-1 flex-col gap-1 text-xs vassist-text-primary">
+                <span>Time per image (seconds)</span>
+                <Input
+                  type="number"
+                  min={5}
+                  max={3600}
+                  step={5}
+                  value={background.slideshowIntervalSeconds}
+                  onChange={(event) =>
+                    updateUIConfig(
+                      "desktopBackground.slideshowIntervalSeconds",
+                      Math.min(
+                        3600,
+                        Math.max(5, Number(event.target.value) || 30),
+                      ),
+                    )
+                  }
+                  variant={isLightBackground ? "dark" : "default"}
+                  disableDebounce
+                />
+              </label>
+              <label className="flex min-w-[120px] flex-1 flex-col gap-1 text-xs vassist-text-primary">
+                <span>Fade duration (seconds)</span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={15}
+                  step={0.5}
+                  value={background.fadeDurationSeconds}
+                  onChange={(event) =>
+                    updateUIConfig(
+                      "desktopBackground.fadeDurationSeconds",
+                      Math.min(
+                        15,
+                        Math.max(0, Number(event.target.value) || 0),
+                      ),
+                    )
+                  }
+                  variant={isLightBackground ? "dark" : "default"}
+                  disableDebounce
+                />
+              </label>
+            </div>
+          )}
+
+          {message && <p className="text-xs vassist-text-muted">{message}</p>}
+          {error && <p className="text-xs text-red-300">{error}</p>}
         </>
       )}
     </div>

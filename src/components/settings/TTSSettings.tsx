@@ -35,7 +35,8 @@ import AndroidLocalTTSConfig from "./tts/AndroidLocalTTSConfig";
 import RemoteModelPicker from "./shared/RemoteModelPicker";
 import Toggle from "../common/Toggle";
 import Logger from "../../services/common/LoggerService";
-import { Button, Input, Select, Card, SettingsRow } from "../ui";
+import { Button, Input, Select, SettingsRow } from "../ui";
+import SettingsGroup from "./shared/SettingsGroup";
 
 interface TTSSettingsProps {
   isLightBackground?: boolean;
@@ -262,8 +263,8 @@ const TTSSettings = ({
   const renderRemoteProfileBar = (
     provider: TTSRemoteProviderProfile["provider"],
   ) => (
-    <div className="space-y-2">
-      <label className="block text-sm font-medium text-white/90">
+    <div className="flex flex-col gap-2">
+      <label className="block text-sm font-medium vassist-text-primary">
         Saved Backends
       </label>
       <Input
@@ -274,7 +275,7 @@ const TTSSettings = ({
         variant={isLightBackground ? "dark" : "default"}
         size="xs"
       />
-      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+      <div className="flex flex-wrap items-center gap-2 [&>button:first-child]:min-w-0 [&>button:first-child]:flex-1">
         <Select
           value={selectedProfileId}
           onChange={(event) =>
@@ -345,13 +346,10 @@ const TTSSettings = ({
   }, []);
 
   return (
-    <div className="space-y-6">
-      <h3 className="text-base font-semibold text-white mb-4">
-        TTS Configuration
-      </h3>
+    <div className="flex min-w-0 flex-col gap-4">
+      <SettingsGroup>
+        {/* Enable TTS Toggle */}
 
-      {/* Enable TTS Toggle */}
-      <Card variant="default">
         <SettingsRow label="Enable Text-to-Speech" targetId="tts.enabled">
           <Toggle
             id="enable-tts"
@@ -360,27 +358,26 @@ const TTSSettings = ({
             onChange={(checked) => updateTTSConfig("enabled", checked)}
           />
         </SettingsRow>
-      </Card>
 
-      <SettingsRow label="Accurate Lip Sync" targetId="tts.accurateLipSync">
-        <Toggle
-          id="accurate-lip-sync"
-          checked={ttsConfig.accurateLipSync}
-          onChange={(checked) => updateTTSConfig("accurateLipSync", checked)}
-        />
-      </SettingsRow>
+        <SettingsRow label="Accurate Lip Sync" targetId="tts.accurateLipSync">
+          <Toggle
+            id="accurate-lip-sync"
+            checked={ttsConfig.accurateLipSync}
+            onChange={(checked) => updateTTSConfig("accurateLipSync", checked)}
+          />
+        </SettingsRow>
 
-      <SettingsRow label="Use Legacy Lip Sync" targetId="tts.legacyLipSync">
-        <Toggle
-          id="legacy-lip-sync"
-          checked={ttsConfig.legacyLipSync}
-          disabled={!ttsConfig.accurateLipSync}
-          onChange={(checked) => updateTTSConfig("legacyLipSync", checked)}
-        />
-      </SettingsRow>
-
+        <SettingsRow label="Use Legacy Lip Sync" targetId="tts.legacyLipSync">
+          <Toggle
+            id="legacy-lip-sync"
+            checked={ttsConfig.legacyLipSync}
+            disabled={!ttsConfig.accurateLipSync}
+            onChange={(checked) => updateTTSConfig("legacyLipSync", checked)}
+          />
+        </SettingsRow>
+      </SettingsGroup>
       {/* Provider Selection */}
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2">
         <SettingsRow
           label="Provider"
           targetId="tts.provider.select"
@@ -397,7 +394,7 @@ const TTSSettings = ({
           />
         </SettingsRow>
         {isAndroid && (
-          <p className="text-xs text-white/50">
+          <p className="text-xs vassist-text-muted">
             Using native Android TTS via local VITS model
           </p>
         )}
@@ -431,9 +428,7 @@ const TTSSettings = ({
           {/* Desktop Local TTS Configuration */}
           {ttsConfig.provider === TTSProviders.DESKTOP_LOCAL && isDesktop && (
             <>
-              <h4 className="text-sm font-semibold text-white/90 mb-3">
-                Desktop Local TTS
-              </h4>
+              <h4 className="settings-group-heading">Desktop Local TTS</h4>
               <GPTSoVITSConfig
                 config={ttsConfig["desktop-local"] || {}}
                 onChange={(field: string, value: string | number | null) => {
@@ -520,10 +515,8 @@ const TTSSettings = ({
 
               {/* Cache Management - Only in Settings */}
               {kokoroStatus.initialized && (
-                <div className="space-y-2 p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
-                  <h4 className="text-sm font-semibold text-white/90">
-                    Cache Management
-                  </h4>
+                <div className="flex flex-col gap-2 settings-section">
+                  <h4 className="settings-group-heading">Cache Management</h4>
                   <div className="flex gap-2">
                     <Button
                       variant={isLightBackground ? "dark" : "default"}
@@ -570,7 +563,7 @@ const TTSSettings = ({
                       {clearingCache ? (
                         <>
                           <Icon
-                            name="loading"
+                            name="loading-2"
                             size={14}
                             className="animate-spin"
                           />{" "}
@@ -584,7 +577,7 @@ const TTSSettings = ({
                     </Button>
                   </div>
                   {cacheSize !== null && cacheSize.usage !== undefined && (
-                    <div className="text-xs text-white/60">
+                    <div className="text-xs vassist-text-muted">
                       Cache: {(cacheSize.usage / 1024 / 1024).toFixed(1)} MB
                     </div>
                   )}
@@ -626,10 +619,7 @@ const TTSSettings = ({
                   isLightBackground={isLightBackground}
                 />
               </SettingsRow>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-white/90">
-                  Voice
-                </label>
+              <SettingsRow label="Voice" layout="stacked">
                 <Select
                   value={ttsConfig.openai.voice}
                   onChange={(e) =>
@@ -641,7 +631,7 @@ const TTSSettings = ({
                     label: key.charAt(0) + key.slice(1).toLowerCase(),
                   }))}
                 />
-              </div>
+              </SettingsRow>
             </>
           )}
 
@@ -699,10 +689,7 @@ const TTSSettings = ({
                   isLightBackground={isLightBackground}
                 />
               </SettingsRow>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-white/90">
-                  Voice
-                </label>
+              <SettingsRow label="Voice" layout="stacked">
                 <Input
                   type="text"
                   value={ttsConfig["openai-compatible"]?.voice ?? ""}
@@ -712,19 +699,16 @@ const TTSSettings = ({
                   placeholder="default"
                   variant={isLightBackground ? "dark" : "default"}
                 />
-              </div>
+              </SettingsRow>
             </>
           )}
         </>
       )}
 
       {/* Actions */}
-      <div className="space-y-3 pt-4">
+      <SettingsGroup className="gap-3 p-3">
         {/* Test Text Input */}
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-white/90">
-            Test Text
-          </label>
+        <SettingsRow label="Test Text" layout="stacked">
           <Input
             type="text"
             value={testText}
@@ -732,14 +716,11 @@ const TTSSettings = ({
             placeholder="Enter text to test TTS..."
             variant={isLightBackground ? "dark" : "default"}
           />
-        </div>
+        </SettingsRow>
 
         {/* Test Language (only for GPT-SoVITS) */}
         {ttsConfig.provider === TTSProviders.DESKTOP_LOCAL && (
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">
-              Test Language
-            </label>
+          <SettingsRow label="Test Language" layout="stacked">
             <Select
               value={testLanguage}
               onChange={(e) => setTestLanguage(e.target.value)}
@@ -753,7 +734,7 @@ const TTSSettings = ({
                 { value: GPTSoVITSLanguages.CHINESE, label: "Chinese (中文)" },
               ]}
             />
-          </div>
+          </SettingsRow>
         )}
 
         <Button
@@ -763,7 +744,7 @@ const TTSSettings = ({
         >
           Test TTS
         </Button>
-      </div>
+      </SettingsGroup>
     </div>
   );
 };

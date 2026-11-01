@@ -1,3 +1,4 @@
+import SettingsScrollArea from "../shared/SettingsScrollArea";
 import {
   useCallback,
   useEffect,
@@ -6,10 +7,11 @@ import {
 } from "react";
 import { Icon } from "../../icons";
 import Dialog from "../../common/Dialog";
-import Toggle from "../../common/Toggle";
+import SettingsListItem from "../shared/SettingsListItem";
 import { Button, Input } from "../../ui";
 import { cn } from "../../../utils/cn";
 import type { DiscoveryItem } from "../../../services/storage/LLMModelStorageService";
+import SettingsRow from "../../ui/SettingsRow";
 
 interface ModelEntry {
   name: string;
@@ -137,8 +139,8 @@ const SearchInput = ({
         className="w-full pr-10"
       />
       {loading && (
-        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-white/45">
-          <Icon name="loading" size={14} className="animate-spin" />
+        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center vassist-text-muted">
+          <Icon name="loading-2" size={14} className="animate-spin" />
         </span>
       )}
     </div>
@@ -157,7 +159,7 @@ const CatalogList = ({
 }: CatalogListProps) => {
   if (loading && items.length === 0) {
     return (
-      <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2 text-xs text-white/55">
+      <div className="rounded-lg border border-current/10 bg-black/10 px-3 py-2 text-xs vassist-text-muted">
         Loading results...
       </div>
     );
@@ -173,15 +175,15 @@ const CatalogList = ({
 
   if (!items.length) {
     return (
-      <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2 text-xs text-white/45">
+      <div className="rounded-lg border border-current/10 bg-black/10 px-3 py-2 text-xs vassist-text-muted">
         {emptyText}
       </div>
     );
   }
 
   return (
-    <div className="space-y-2">
-      <div className="max-h-56 space-y-2 overflow-y-auto rounded-lg border border-white/10 bg-black/10 p-2 scrollbar-glass">
+    <div className="flex flex-col gap-2">
+      <SettingsScrollArea className="max-h-56 p-1">
         {items.map((item) => {
           const isSelected =
             selectedValue === item.value || selectedValue === item.id;
@@ -192,12 +194,12 @@ const CatalogList = ({
               type="button"
               onClick={() => onSelect(item)}
               className={cn(
-                "w-full rounded-lg border px-3 py-2 text-left transition-colors",
+                "settings-list-row flex w-full flex-col items-stretch gap-1 text-left",
                 isSelected
-                  ? "border-white/30 bg-white/12 text-white"
-                  : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10",
+                  ? "settings-list-row-selected vassist-text-primary"
+                  : "vassist-text-primary",
               )}
-              title={item.label}
+              aria-pressed={isSelected}
             >
               <div className="flex min-w-0 items-start justify-between gap-2">
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">
@@ -205,7 +207,7 @@ const CatalogList = ({
                 </span>
                 {item.secondaryLabel && item.secondaryLabel !== item.label && (
                   <span
-                    className="max-w-[45%] shrink truncate text-[10px] text-white/45"
+                    className="max-w-[45%] shrink truncate text-[10px] vassist-text-muted"
                     title={item.secondaryLabel}
                   >
                     {item.secondaryLabel}
@@ -214,7 +216,7 @@ const CatalogList = ({
               </div>
               {item.description && (
                 <div
-                  className="mt-1 truncate text-[11px] text-white/55"
+                  className="pt-1 truncate text-[11px] vassist-text-muted"
                   title={item.description}
                 >
                   {item.description}
@@ -223,21 +225,23 @@ const CatalogList = ({
             </Button>
           );
         })}
-      </div>
+      </SettingsScrollArea>
 
       {hasMore && onLoadMore && (
         <Button
           type="button"
           onClick={onLoadMore}
           variant="ghost"
-          className="w-full border border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
+          className="w-full border border-current/10 bg-current/5 vassist-text-primary hover:bg-current/10"
         >
           Load More
         </Button>
       )}
 
       {loading && items.length > 0 && (
-        <div className="text-[11px] text-white/50">Loading more results...</div>
+        <div className="text-[11px] vassist-text-muted">
+          Loading more results...
+        </div>
       )}
     </div>
   );
@@ -452,9 +456,9 @@ const OllamaBrowser = ({
   };
 
   return (
-    <div className="space-y-3">
-      <div className="space-y-2">
-        <label className="block text-xs font-medium text-white/80">
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
+        <label className="block text-xs font-medium vassist-text-primary">
           Search Ollama Library
         </label>
         <SearchInput
@@ -482,8 +486,8 @@ const OllamaBrowser = ({
       </div>
 
       {selectedModelId && (
-        <div className="space-y-2">
-          <label className="block text-xs font-medium text-white/80">
+        <div className="flex flex-col gap-2">
+          <label className="block text-xs font-medium vassist-text-primary">
             Choose Tag
           </label>
           <SearchInput
@@ -708,9 +712,9 @@ const HuggingFaceBrowser = ({
   };
 
   return (
-    <div className="space-y-3">
-      <div className="space-y-2">
-        <label className="block text-xs font-medium text-white/80">
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
+        <label className="block text-xs font-medium vassist-text-primary">
           Search Hugging Face Model Repositories
         </label>
         <SearchInput
@@ -734,12 +738,12 @@ const HuggingFaceBrowser = ({
       </div>
 
       {selectedRepo && (
-        <div className="space-y-2">
-          <label className="block text-xs font-medium text-white/80">
+        <div className="flex flex-col gap-2">
+          <label className="block text-xs font-medium vassist-text-primary">
             Choose GGUF File
           </label>
           <div
-            className="truncate text-[11px] text-white/55"
+            className="truncate text-[11px] vassist-text-muted"
             title={selectedRepo.label}
           >
             {selectedRepo.label}
@@ -930,7 +934,6 @@ const LocalLLMModelManager = ({
     if (!storageService || !pendingDeleteFilename) return;
 
     const filename = pendingDeleteFilename;
-    setPendingDeleteFilename(null);
 
     try {
       const result = await storageService.deleteModel(
@@ -940,10 +943,11 @@ const LocalLLMModelManager = ({
       if (result?.success) {
         await loadModels();
       } else {
-        setError(result?.error || "Delete failed");
+        throw new Error(result?.error || "Delete failed");
       }
     } catch (err: unknown) {
       setError(getErrorMessage(err));
+      throw err;
     }
   };
 
@@ -1018,55 +1022,143 @@ const LocalLLMModelManager = ({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       {/* Custom Models Folder (Desktop only) */}
       {supportsCustomFolder && onCustomPathChange && (
-        <div className="p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
-          <h3 className="text-sm font-semibold text-white/90 mb-3 flex items-center gap-2">
+        <div className="settings-section">
+          <h3 className="settings-group-heading flex items-center gap-2">
             <Icon name="folder" size={16} />
             Models Folder
           </h3>
 
-          <div className="space-y-2">
-            <Input
-              type="text"
-              value={customModelsPath || "Default"}
-              readOnly
-              placeholder="Default models folder"
-              variant={isLightBackground ? "dark" : "default"}
-              className="w-full text-xs"
-            />
-            <div className="flex gap-2">
-              <Button
-                onClick={handleChooseFolder}
+          <div className="flex flex-col gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <Input
+                type="text"
+                value={customModelsPath || "Default"}
+                readOnly
+                placeholder="Default models folder"
                 variant={isLightBackground ? "dark" : "default"}
-                className={customModelsPath ? "flex-1" : "w-full"}
-              >
-                <Icon name="folder" size={14} />
-                <span>Choose</span>
-              </Button>
-              {customModelsPath && (
+                className="min-w-0 flex-1 text-xs"
+              />
+              <div className="flex shrink-0 gap-1">
                 <Button
-                  variant="unstyled"
-                  tooltipVariant={isLightBackground ? "dark" : "default"}
-                  onClick={handleClearCustomFolder}
-                  className="w-10 h-10 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 transition-colors flex items-center justify-center"
-                  title="Reset to default"
+                  onClick={handleChooseFolder}
+                  variant={isLightBackground ? "dark" : "default"}
+                  size="sm"
                 >
-                  <Icon name="x" size={16} />
+                  <Icon name="folder" size={14} />
+                  <span>Choose</span>
                 </Button>
-              )}
+                {customModelsPath && (
+                  <Button
+                    variant="ghost"
+                    tooltipVariant={isLightBackground ? "dark" : "default"}
+                    onClick={handleClearCustomFolder}
+                    size="icon"
+                    title="Reset to default"
+                    aria-label="Reset model folder"
+                  >
+                    <Icon name="x" size={16} />
+                  </Button>
+                )}
+              </div>
             </div>
-            <p className="text-[10px] text-white/50">
+            <p className="text-[10px] vassist-text-muted">
               Store models on a different drive or custom location
             </p>
           </div>
         </div>
       )}
 
+      {/* Model List */}
+      {modelsLoaded &&
+        selectedModel &&
+        !models.some((model) => model.name === selectedModel) && (
+          <p className="text-xs text-amber-300">
+            Selected model {selectedModel} is not installed. Download it or
+            select another model.
+          </p>
+        )}
+      <div className="settings-section">
+        <div className="flex items-center justify-between pb-3">
+          <h3 className="settings-group-heading flex items-center gap-2">
+            <Icon name="folder" size={16} />
+            Installed Models ({models.length})
+          </h3>
+          <button
+            onClick={loadModels}
+            className="text-xs vassist-text-secondary hover:vassist-text-primary flex items-center gap-1 transition-colors"
+          >
+            <Icon name="refresh" size={12} />
+            Refresh
+          </button>
+        </div>
+
+        {models.length === 0 ? (
+          <div className="flex flex-col items-center gap-1 py-4 vassist-text-muted">
+            <Icon name="folder" size={20} className="opacity-50" />
+            <p className="text-xs">No models installed</p>
+            <p className="text-[10px] pt-1">Download a model to get started</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {models.map((model) => (
+              <SettingsListItem
+                key={model.name}
+                title={model.name}
+                selected={selectedModel === model.name}
+                description={
+                  <span>
+                    {formatBytes(model.size)}
+                    {model.modified
+                      ? " · " + new Date(model.modified).toLocaleDateString()
+                      : ""}
+                  </span>
+                }
+                actions={
+                  <div className="flex items-center gap-1">
+                    {model.hasImageSupport && (
+                      <div
+                        className="p-2 vassist-text-secondary"
+                        title="Supports vision/image input"
+                      >
+                        <Icon name="image" size={16} />
+                      </div>
+                    )}
+                    <Button
+                      variant="unstyled"
+                      onClick={() => handleDelete(model.name)}
+                      size="icon"
+                      title="Delete model"
+                      aria-label={"Delete " + model.name}
+                    >
+                      <Icon name="trash" size={16} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={"Use " + model.name}
+                      aria-pressed={selectedModel === model.name}
+                      onClick={() => onModelSelect(model.name)}
+                    >
+                      {selectedModel === model.name ? (
+                        <Icon name="check" size={15} />
+                      ) : (
+                        "Use"
+                      )}
+                    </Button>
+                  </div>
+                }
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Import Model */}
-      <div className="p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
-        <h3 className="text-sm font-semibold text-white/90 mb-3 flex items-center gap-2">
+      <div className="settings-section">
+        <h3 className="settings-group-heading flex items-center gap-2">
           <Icon name="upload" size={16} />
           Import Model
         </h3>
@@ -1074,31 +1166,33 @@ const LocalLLMModelManager = ({
         <button
           onClick={handleImportClick}
           disabled={loading}
-          className="flex w-full flex-col p-2 md:p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex w-full items-center gap-3 rounded-lg border border-current/15 px-3 py-3 text-left transition-colors hover:bg-current/5 disabled:opacity-50"
         >
           <Icon
             name="upload"
-            size={32}
-            className="mx-auto mb-2 text-white/70"
+            size={18}
+            className="shrink-0 vassist-text-secondary"
           />
-          <p className="text-sm text-white/90 mb-1">
-            {loading ? "Importing..." : "Import GGUF Model"}
-          </p>
-          <p className="text-xs text-white/50">
-            Click to browse for .gguf file
-          </p>
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="text-sm vassist-text-primary">
+              {loading ? "Importing..." : "Import GGUF Model"}
+            </span>
+            <span className="text-xs vassist-text-muted">
+              Click to browse for .gguf file
+            </span>
+          </span>
         </button>
       </div>
 
       {/* Download Section */}
-      <div className="p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
-        <h3 className="text-sm font-semibold text-white/90 mb-3 flex items-center gap-2">
+      <div className="settings-section">
+        <h3 className="settings-group-heading flex items-center gap-2">
           <Icon name="download" size={16} />
           Download Model
         </h3>
 
         {/* Download method selector */}
-        <div className="flex gap-2 mb-3">
+        <div className="flex gap-2 pb-3">
           <Button
             onClick={() => setDownloadMethod("ollama")}
             variant={
@@ -1111,7 +1205,7 @@ const LocalLLMModelManager = ({
             className={cn(
               "flex-1",
               downloadMethod !== "ollama" &&
-                "bg-white/5 text-white/60 border border-white/10",
+                "bg-current/5 vassist-text-muted border border-current/10",
             )}
           >
             Ollama
@@ -1128,14 +1222,14 @@ const LocalLLMModelManager = ({
             className={cn(
               "flex-1",
               downloadMethod !== "huggingface" &&
-                "bg-white/5 text-white/60 border border-white/10",
+                "bg-current/5 vassist-text-muted border border-current/10",
             )}
           >
             Hugging Face
           </Button>
         </div>
 
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           {downloadMethod === "ollama" ? (
             <>
               <OllamaBrowser
@@ -1145,10 +1239,11 @@ const LocalLLMModelManager = ({
                 disabled={loading}
                 isLightBackground={isLightBackground}
               />
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-white/80">
-                  Selected Ollama Pull Target
-                </label>
+              <SettingsRow
+                label="Selected Ollama Pull Target"
+                description="Search above, choose a tag, or type a full Ollama model reference manually."
+                layout="stacked"
+              >
                 <Input
                   type="text"
                   value={ollamaModel}
@@ -1158,11 +1253,7 @@ const LocalLLMModelManager = ({
                   variant={isLightBackground ? "dark" : "default"}
                   className="w-full"
                 />
-                <p className="mt-1.5 text-[10px] text-white/50">
-                  Search above, choose a tag, or type a full Ollama model
-                  reference manually.
-                </p>
-              </div>
+              </SettingsRow>
             </>
           ) : (
             <>
@@ -1174,10 +1265,11 @@ const LocalLLMModelManager = ({
                 isLightBackground={isLightBackground}
                 searchFilter={huggingFaceFilter}
               />
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-white/80">
-                  Selected Hugging Face Download URL
-                </label>
+              <SettingsRow
+                label="Selected Hugging Face Download URL"
+                description="Search GGUF repos above, pick a file, or paste a direct download URL manually."
+                layout="stacked"
+              >
                 <Input
                   type="text"
                   value={downloadUrl}
@@ -1187,24 +1279,22 @@ const LocalLLMModelManager = ({
                   variant={isLightBackground ? "dark" : "default"}
                   className="w-full"
                 />
-                <p className="mt-1.5 text-[10px] text-white/50">
-                  Search GGUF repos above, pick a file, or paste a direct
-                  download URL manually.
-                </p>
-              </div>
+              </SettingsRow>
             </>
           )}
 
           {/* Progress Bar */}
           {downloadProgress && (
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <div className="flex justify-between text-xs">
-                <span className="text-white/70">{downloadProgress.status}</span>
-                <span className="text-white/70">
+                <span className="vassist-text-secondary">
+                  {downloadProgress.status}
+                </span>
+                <span className="vassist-text-secondary">
                   {downloadProgress.percent}%
                 </span>
               </div>
-              <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+              <div className="w-full h-2 bg-current/10 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-linear-to-r from-white/40 to-white/60 transition-all duration-300"
                   style={{ width: `${downloadProgress.percent}%` }}
@@ -1247,7 +1337,7 @@ const LocalLLMModelManager = ({
       {successMessage && (
         <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-300 text-xs">
           <div className="flex items-start gap-2">
-            <Icon name="check" size={14} className="flex-shrink-0 mt-0.5" />
+            <Icon name="check" size={14} className="flex-shrink-0 pt-0.5" />
             <span>{successMessage}</span>
           </div>
         </div>
@@ -1257,101 +1347,11 @@ const LocalLLMModelManager = ({
       {error && (
         <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-xs">
           <div className="flex items-start gap-2">
-            <Icon name="error" size={14} className="flex-shrink-0 mt-0.5" />
+            <Icon name="error" size={14} className="flex-shrink-0 pt-0.5" />
             <span>{error}</span>
           </div>
         </div>
       )}
-
-      {/* Model List */}
-      {modelsLoaded &&
-        selectedModel &&
-        !models.some((model) => model.name === selectedModel) && (
-          <p className="text-xs text-amber-300">
-            Selected model {selectedModel} is not installed. Download it or
-            select another model.
-          </p>
-        )}
-      <div className="p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-white/90 flex items-center gap-2">
-            <Icon name="folder" size={16} />
-            Installed Models ({models.length})
-          </h3>
-          <button
-            onClick={loadModels}
-            className="text-xs text-white/70 hover:text-white/90 flex items-center gap-1 transition-colors"
-          >
-            <Icon name="refresh" size={12} />
-            Refresh
-          </button>
-        </div>
-
-        {models.length === 0 ? (
-          <div className="text-center py-8 text-white/40">
-            <Icon name="folder" size={32} className="mx-auto mb-2 opacity-50" />
-            <p className="text-xs">No models installed</p>
-            <p className="text-[10px] mt-1">Download a model to get started</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {models.map((model) => (
-              <div
-                key={model.name}
-                className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Icon
-                      name="document"
-                      size={14}
-                      className="text-white/70 flex-shrink-0"
-                    />
-                    <span className="text-sm font-medium text-white/90 truncate">
-                      {model.name}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 text-[10px] text-white/50">
-                    <span>{formatBytes(model.size)}</span>
-                    {model.modified && (
-                      <span>
-                        {new Date(model.modified).toLocaleDateString()}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  {model.hasImageSupport && (
-                    <div
-                      className="p-2 text-white/70"
-                      title="Supports vision/image input"
-                    >
-                      <Icon name="image" size={16} />
-                    </div>
-                  )}
-                  <Button
-                    variant="unstyled"
-                    onClick={() => handleDelete(model.name)}
-                    className="p-2 rounded hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-colors"
-                    title="Delete model"
-                  >
-                    <Icon name="trash" size={16} />
-                  </Button>
-                  <Toggle
-                    checked={selectedModel === model.name}
-                    onChange={(checked) => {
-                      if (checked) {
-                        onModelSelect(model.name);
-                      }
-                    }}
-                    title="Set as default model"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       {pendingDeleteFilename && (
         <Dialog
@@ -1362,6 +1362,7 @@ const LocalLLMModelManager = ({
           confirmStyle="error"
           isLightBackground={isLightBackground}
           onConfirm={confirmDelete}
+          onConfirmComplete={() => setPendingDeleteFilename(null)}
           onCancel={() => setPendingDeleteFilename(null)}
         />
       )}

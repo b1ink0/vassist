@@ -4,6 +4,18 @@ import type {
   VAssistSettingsTargetId,
 } from "./config";
 import { VASSIST_SETTINGS_TABS } from "./config";
+import { AIProviders, getAIProviderSection } from "../config/aiConfig";
+
+export function getAIContextSettingsTarget(
+  provider: string,
+  apiFormat?: string,
+): VAssistSettingsTargetId {
+  return provider === AIProviders.DESKTOP_LOCAL ||
+    provider === AIProviders.ANDROID_LOCAL ||
+    (provider === AIProviders.OLLAMA && apiFormat === "ollama")
+    ? `llm.${getAIProviderSection(provider)}.contextSize`
+    : "llm.provider";
+}
 
 const getOwningTab = (
   targetId: VAssistSettingsTargetId,

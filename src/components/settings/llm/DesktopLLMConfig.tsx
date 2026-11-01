@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icon } from "../../icons";
 import { useDesktopApi } from "../../../hooks/useDesktopStore";
 import { isDesktop } from "../../../utils/PlatformUtils";
-import { Button, Select, Input } from "../../ui";
+import { Button, Select, Input, SettingsRow } from "../../ui";
 import { DEFAULT_ENDPOINTS } from "../../../config/serviceEndpoints";
+import RemoteModelPicker from "../shared/RemoteModelPicker";
 import LocalLLMModelManager from "./LocalLLMModelManager";
 import LLMParameterSettings from "./LLMParameterSettings";
 import type { LLMParameters } from "../../../config/llmParameters";
@@ -106,6 +107,7 @@ const isDesktopLlmBridge = (value: unknown): value is DesktopLlmBridge => {
 };
 
 interface DesktopLLMConfigProps {
+  view?: "all" | "connection" | "generation" | "models" | "runtime";
   config?: DesktopLLMConfigShape;
   onChange: (updates: Record<string, unknown>) => void;
   isLightBackground?: boolean;
@@ -133,6 +135,7 @@ const getErrorMessage = (error: unknown): string => {
  */
 const DesktopLLMConfig = ({
   config = {},
+  view = "all",
   onChange,
   isLightBackground = false,
   onRequestDeleteModel,
@@ -370,197 +373,188 @@ const DesktopLLMConfig = ({
   };
 
   return (
-    <div className="space-y-3">
-      {/* Info Banner */}
-      <div className="p-3 rounded-lg bg-white/10 border border-white/20">
-        <div className="flex items-start gap-2">
-          <Icon
-            name="cpu"
-            size={18}
-            className="text-white/90 shrink-0 mt-0.5"
-          />
-          <p className="text-xs text-white/90">
-            <span className="font-semibold">Desktop Local AI</span> - On-device
-            language model using llama.cpp. GPU-accelerated and runs entirely on
-            your desktop!
-          </p>
-        </div>
-      </div>
-
-      {/* Status */}
-      <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-        <div className="flex items-center gap-2 mb-2">
-          <div className="w-2 h-2 rounded-full bg-white/40"></div>
-          <span className="text-sm font-semibold text-white/90">
-            {config.model ? "Model selected" : "No model selected"}
-          </span>
-        </div>
-        <p className="text-xs text-white/60">
-          Model: {config.model || "No model selected"} •{" "}
-          {config.llmEngine !== "node-llama"
-            ? "llama-server"
-            : "node-llama-cpp"}
-        </p>
-        {!config.model && (
-          <p className="text-[10px] text-yellow-400 mt-1">
-            ⚠ Select a model below to enable LLM features
-          </p>
-        )}
-      </div>
-
-      {/* Inference Engine */}
-      <div className="p-3 rounded-lg bg-white/5 border border-white/10 space-y-3">
-        <h3 className="text-sm font-semibold text-white/90">
-          Inference Engine
-        </h3>
-        <Select
-          data-testid="desktop-llm-engine-select"
-          value={config.llmEngine || "llama-server"}
-          onChange={(e) => handleChange("llmEngine", e.target.value)}
-          variant={isLightBackground ? "dark" : "default"}
-          options={[
-            {
-              value: "llama-server",
-              label: "llama-server (recommended)",
-            },
-            { value: "node-llama", label: "node-llama-cpp" },
-          ]}
-        />
-
-        {config.llmEngine !== "node-llama" && (
-          <LlamaServerRuntimeManager
-            api={api?.llamaServer}
-            packs={CHAT_LLAMA_RUNTIME_PACKS}
-            selectedBackend={config.llmBackend || "auto"}
-            onBackendChange={(backend) => handleChange("llmBackend", backend)}
-            onRequestDeleteBackend={
-              onRequestDeleteModel
-                ? (backend) => onRequestDeleteModel(`llama-backend:${backend}`)
-                : null
-            }
-            refreshTrigger={refreshTrigger}
-            isLightBackground={isLightBackground}
-            testIdPrefix="desktop-llama-backend"
-          />
-        )}
-      </div>
-
-      {/* Backend Manager (node-llama-cpp engine only) */}
-      {config.llmEngine === "node-llama" && (
-        <div className="p-3 rounded-lg bg-white/5 border border-white/10 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-semibold text-white/90">
-                Runtime Backend
-              </h3>
-              <p className="text-[11px] text-white/60">
-                Choose and install llama.cpp compute backend
-              </p>
-            </div>
-            <button
-              onClick={loadBackendStatus}
-              className="text-xs text-white/70 hover:text-white/90"
-              type="button"
-            >
-              Refresh
-            </button>
-          </div>
-
-          <Select
-            value={selectedBackend}
-            onChange={(e) => handleChange("backend", e.target.value)}
-            variant={isLightBackground ? "dark" : "default"}
-            options={
-              backendItems.length > 0
-                ? backendItems.map((item) => ({
-                    value: item.name,
-                    label: `${item.name.toUpperCase()}${!item.supported ? " (unsupported)" : ""}`,
-                    disabled: !item.supported,
-                  }))
-                : [
-                    { value: "auto", label: "AUTO" },
-                    { value: "cpu", label: "CPU" },
-                    { value: "cuda", label: "CUDA" },
-                    { value: "vulkan", label: "VULKAN" },
-                    { value: "metal", label: "METAL" },
-                  ]
-            }
-          />
-
-          <div className="flex items-center justify-between">
-            <p className="text-[11px] text-white/60">
-              {backendStatus?.selectedInstalled
-                ? `Selected backend (${selectedBackend}) is installed`
-                : `Selected backend (${selectedBackend}) is not installed`}
-            </p>
-            <Button
-              onClick={installSelectedBackend}
-              disabled={backendLoading || selectedBackend === "auto"}
+    <div className="flex flex-col gap-3">
+      {(view === "all" || view === "runtime") && (
+        <>
+          {/* Inference Engine */}
+          <div className="flex flex-col gap-3 settings-section">
+            <h3 className="settings-group-heading">Inference Engine</h3>
+            <Select
+              data-testid="desktop-llm-engine-select"
+              value={config.llmEngine || "llama-server"}
+              onChange={(e) => handleChange("llmEngine", e.target.value)}
               variant={isLightBackground ? "dark" : "default"}
-              size="sm"
-              type="button"
-            >
-              {backendLoading
-                ? "Installing..."
-                : backendStatus?.selectedInstalled
-                  ? "Reinstall"
-                  : "Install"}
-            </Button>
+              options={[
+                {
+                  value: "llama-server",
+                  label: "llama-server (recommended)",
+                },
+                { value: "node-llama", label: "node-llama-cpp" },
+              ]}
+            />
+
+            {config.llmEngine !== "node-llama" && (
+              <LlamaServerRuntimeManager
+                api={api?.llamaServer}
+                packs={CHAT_LLAMA_RUNTIME_PACKS}
+                selectedBackend={config.llmBackend || "auto"}
+                onBackendChange={(backend) =>
+                  handleChange("llmBackend", backend)
+                }
+                onRequestDeleteBackend={
+                  onRequestDeleteModel
+                    ? (backend) =>
+                        onRequestDeleteModel(`llama-backend:${backend}`)
+                    : null
+                }
+                refreshTrigger={refreshTrigger}
+                isLightBackground={isLightBackground}
+                testIdPrefix="desktop-llama-backend"
+              />
+            )}
           </div>
 
-          {backendProgress && (
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="text-white/70">{backendProgress.status}</span>
-                <span className="text-white/70">
-                  {Math.round(backendProgress.percent || 0)}%
-                </span>
+          {/* Backend Manager (node-llama-cpp engine only) */}
+          {config.llmEngine === "node-llama" && (
+            <div className="flex flex-col gap-3 settings-section">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h3 className="settings-group-heading">Runtime Backend</h3>
+                  <p className="text-[11px] vassist-text-muted">
+                    Choose and install llama.cpp compute backend
+                  </p>
+                </div>
+                <button
+                  onClick={loadBackendStatus}
+                  className="text-xs vassist-text-secondary hover:vassist-text-primary"
+                  type="button"
+                >
+                  Refresh
+                </button>
               </div>
-              {backendProgressBytes && (
-                <div className="text-xs text-white/70">
-                  {backendProgressBytes.totalMB
-                    ? `${backendProgressBytes.downloadedMB}MB / ${backendProgressBytes.totalMB}MB`
-                    : `${backendProgressBytes.downloadedMB}MB downloaded`}
+
+              <Select
+                value={selectedBackend}
+                onChange={(e) => handleChange("backend", e.target.value)}
+                variant={isLightBackground ? "dark" : "default"}
+                options={
+                  backendItems.length > 0
+                    ? backendItems.map((item) => ({
+                        value: item.name,
+                        label: `${item.name.toUpperCase()}${!item.supported ? " (unsupported)" : ""}`,
+                        disabled: !item.supported,
+                      }))
+                    : [
+                        { value: "auto", label: "AUTO" },
+                        ...(selectedBackend !== "auto"
+                          ? [
+                              {
+                                value: selectedBackend,
+                                label: selectedBackend.toUpperCase(),
+                              },
+                            ]
+                          : []),
+                      ]
+                }
+              />
+
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] vassist-text-muted">
+                  {!backendStatus
+                    ? "Backend availability has not been reported"
+                    : backendStatus.selectedInstalled
+                      ? `Selected backend (${selectedBackend}) is installed`
+                      : `Selected backend (${selectedBackend}) is not installed`}
+                </p>
+                <Button
+                  onClick={installSelectedBackend}
+                  disabled={
+                    backendLoading ||
+                    !backendStatus ||
+                    selectedBackend === "auto"
+                  }
+                  variant={isLightBackground ? "dark" : "default"}
+                  size="sm"
+                  type="button"
+                >
+                  {backendLoading
+                    ? "Installing..."
+                    : backendStatus?.selectedInstalled
+                      ? "Reinstall"
+                      : "Install"}
+                </Button>
+              </div>
+
+              {backendProgress && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="vassist-text-secondary">
+                      {backendProgress.status}
+                    </span>
+                    <span className="vassist-text-secondary">
+                      {Math.round(backendProgress.percent || 0)}%
+                    </span>
+                  </div>
+                  {backendProgressBytes && (
+                    <div className="text-xs vassist-text-secondary">
+                      {backendProgressBytes.totalMB
+                        ? `${backendProgressBytes.downloadedMB}MB / ${backendProgressBytes.totalMB}MB`
+                        : `${backendProgressBytes.downloadedMB}MB downloaded`}
+                    </div>
+                  )}
+                  <div className="w-full h-2 bg-current/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-linear-to-r from-white/40 to-white/60 transition-all duration-300"
+                      style={{
+                        width: `${Math.max(0, Math.min(100, backendProgress.percent || 0))}%`,
+                      }}
+                    />
+                  </div>
                 </div>
               )}
-              <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-linear-to-r from-white/40 to-white/60 transition-all duration-300"
-                  style={{
-                    width: `${Math.max(0, Math.min(100, backendProgress.percent || 0))}%`,
-                  }}
-                />
-              </div>
+
+              {backendError && (
+                <p className="text-[11px] text-red-300">{backendError}</p>
+              )}
             </div>
           )}
-
-          {backendError && (
-            <p className="text-[11px] text-red-300">{backendError}</p>
-          )}
-        </div>
+        </>
       )}
+      {(view === "all" || view === "connection") && (
+        <>
+          <SettingsRow label="Endpoint URL" layout="stacked">
+            <Input
+              type="text"
+              value={config.endpoint || DEFAULT_ENDPOINTS.desktopLocal}
+              onChange={(event) => handleChange("endpoint", event.target.value)}
+              placeholder={DEFAULT_ENDPOINTS.desktopLocal}
+              variant={isLightBackground ? "dark" : "default"}
+            />
+          </SettingsRow>
 
-      <div className="space-y-4">
-        <label className="block text-xs font-medium text-white/90">
-          Endpoint URL
-        </label>
-        <Input
-          type="text"
-          value={config.endpoint || DEFAULT_ENDPOINTS.desktopLocal}
-          onChange={(event) => handleChange("endpoint", event.target.value)}
-          placeholder={DEFAULT_ENDPOINTS.desktopLocal}
-          variant={isLightBackground ? "dark" : "default"}
-        />
+          <SettingsRow label="Model" layout="stacked">
+            <RemoteModelPicker
+              provider="desktop-local"
+              value={config.model ?? ""}
+              endpoint={config.endpoint}
+              customModelsPath={config.customModelsPath}
+              onChange={handleModelSelect}
+              isLightBackground={isLightBackground}
+            />
+          </SettingsRow>
+        </>
+      )}
+      {(view === "all" || view === "generation") && (
         <LLMParameterSettings
           provider="desktop-local"
           config={config}
           onChange={handleChange}
           isLightBackground={isLightBackground}
         />
-      </div>
+      )}
 
       {/* Model Management Section */}
-      {isDesktop && storageService && (
+      {(view === "all" || view === "models") && isDesktop && storageService && (
         <LocalLLMModelManager
           storageService={storageService}
           selectedModel={config.model ?? null}

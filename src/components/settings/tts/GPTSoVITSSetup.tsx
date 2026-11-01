@@ -4,12 +4,14 @@
  * Downloads Python, dependencies, and models with live progress logs
  */
 
+import SettingsScrollArea from "../shared/SettingsScrollArea";
 import { useState, useEffect, useRef } from "react";
 import { Icon } from "../../icons";
 import Dialog from "../../common/Dialog";
 import { useDesktopApi } from "../../../hooks/useDesktopStore";
 import { cn } from "../../../utils/cn";
 import { Button, Select } from "../../ui";
+import SettingsRow from "../../ui/SettingsRow";
 
 interface GPTSoVITSConfigShape {
   pytorchBackend?: string;
@@ -178,17 +180,18 @@ const GPTSoVITSSetup = ({
   };
 
   const confirmReinstall = async () => {
-    setShowReinstallConfirmDialog(false);
+    if (!setupApi?.start) throw new Error("Runtime setup is unavailable");
     setIsSetupRunning(true);
     setLogs([]);
     setSetupComplete(false);
     setSetupError(null);
 
     try {
-      await setupApi?.start?.({ torchBackend: selectedBackend, force: true });
+      await setupApi.start({ torchBackend: selectedBackend, force: true });
     } catch (error: unknown) {
       setSetupError(getErrorMessage(error));
       setIsSetupRunning(false);
+      throw error;
     }
   };
 
@@ -221,9 +224,9 @@ const GPTSoVITSSetup = ({
       setupStatus.gptsovitsExists);
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {/* Status indicator */}
-      <div className="p-2 md:p-4 rounded-lg bg-white/10 border border-white/30">
+      <div className="p-2 md:p-4 rounded-lg bg-current/10 border border-current/30">
         <div className="flex items-center gap-2">
           <Icon
             name={isInstalled ? "check-circle" : "alert-circle"}
@@ -240,10 +243,11 @@ const GPTSoVITSSetup = ({
         </div>
       </div>
 
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">
-          PyTorch Backend
-        </label>
+      <SettingsRow
+        label="PyTorch Backend"
+        description="Unsupported choices automatically fall back to a compatible backend."
+        layout="stacked"
+      >
         <Select
           value={selectedBackend}
           onChange={(e) => {
@@ -255,14 +259,11 @@ const GPTSoVITSSetup = ({
           variant={isLightBackground ? "dark" : "default"}
           options={TORCH_BACKEND_OPTIONS}
         />
-        <p className="text-xs text-white/50">
-          Unsupported choices automatically fall back to a compatible backend.
-        </p>
-      </div>
+      </SettingsRow>
 
       {/* Install/Cancel buttons */}
       {!isInstalled && (
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           <div className="flex gap-2">
             <Button
               onClick={isPartialInstall ? handleReinstall : handleStartSetup}
@@ -335,11 +336,11 @@ const GPTSoVITSSetup = ({
 
       {/* Log viewer */}
       {(isSetupRunning || setupComplete || setupError || logs.length > 0) && (
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-white/90">
+        <div className="flex flex-col gap-2">
+          <label className="block text-sm font-medium vassist-text-primary">
             Installation Log
           </label>
-          <div
+          <SettingsScrollArea
             ref={logsContainerRef}
             className={cn(
               "glass-input h-[300px] overflow-y-auto p-3 font-mono text-xs whitespace-pre-wrap hover-scrollbar scrollbar-glass",
@@ -347,12 +348,12 @@ const GPTSoVITSSetup = ({
             )}
           >
             {logs.map((log, i) => (
-              <div key={i} className="text-white/80">
+              <div key={i} className="vassist-text-primary">
                 {log}
               </div>
             ))}
             <div ref={logsEndRef} />
-          </div>
+          </SettingsScrollArea>
 
           {setupComplete && (
             <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
@@ -362,7 +363,7 @@ const GPTSoVITSSetup = ({
                   Installation complete!
                 </span>
               </div>
-              <p className="text-xs text-green-300/70 mt-1">
+              <p className="text-xs text-green-300/70 pt-1">
                 GPT-SoVITS is now ready to use
               </p>
             </div>
@@ -374,10 +375,10 @@ const GPTSoVITSSetup = ({
                 <Icon name="alert-circle" size={16} />
                 <span className="text-sm font-medium">Installation failed</span>
               </div>
-              <p className="text-xs text-red-300/70 mt-1">{setupError}</p>
+              <p className="text-xs text-red-300/70 pt-1">{setupError}</p>
               <button
                 onClick={handleStartSetup}
-                className="mt-2 text-xs text-red-300 hover:text-red-200 underline"
+                className="pt-2 text-xs text-red-300 hover:text-red-200 underline"
               >
                 Retry Installation
               </button>
@@ -388,44 +389,50 @@ const GPTSoVITSSetup = ({
 
       {/* Info panel */}
       {!isInstalled && !isSetupRunning && (
-        <div className="p-2 md:p-4 bg-white/5 border border-white/10 rounded-lg">
-          <p className="text-xs text-white/70 mb-2 font-medium">
+        <div className="settings-section">
+          <p className="text-xs vassist-text-secondary pb-2 font-medium">
             What will be installed:
           </p>
-          <ul className="text-xs text-white/50 space-y-1">
+          <ul className="text-xs vassist-text-muted flex flex-col gap-1">
             <li className="flex items-start gap-2">
-              <span className="text-white/30">•</span>
+              <span className="vassist-text-muted">•</span>
               <span>Python 3.10 runtime (~9-100MB depending on platform)</span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-white/30">•</span>
+              <span className="vassist-text-muted">•</span>
               <span>
                 PyTorch backend: {selectedBackend.toUpperCase()} (~2-3GB for GPU
                 builds)
               </span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-white/30">•</span>
+              <span className="vassist-text-muted">•</span>
               <span>GPT-SoVITS AI models (~2GB)</span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-white/30">•</span>
+              <span className="vassist-text-muted">•</span>
               <span>Required dependencies and tools</span>
             </li>
           </ul>
-          <div className="mt-3 pt-3 border-t border-white/10">
+          <div className="pt-3 pt-3">
             <div className="flex items-center gap-2 text-xs">
-              <Icon name="hard-drive" size={12} className="text-white/40" />
-              <span className="text-white/60">Disk space needed: ~5GB</span>
+              <Icon
+                name="hard-drive"
+                size={12}
+                className="vassist-text-muted"
+              />
+              <span className="vassist-text-muted">
+                Disk space needed: ~5GB
+              </span>
             </div>
-            <div className="flex items-center gap-2 text-xs mt-1">
-              <Icon name="clock" size={12} className="text-white/40" />
-              <span className="text-white/60">
+            <div className="flex items-center gap-2 text-xs pt-1">
+              <Icon name="clock" size={12} className="vassist-text-muted" />
+              <span className="vassist-text-muted">
                 Estimated time: 10-30 minutes
               </span>
             </div>
           </div>
-          <p className="text-xs text-white/40 mt-3 italic">
+          <p className="text-xs vassist-text-muted pt-3 italic">
             Note: No system Python required! Everything is downloaded
             automatically.
           </p>
@@ -441,6 +448,7 @@ const GPTSoVITSSetup = ({
           confirmStyle="error"
           isLightBackground={isLightBackground}
           onConfirm={confirmReinstall}
+          onConfirmComplete={() => setShowReinstallConfirmDialog(false)}
           onCancel={() => setShowReinstallConfirmDialog(false)}
         />
       )}

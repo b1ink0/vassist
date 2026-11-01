@@ -193,8 +193,6 @@ const STTTTSModelManager = ({
     const modelType = pendingDeleteModelType;
     if (!modelType) return;
 
-    setPendingDeleteModelType(null);
-
     const modelName = modelType === "whisper" ? "Whisper STT" : "VITS-VCTK TTS";
 
     try {
@@ -216,10 +214,11 @@ const STTTTSModelManager = ({
         setTimeout(() => setSuccessMessage(""), 3000);
         await loadStatus();
       } else {
-        setError(result?.error || "Delete failed");
+        throw new Error(result?.error || "Delete failed");
       }
     } catch (err: unknown) {
       setError(getErrorMessage(err));
+      throw err;
     }
   };
 
@@ -231,8 +230,8 @@ const STTTTSModelManager = ({
 
   if (!status) {
     return (
-      <div className="p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
-        <p className="text-sm text-white/50">Loading model status...</p>
+      <div className="settings-section">
+        <p className="text-sm vassist-text-muted">Loading model status...</p>
       </div>
     );
   }
@@ -241,7 +240,7 @@ const STTTTSModelManager = ({
   const vitsStatus = status.vits || {};
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       {/* Info Banner */}
       <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
         <p className="text-xs text-blue-300">
@@ -251,41 +250,43 @@ const STTTTSModelManager = ({
       </div>
 
       {/* Whisper STT Model */}
-      <div className="p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
-        <div className="flex items-center justify-between mb-3">
+      <div className="settings-section">
+        <div className="flex items-center justify-between pb-3">
           <div className="flex items-center gap-2">
-            <Icon name="microphone" size={16} className="text-white/70" />
-            <h3 className="text-sm font-semibold text-white/90">
-              Whisper Tiny.en (STT)
-            </h3>
+            <Icon
+              name="microphone"
+              size={16}
+              className="vassist-text-secondary"
+            />
+            <h3 className="settings-group-heading">Whisper Tiny.en (STT)</h3>
           </div>
           {whisperStatus.downloaded ? (
             <span className="px-2 py-1 rounded text-[10px] font-medium bg-green-500/20 text-green-300 border border-green-500/30">
               Downloaded
             </span>
           ) : (
-            <span className="px-2 py-1 rounded text-[10px] font-medium bg-white/10 text-white/50 border border-white/20">
+            <span className="px-2 py-1 rounded text-[10px] font-medium bg-current/10 vassist-text-muted border border-current/20">
               Not Downloaded
             </span>
           )}
         </div>
 
-        <div className="space-y-2 mb-3">
+        <div className="flex flex-col gap-2 pb-3">
           <div className="flex justify-between text-xs">
-            <span className="text-white/60">Model Size:</span>
-            <span className="text-white/90">
+            <span className="vassist-text-muted">Model Size:</span>
+            <span className="vassist-text-primary">
               {whisperStatus.downloaded
                 ? formatBytes(whisperStatus.size ?? 0)
                 : "~99 MB"}
             </span>
           </div>
           <div className="flex justify-between text-xs">
-            <span className="text-white/60">Language:</span>
-            <span className="text-white/90">English</span>
+            <span className="vassist-text-muted">Language:</span>
+            <span className="vassist-text-primary">English</span>
           </div>
           <div className="flex justify-between text-xs">
-            <span className="text-white/60">Purpose:</span>
-            <span className="text-white/90">
+            <span className="vassist-text-muted">Purpose:</span>
+            <span className="vassist-text-primary">
               Speech-to-Text (Transcription)
             </span>
           </div>
@@ -293,16 +294,16 @@ const STTTTSModelManager = ({
 
         {/* Progress Bar for Whisper */}
         {downloadProgress.whisper && (
-          <div className="space-y-2 mb-3">
+          <div className="flex flex-col gap-2 pb-3">
             <div className="flex justify-between text-xs">
-              <span className="text-white/70">
+              <span className="vassist-text-secondary">
                 {downloadProgress.whisper.status}
               </span>
-              <span className="text-white/70">
+              <span className="vassist-text-secondary">
                 {downloadProgress.whisper.percent}%
               </span>
             </div>
-            <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+            <div className="w-full h-2 bg-current/10 rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-blue-400/60 to-blue-500/80 transition-all duration-300"
                 style={{ width: `${downloadProgress.whisper.percent}%` }}
@@ -344,45 +345,43 @@ const STTTTSModelManager = ({
       </div>
 
       {/* VITS TTS Model */}
-      <div className="p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
-        <div className="flex items-center justify-between mb-3">
+      <div className="settings-section">
+        <div className="flex items-center justify-between pb-3">
           <div className="flex items-center gap-2">
-            <Icon name="speaker" size={16} className="text-white/70" />
-            <h3 className="text-sm font-semibold text-white/90">
-              VITS-VCTK (TTS)
-            </h3>
+            <Icon name="speaker" size={16} className="vassist-text-secondary" />
+            <h3 className="settings-group-heading">VITS-VCTK (TTS)</h3>
           </div>
           {vitsStatus.downloaded ? (
             <span className="px-2 py-1 rounded text-[10px] font-medium bg-green-500/20 text-green-300 border border-green-500/30">
               Downloaded
             </span>
           ) : (
-            <span className="px-2 py-1 rounded text-[10px] font-medium bg-white/10 text-white/50 border border-white/20">
+            <span className="px-2 py-1 rounded text-[10px] font-medium bg-current/10 vassist-text-muted border border-current/20">
               Not Downloaded
             </span>
           )}
         </div>
 
-        <div className="space-y-2 mb-3">
+        <div className="flex flex-col gap-2 pb-3">
           <div className="flex justify-between text-xs">
-            <span className="text-white/60">Model Size:</span>
-            <span className="text-white/90">
+            <span className="vassist-text-muted">Model Size:</span>
+            <span className="vassist-text-primary">
               {vitsStatus.downloaded
                 ? formatBytes(vitsStatus.size ?? 0)
                 : "~152 MB"}
             </span>
           </div>
           <div className="flex justify-between text-xs">
-            <span className="text-white/60">Language:</span>
-            <span className="text-white/90">English</span>
+            <span className="vassist-text-muted">Language:</span>
+            <span className="vassist-text-primary">English</span>
           </div>
           <div className="flex justify-between text-xs">
-            <span className="text-white/60">Speakers:</span>
-            <span className="text-white/90">109 voices</span>
+            <span className="vassist-text-muted">Speakers:</span>
+            <span className="vassist-text-primary">109 voices</span>
           </div>
           <div className="flex justify-between text-xs">
-            <span className="text-white/60">Purpose:</span>
-            <span className="text-white/90">
+            <span className="vassist-text-muted">Purpose:</span>
+            <span className="vassist-text-primary">
               Text-to-Speech (Voice Synthesis)
             </span>
           </div>
@@ -390,16 +389,16 @@ const STTTTSModelManager = ({
 
         {/* Progress Bar for VITS */}
         {downloadProgress.vits && (
-          <div className="space-y-2 mb-3">
+          <div className="flex flex-col gap-2 pb-3">
             <div className="flex justify-between text-xs">
-              <span className="text-white/70">
+              <span className="vassist-text-secondary">
                 {downloadProgress.vits.status}
               </span>
-              <span className="text-white/70">
+              <span className="vassist-text-secondary">
                 {downloadProgress.vits.percent}%
               </span>
             </div>
-            <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+            <div className="w-full h-2 bg-current/10 rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-purple-400/60 to-purple-500/80 transition-all duration-300"
                 style={{ width: `${downloadProgress.vits.percent}%` }}
@@ -444,7 +443,7 @@ const STTTTSModelManager = ({
       {successMessage && (
         <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-300 text-xs">
           <div className="flex items-start gap-2">
-            <Icon name="check" size={14} className="flex-shrink-0 mt-0.5" />
+            <Icon name="check" size={14} className="flex-shrink-0 pt-0.5" />
             <span>{successMessage}</span>
           </div>
         </div>
@@ -454,7 +453,7 @@ const STTTTSModelManager = ({
       {error && (
         <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-xs">
           <div className="flex items-start gap-2">
-            <Icon name="error" size={14} className="flex-shrink-0 mt-0.5" />
+            <Icon name="error" size={14} className="flex-shrink-0 pt-0.5" />
             <span>{error}</span>
           </div>
         </div>
@@ -469,6 +468,7 @@ const STTTTSModelManager = ({
           confirmStyle="error"
           isLightBackground={isLightBackground}
           onConfirm={confirmDelete}
+          onConfirmComplete={() => setPendingDeleteModelType(null)}
           onCancel={() => setPendingDeleteModelType(null)}
         />
       )}

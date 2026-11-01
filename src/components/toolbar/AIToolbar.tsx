@@ -1256,6 +1256,11 @@ const AIToolbar = () => {
   const handleInputFocus = useCallback(
     (e: FocusEvent) => {
       const target = e.target as HTMLElement;
+      if (target.closest(".composer-menu, .composer-layout")) {
+        setIsVisible(false);
+        return;
+      }
+
       Logger.log("AIToolbar", "handleInputFocus triggered", {
         enabled: aiToolbarSettings?.showOnInputFocus,
         target,

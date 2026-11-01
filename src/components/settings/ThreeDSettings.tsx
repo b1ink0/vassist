@@ -4,8 +4,9 @@
  * Handles model loading, physics, animations, custom model/motion uploads
  */
 
+import SettingsScrollArea from "./shared/SettingsScrollArea";
+import SettingsLoading from "./shared/SettingsLoading";
 import {
-  lazy,
   Suspense,
   useState,
   useEffect,
@@ -14,7 +15,7 @@ import {
   type ChangeEvent,
 } from "react";
 import { useAnimation } from "../../contexts/AnimationContext";
-import { useSceneActions, useSceneRef } from "../../hooks/app/useScene";
+import { useSceneRef } from "../../hooks/app/useScene";
 import {
   useConfigUIActions,
   useUIConfig,
@@ -39,18 +40,18 @@ import { pmxConverterService } from "../../services/mmd/PMXConverterService";
 import { vmdConverterService } from "../../services/mmd/VMDConverterService";
 import { modelStorageService } from "../../services/storage/ModelStorageService";
 import StageSettings from "./StageSettings";
-import { canConfigureStages } from "../../babylon/stages/stageAvailability";
-import { useXrRuntime } from "../../contexts/XrRuntimeContext";
+import EmotePlaybackSettings from "./EmotePlaybackSettings";
 import { motionStorageService } from "../../services/storage/MotionStorageService";
 import emoteStorageService from "../../services/storage/EmoteStorageService";
 import { isAndroid, isDesktop } from "../../utils/PlatformUtils";
 import JSZip from "jszip";
-import { Button, Input, Select, TabBar } from "../ui";
+import { Button, Input, Select } from "../ui";
+import RangeSlider from "../ui/RangeSlider";
 
-const SettingsSubTabContent = lazy(() => import("./SettingsSubTabContent"));
-
-type SubTabId = "display" | "performance" | "models" | "animations" | "emotes";
-type AssetTabId = "avatars" | "stages";
+import SettingsSubTabContent from "./SettingsSubTabContent";
+import SettingsRow from "../ui/SettingsRow";
+import SettingsExpander from "./shared/SettingsExpander";
+import SettingsGroup from "./shared/SettingsGroup";
 
 interface TextureInfo {
   id: string;
@@ -185,6 +186,14 @@ interface MotionUploadState extends UploadState {
 }
 
 interface ThreeDSettingsProps {
+  page?:
+    | "display"
+    | "performance"
+    | "models"
+    | "stages"
+    | "animations"
+    | "emotes"
+    | undefined;
   isLightBackground: boolean;
   onRequestDeleteModelDialog?: ((modelId: string) => void) | undefined;
   onRequestDeleteMotionDialog?: ((motionId: string) => void) | undefined;
@@ -211,11 +220,11 @@ const ThreeDSettings = ({
   onRequestDeleteEmoteDialog,
   onRequestSettingsErrorDialog,
   refreshTrigger,
+  page = "display",
 }: ThreeDSettingsProps) => {
-  const xr = useXrRuntime();
   const uiConfig = useUIConfig();
   const { updateUIConfig } = useConfigUIActions();
-  const { reloadScene } = useSceneActions();
+
   const sceneRef = useSceneRef();
 
   const {
@@ -227,35 +236,8 @@ const ThreeDSettings = ({
   } = useAnimation();
   const allowPositionSelection = !isAndroid && !isDesktop;
 
-  const [activeSubTab, setActiveSubTab] = useState<SubTabId>("display");
-  const [activeAssetTab, setActiveAssetTab] = useState<AssetTabId>("avatars");
-  useEffect(() => {
-    if (
-      !xr.enabled &&
-      !canConfigureStages(uiConfig.desktopMode.mode) &&
-      activeAssetTab === "stages"
-    )
-      setActiveAssetTab("avatars");
-  }, [activeAssetTab, uiConfig.desktopMode.mode, xr.enabled]);
-  const [subTabIndicatorStyle, setSubTabIndicatorStyle] = useState({
-    left: 0,
-    width: 0,
-  });
-  const [assetTabIndicatorStyle, setAssetTabIndicatorStyle] = useState({
-    left: 0,
-    width: 0,
-  });
-  const subTabsRef = useRef<Record<SubTabId, HTMLButtonElement | null>>({
-    display: null,
-    performance: null,
-    models: null,
-    animations: null,
-    emotes: null,
-  });
-  const assetTabsRef = useRef<Record<AssetTabId, HTMLButtonElement | null>>({
-    avatars: null,
-    stages: null,
-  });
+  const activeSubTab = page === "stages" ? "models" : page;
+  const activeAssetTab = page === "stages" ? "stages" : "avatars";
 
   // Model upload state
   const [models, setModels] = useState<ModelItem[]>([]);
@@ -413,57 +395,6 @@ const ThreeDSettings = ({
     };
     loadPortraitClipping();
   }, [models]);
-
-  // Update tab indicators whenever the active tab or available width changes.
-  useEffect(() => {
-    const updateSubTabIndicator = () => {
-      const activeTabElement = subTabsRef.current[activeSubTab];
-      if (!activeTabElement) return;
-
-      setSubTabIndicatorStyle({
-        left: activeTabElement.offsetLeft,
-        width: activeTabElement.offsetWidth,
-      });
-    };
-
-    updateSubTabIndicator();
-    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-    const handleResize = () => {
-      if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(updateSubTabIndicator, 150);
-    };
-
-    window.addEventListener("resize", handleResize);
-    return () => {
-      if (resizeTimer) clearTimeout(resizeTimer);
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [activeSubTab]);
-
-  useEffect(() => {
-    const updateAssetTabIndicator = () => {
-      const activeTabElement = assetTabsRef.current[activeAssetTab];
-      if (!activeTabElement) return;
-
-      setAssetTabIndicatorStyle({
-        left: activeTabElement.offsetLeft,
-        width: activeTabElement.offsetWidth,
-      });
-    };
-
-    updateAssetTabIndicator();
-    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-    const handleResize = () => {
-      if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(updateAssetTabIndicator, 150);
-    };
-
-    window.addEventListener("resize", handleResize);
-    return () => {
-      if (resizeTimer) clearTimeout(resizeTimer);
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [activeAssetTab]);
 
   const processModelUploadWithProgress = (
     file: File,
@@ -1832,174 +1763,125 @@ const ThreeDSettings = ({
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Sub-tabs */}
-      <div className="relative">
-        <div
-          className="absolute bottom-0 z-10 h-0.5 bg-white transition-all duration-300 ease-out"
-          style={{
-            left: `${subTabIndicatorStyle.left}px`,
-            width: `${subTabIndicatorStyle.width}px`,
-          }}
-        />
-        <TabBar
-          tabs={[
-            { id: "display", label: "Display" },
-            { id: "performance", label: "Performance" },
-            { id: "models", label: "Models" },
-            { id: "animations", label: "Animations" },
-            { id: "emotes", label: "Emotes" },
-          ]}
-          size="compact"
-          activeTab={activeSubTab}
-          onTabChange={(tabId) => setActiveSubTab(tabId as SubTabId)}
-          tabsRef={subTabsRef}
-        />
-      </div>
-
+    <div className={page ? "flex flex-col gap-5" : "flex flex-col h-full"}>
       {/* Only the active sub-tab is mounted; these panels contain expensive controls and storage-backed lists. */}
       <div className="flex-1 min-h-0 overflow-hidden">
         <div className="h-full">
-          <Suspense
-            fallback={
-              <div className="flex h-full items-center justify-center">
-                <Icon
-                  name="loading-2"
-                  size={32}
-                  className="animate-spin text-white/75"
-                />
-              </div>
-            }
-          >
+          <Suspense fallback={<SettingsLoading />}>
             <SettingsSubTabContent
               render={() => (
                 <>
                   {/* Display Tab */}
                   {activeSubTab === "display" && (
-                    <div className="h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4 scrollbar-glass">
+                    <div className="flex flex-col gap-4">
                       {/* Enable Avatar Toggle */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex-1">
-                            <label className="text-sm text-white font-medium">
-                              Enable Avatar
-                            </label>
-                            <p className="text-xs text-white/50 mt-0.5">
-                              {uiConfig.enableModelLoading
-                                ? "Virtual assistant with animated 3D avatar"
-                                : "Chat-only mode (no 3D avatar)"}
-                            </p>
-                          </div>
+                      <SettingsGroup>
+                        <div className="flex flex-col gap-2">
+                          <SettingsRow
+                            label="Enable Avatar"
+                            description={
+                              <>
+                                {uiConfig.enableModelLoading
+                                  ? "Virtual assistant with animated 3D avatar"
+                                  : "Chat-only mode (no 3D avatar)"}
+                              </>
+                            }
+                          >
+                            <Toggle
+                              checked={uiConfig.enableModelLoading}
+                              data-testid="toggle-enable-avatar"
+                              onChange={(checked) =>
+                                updateUIConfig("enableModelLoading", checked)
+                              }
+                            />
+                          </SettingsRow>
+                        </div>
+
+                        <SettingsRow
+                          label="Avatar Shadow"
+                          description={
+                            <>
+                              {uiConfig.enableAvatarShadow !== false
+                                ? "Show a translucent shadow behind the avatar. Stages receive cast shadows."
+                                : "Avatar shadows are turned off"}
+                            </>
+                          }
+                        >
                           <Toggle
-                            checked={uiConfig.enableModelLoading}
-                            data-testid="toggle-enable-avatar"
+                            checked={uiConfig.enableAvatarShadow !== false}
                             onChange={(checked) =>
-                              updateUIConfig("enableModelLoading", checked)
+                              updateUIConfig("enableAvatarShadow", checked)
                             }
                           />
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex-1">
-                          <label className="text-sm text-white font-medium">
-                            Avatar Shadow
-                          </label>
-                          <p className="text-xs text-white/50 mt-0.5">
-                            {uiConfig.enableAvatarShadow !== false
-                              ? "Show a translucent shadow behind the avatar. Stages receive cast shadows."
-                              : "Avatar shadows are turned off"}
-                          </p>
-                        </div>
-                        <Toggle
-                          checked={uiConfig.enableAvatarShadow !== false}
-                          onChange={(checked) =>
-                            updateUIConfig("enableAvatarShadow", checked)
-                          }
-                        />
-                      </div>
-
-                      {/* Reload Scene Button */}
-                      {uiConfig.enableModelLoading && (
-                        <div className="space-y-2">
-                          <Button
-                            variant={isLightBackground ? "dark" : "default"}
-                            onClick={reloadScene}
-                            className="w-full flex items-center justify-center gap-2"
-                          >
-                            <Icon name="refresh" size={16} />
-                            Reload Avatar
-                          </Button>
-                          <p className="text-xs text-white/50 text-center">
-                            Refresh the avatar after changing model or settings
-                          </p>
-                        </div>
-                      )}
+                        </SettingsRow>
+                      </SettingsGroup>
 
                       {/* Character Display Settings - Only show when avatar is enabled */}
                       {uiConfig.enableModelLoading && (
                         <>
                           {/* Portrait Mode Toggle */}
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex-1">
-                                <label className="text-sm text-white font-medium">
-                                  Portrait Mode
-                                </label>
-                                <p className="text-xs text-white/50 mt-0.5">
+                          <SettingsGroup>
+                            <SettingsRow
+                              label="Portrait Mode"
+                              description={
+                                <>
                                   {uiConfig.enablePortraitMode
                                     ? "Upper body framing with closer camera view"
                                     : "Full body view with standard camera"}
-                                </p>
-                              </div>
+                                </>
+                              }
+                            >
                               <Toggle
                                 checked={uiConfig.enablePortraitMode || false}
                                 onChange={(checked) =>
                                   updateUIConfig("enablePortraitMode", checked)
                                 }
                               />
-                            </div>
+                            </SettingsRow>
 
                             {/* Portrait Clipping Adjustment - Only show when portrait mode is enabled */}
                             {uiConfig.enablePortraitMode && (
-                              <div className="mt-3 pt-3 border-t border-white/10">
-                                <div className="flex items-center justify-between mb-2">
-                                  <label className="text-xs text-white/70 font-medium">
-                                    Clipping Height
-                                  </label>
-                                  <span className="text-xs text-white/50">
+                              <SettingsRow
+                                label={<>Clipping Height</>}
+                                description={
+                                  <>
+                                    Adjust for different model heights (lower =
+                                    show more body, higher = show less)
+                                  </>
+                                }
+                                layout="stacked"
+                              >
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <RangeSlider
+                                    aria-label="Clipping Height"
+                                    min="0"
+                                    max="15"
+                                    step="0.1"
+                                    value={portraitClipping}
+                                    onValueChange={(nextValue) =>
+                                      handlePortraitClippingChange(nextValue)
+                                    }
+                                  />
+                                  <span className="shrink-0 text-xs tabular-nums vassist-text-secondary">
                                     {portraitClipping.toFixed(1)}
                                   </span>
                                 </div>
-                                <input
-                                  type="range"
-                                  min="0"
-                                  max="15"
-                                  step="0.1"
-                                  value={portraitClipping}
-                                  onChange={(e) =>
-                                    handlePortraitClippingChange(
-                                      parseFloat(e.target.value),
-                                    )
-                                  }
-                                  className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                                  style={{
-                                    accentColor: "rgba(147, 51, 234, 0.8)",
-                                  }}
-                                />
-                                <p className="text-xs text-white/40 mt-1.5">
-                                  Adjust for different model heights (lower =
-                                  show more body, higher = show less)
-                                </p>
-                              </div>
+                              </SettingsRow>
                             )}
-                          </div>
+                          </SettingsGroup>
 
                           {allowPositionSelection && (
-                            <div className="space-y-2">
-                              <label className="block text-sm font-medium text-white/90">
-                                Character Position
-                              </label>
+                            <SettingsRow
+                              label="Character Position"
+                              description={
+                                <>
+                                  {uiConfig.position?.preset === "last-location"
+                                    ? "Will load at the last dragged position. Drag to save new position."
+                                    : "Changes will apply on next page load or reload"}
+                                </>
+                              }
+                              layout="stacked"
+                            >
                               <Select
                                 value={
                                   uiConfig.position?.preset || "bottom-right"
@@ -2024,26 +1906,14 @@ const ThreeDSettings = ({
                                     })),
                                 ]}
                               />
-                              <p className="text-xs text-white/50">
-                                {uiConfig.position?.preset === "last-location"
-                                  ? "Will load at the last dragged position. Drag to save new position."
-                                  : "Changes will apply on next page load or reload"}
-                              </p>
-                            </div>
+                            </SettingsRow>
                           )}
 
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex-1">
-                                <label className="text-sm text-white font-medium">
-                                  Sticker Border
-                                </label>
-                                <p className="text-xs text-white/50 mt-0.5">
-                                  Add a clean border around the avatar
-                                  silhouette without changing the MMD material
-                                  outline
-                                </p>
-                              </div>
+                          <SettingsGroup>
+                            <SettingsRow
+                              label="Sticker Border"
+                              description="Add a clean border around the avatar silhouette."
+                            >
                               <div className="flex items-center gap-2">
                                 <Button
                                   type="button"
@@ -2070,14 +1940,11 @@ const ThreeDSettings = ({
                                   }
                                 />
                               </div>
-                            </div>
+                            </SettingsRow>
 
                             {uiConfig.stickerBorder?.enabled === true && (
-                              <div className="space-y-3 border-t border-white/10 pt-3">
-                                <div className="flex items-center justify-between gap-3">
-                                  <label className="text-xs text-white/70">
-                                    Border Color
-                                  </label>
+                              <div className="flex flex-col gap-3  pt-3">
+                                <SettingsRow label={<>Border Color</>}>
                                   <input
                                     type="color"
                                     value={
@@ -2090,84 +1957,113 @@ const ThreeDSettings = ({
                                         event.target.value,
                                       )
                                     }
-                                    className="h-7 w-10 cursor-pointer rounded border border-white/20 bg-transparent p-0.5"
+                                    className="h-7 w-10 cursor-pointer rounded border border-current/20 bg-transparent p-0.5"
                                     aria-label="Sticker border color"
                                   />
-                                </div>
+                                </SettingsRow>
 
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <label className="text-xs text-white/70">
-                                      Border Width
-                                    </label>
-                                    <span className="text-xs text-white/50">
+                                <SettingsRow
+                                  label={<>Border Width</>}
+                                  layout="stacked"
+                                >
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <RangeSlider
+                                      aria-label="Border Width"
+                                      min={
+                                        StickerBorderControlLimits.thickness.min
+                                      }
+                                      max={
+                                        StickerBorderControlLimits.thickness.max
+                                      }
+                                      step={
+                                        StickerBorderControlLimits.thickness
+                                          .step
+                                      }
+                                      value={
+                                        uiConfig.stickerBorder.thickness ??
+                                        DefaultStickerBorderSettings.thickness
+                                      }
+                                      onValueChange={(nextValue) =>
+                                        updateUIConfig(
+                                          "stickerBorder.thickness",
+                                          nextValue,
+                                        )
+                                      }
+                                    />
+                                    <span className="shrink-0 text-xs tabular-nums vassist-text-secondary">
                                       {uiConfig.stickerBorder.thickness ??
                                         DefaultStickerBorderSettings.thickness}
                                       px
                                     </span>
                                   </div>
-                                  <input
-                                    type="range"
-                                    min={
-                                      StickerBorderControlLimits.thickness.min
-                                    }
-                                    max={
-                                      StickerBorderControlLimits.thickness.max
-                                    }
-                                    step={
-                                      StickerBorderControlLimits.thickness.step
-                                    }
-                                    value={
-                                      uiConfig.stickerBorder.thickness ??
-                                      DefaultStickerBorderSettings.thickness
-                                    }
-                                    onChange={(event) =>
-                                      updateUIConfig(
-                                        "stickerBorder.thickness",
-                                        Number(event.target.value),
-                                      )
-                                    }
-                                    className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-white/10"
-                                  />
-                                </div>
+                                </SettingsRow>
 
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <label className="text-xs text-white/70">
-                                      Edge Quality
-                                    </label>
-                                    <span className="text-xs text-white/50">
+                                <SettingsRow
+                                  label={<>Edge Quality</>}
+                                  layout="stacked"
+                                >
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <RangeSlider
+                                      aria-label="Edge Quality"
+                                      min={
+                                        StickerBorderControlLimits.samples.min
+                                      }
+                                      max={
+                                        StickerBorderControlLimits.samples.max
+                                      }
+                                      step={
+                                        StickerBorderControlLimits.samples.step
+                                      }
+                                      value={
+                                        uiConfig.stickerBorder.samples ??
+                                        DefaultStickerBorderSettings.samples
+                                      }
+                                      onValueChange={(nextValue) =>
+                                        updateUIConfig(
+                                          "stickerBorder.samples",
+                                          nextValue,
+                                        )
+                                      }
+                                    />
+                                    <span className="shrink-0 text-xs tabular-nums vassist-text-secondary">
                                       {uiConfig.stickerBorder.samples ??
                                         DefaultStickerBorderSettings.samples}
                                     </span>
                                   </div>
-                                  <input
-                                    type="range"
-                                    min={StickerBorderControlLimits.samples.min}
-                                    max={StickerBorderControlLimits.samples.max}
-                                    step={
-                                      StickerBorderControlLimits.samples.step
-                                    }
-                                    value={
-                                      uiConfig.stickerBorder.samples ??
-                                      DefaultStickerBorderSettings.samples
-                                    }
-                                    onChange={(event) =>
-                                      updateUIConfig(
-                                        "stickerBorder.samples",
-                                        Number(event.target.value),
-                                      )
-                                    }
-                                    className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-white/10"
-                                  />
-                                </div>
+                                </SettingsRow>
 
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <label className="text-xs text-white/70">
-                                      Occlusion Strength
-                                    </label>
-                                    <span className="text-xs text-white/50">
+                                <SettingsRow
+                                  label={<>Occlusion Strength</>}
+                                  layout="stacked"
+                                >
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <RangeSlider
+                                      aria-label="Occlusion Strength"
+                                      min={
+                                        StickerBorderControlLimits
+                                          .occlusionStrength.min
+                                      }
+                                      max={
+                                        StickerBorderControlLimits
+                                          .occlusionStrength.max
+                                      }
+                                      step={
+                                        StickerBorderControlLimits
+                                          .occlusionStrength.step
+                                      }
+                                      value={
+                                        uiConfig.stickerBorder
+                                          .occlusionStrength ??
+                                        DefaultStickerBorderSettings.occlusionStrength
+                                      }
+                                      onValueChange={(nextValue) =>
+                                        updateUIConfig(
+                                          "stickerBorder.occlusionStrength",
+                                          nextValue,
+                                        )
+                                      }
+                                    />
+                                    <span className="shrink-0 text-xs tabular-nums vassist-text-secondary">
                                       {(
                                         uiConfig.stickerBorder
                                           .occlusionStrength ??
@@ -2175,41 +2071,40 @@ const ThreeDSettings = ({
                                       ).toFixed(2)}
                                     </span>
                                   </div>
-                                  <input
-                                    type="range"
-                                    min={
-                                      StickerBorderControlLimits
-                                        .occlusionStrength.min
-                                    }
-                                    max={
-                                      StickerBorderControlLimits
-                                        .occlusionStrength.max
-                                    }
-                                    step={
-                                      StickerBorderControlLimits
-                                        .occlusionStrength.step
-                                    }
-                                    value={
-                                      uiConfig.stickerBorder
-                                        .occlusionStrength ??
-                                      DefaultStickerBorderSettings.occlusionStrength
-                                    }
-                                    onChange={(event) =>
-                                      updateUIConfig(
-                                        "stickerBorder.occlusionStrength",
-                                        Number(event.target.value),
-                                      )
-                                    }
-                                    className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-white/10"
-                                  />
-                                </div>
+                                </SettingsRow>
 
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <label className="text-xs text-white/70">
-                                      Occlusion Threshold
-                                    </label>
-                                    <span className="text-xs text-white/50">
+                                <SettingsRow
+                                  label={<>Occlusion Threshold</>}
+                                  layout="stacked"
+                                >
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <RangeSlider
+                                      aria-label="Occlusion Threshold"
+                                      min={
+                                        StickerBorderControlLimits
+                                          .occlusionThreshold.min
+                                      }
+                                      max={
+                                        StickerBorderControlLimits
+                                          .occlusionThreshold.max
+                                      }
+                                      step={
+                                        StickerBorderControlLimits
+                                          .occlusionThreshold.step
+                                      }
+                                      value={
+                                        uiConfig.stickerBorder
+                                          .occlusionThreshold ??
+                                        DefaultStickerBorderSettings.occlusionThreshold
+                                      }
+                                      onValueChange={(nextValue) =>
+                                        updateUIConfig(
+                                          "stickerBorder.occlusionThreshold",
+                                          nextValue,
+                                        )
+                                      }
+                                    />
+                                    <span className="shrink-0 text-xs tabular-nums vassist-text-secondary">
                                       {(
                                         uiConfig.stickerBorder
                                           .occlusionThreshold ??
@@ -2217,37 +2112,10 @@ const ThreeDSettings = ({
                                       ).toFixed(3)}
                                     </span>
                                   </div>
-                                  <input
-                                    type="range"
-                                    min={
-                                      StickerBorderControlLimits
-                                        .occlusionThreshold.min
-                                    }
-                                    max={
-                                      StickerBorderControlLimits
-                                        .occlusionThreshold.max
-                                    }
-                                    step={
-                                      StickerBorderControlLimits
-                                        .occlusionThreshold.step
-                                    }
-                                    value={
-                                      uiConfig.stickerBorder
-                                        .occlusionThreshold ??
-                                      DefaultStickerBorderSettings.occlusionThreshold
-                                    }
-                                    onChange={(event) =>
-                                      updateUIConfig(
-                                        "stickerBorder.occlusionThreshold",
-                                        Number(event.target.value),
-                                      )
-                                    }
-                                    className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-white/10"
-                                  />
-                                </div>
+                                </SettingsRow>
                               </div>
                             )}
-                          </div>
+                          </SettingsGroup>
                         </>
                       )}
                     </div>
@@ -2255,34 +2123,41 @@ const ThreeDSettings = ({
 
                   {/* Performance Tab */}
                   {activeSubTab === "performance" && (
-                    <div className="h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4 scrollbar-glass">
+                    <div className="flex flex-col gap-4">
                       {/* Physics Simulation */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex-1">
-                            <label className="text-sm text-white font-medium">
-                              Physics Simulation
-                            </label>
-                            <p className="text-xs text-white/50 mt-0.5">
+                      <SettingsGroup>
+                        <SettingsRow
+                          label="Physics Simulation"
+                          description={
+                            <>
                               {uiConfig.enablePhysics !== false
                                 ? "Realistic hair and cloth movement"
                                 : "Disable physics for better performance"}
-                            </p>
-                          </div>
+                            </>
+                          }
+                        >
                           <Toggle
                             checked={uiConfig.enablePhysics !== false}
                             onChange={(checked) =>
                               updateUIConfig("enablePhysics", checked)
                             }
                           />
-                        </div>
+                        </SettingsRow>
 
                         {/* Physics Engine Selector - Show when physics is enabled */}
                         {uiConfig.enablePhysics !== false && (
-                          <div className="mt-3 pt-3 border-t border-white/10">
-                            <label className="block text-xs text-white/70 font-medium mb-2">
-                              Physics Engine
-                            </label>
+                          <SettingsRow
+                            label="Physics Engine"
+                            description={
+                              <>
+                                {uiConfig.physicsEngine ===
+                                PhysicsEngineOptions.BULLET
+                                  ? "WASM-based physics with better MMD compatibility"
+                                  : "Alternative physics engine"}
+                              </>
+                            }
+                            layout="stacked"
+                          >
                             <Select
                               value={
                                 uiConfig.physicsEngine ||
@@ -2303,65 +2178,66 @@ const ThreeDSettings = ({
                                 },
                               ]}
                             />
-                            <p className="text-xs text-white/40 mt-1.5">
-                              {uiConfig.physicsEngine ===
-                              PhysicsEngineOptions.BULLET
-                                ? "WASM-based physics with better MMD compatibility"
-                                : "Alternative physics engine"}
-                            </p>
-                          </div>
+                          </SettingsRow>
                         )}
-                      </div>
+                      </SettingsGroup>
 
                       {/* FPS Limit */}
-                      <div className="space-y-2">
-                        <label className="block text-sm font-medium text-white/90">
-                          Frame Rate Limit
-                        </label>
-                        <Select
-                          value={uiConfig.fpsLimit || FPSLimitOptions.FPS_60}
-                          onChange={(e) => {
-                            const value =
-                              e.target.value === "native"
-                                ? "native"
-                                : parseInt(e.target.value);
-                            updateUIConfig("fpsLimit", value);
-                          }}
-                          variant={isLightBackground ? "dark" : "default"}
-                          options={[
-                            {
-                              value: FPSLimitOptions.FPS_15,
-                              label: "15 FPS (Ultra Battery Saver)",
-                            },
-                            {
-                              value: FPSLimitOptions.FPS_24,
-                              label: "24 FPS (Cinematic)",
-                            },
-                            {
-                              value: FPSLimitOptions.FPS_30,
-                              label: "30 FPS (Battery Saver)",
-                            },
-                            {
-                              value: FPSLimitOptions.FPS_60,
-                              label: "60 FPS (Recommended)",
-                            },
-                            {
-                              value: FPSLimitOptions.FPS_90,
-                              label: "90 FPS (High Refresh)",
-                            },
-                            {
-                              value: FPSLimitOptions.NATIVE,
-                              label: "Native (Monitor Rate)",
-                            },
-                          ]}
-                        />
+                      <div className="flex min-w-0 flex-col gap-2">
+                        <SettingsRow label="Frame Rate Limit" layout="stacked">
+                          <Select
+                            value={uiConfig.fpsLimit || FPSLimitOptions.FPS_60}
+                            onChange={(e) => {
+                              const value =
+                                e.target.value === "native"
+                                  ? "native"
+                                  : parseInt(e.target.value);
+                              updateUIConfig("fpsLimit", value);
+                            }}
+                            variant={isLightBackground ? "dark" : "default"}
+                            options={[
+                              {
+                                value: FPSLimitOptions.FPS_15,
+                                label: "15 FPS (Ultra Battery Saver)",
+                              },
+                              {
+                                value: FPSLimitOptions.FPS_24,
+                                label: "24 FPS (Cinematic)",
+                              },
+                              {
+                                value: FPSLimitOptions.FPS_30,
+                                label: "30 FPS (Battery Saver)",
+                              },
+                              {
+                                value: FPSLimitOptions.FPS_60,
+                                label: "60 FPS (Recommended)",
+                              },
+                              {
+                                value: FPSLimitOptions.FPS_90,
+                                label: "90 FPS (High Refresh)",
+                              },
+                              {
+                                value: FPSLimitOptions.FPS_120,
+                                label: "120 FPS (High Refresh)",
+                              },
+                              {
+                                value: FPSLimitOptions.FPS_144,
+                                label: "144 FPS (Ultra High Refresh)",
+                              },
+                              {
+                                value: FPSLimitOptions.NATIVE,
+                                label: "Native (Monitor Rate)",
+                              },
+                            ]}
+                          />
+                        </SettingsRow>
                         {String(uiConfig.fpsLimit) ===
                         String(FPSLimitOptions.NATIVE) ? (
-                          <div className="mt-2 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-start gap-2">
+                          <div className="pt-2 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-start gap-2">
                             <Icon
                               name="alert-triangle"
                               size={14}
-                              className="text-yellow-200/90 flex-shrink-0 mt-0.5"
+                              className="text-yellow-200/90 flex-shrink-0 pt-0.5"
                             />
                             <p className="text-xs text-yellow-200/90">
                               Native refresh rate may impact performance on
@@ -2369,7 +2245,7 @@ const ThreeDSettings = ({
                             </p>
                           </div>
                         ) : (
-                          <p className="text-xs text-white/50">
+                          <p className="text-xs vassist-text-muted">
                             Limits rendering to {uiConfig.fpsLimit || 60} frames
                             per second
                           </p>
@@ -2377,110 +2253,109 @@ const ThreeDSettings = ({
                       </div>
 
                       {/* Render Quality */}
-                      <div className="space-y-2">
-                        <label className="block text-sm font-medium text-white/90">
-                          Render Quality
-                        </label>
-                        <Select
-                          value={
-                            uiConfig.renderQuality ||
-                            RenderQualityOptions.MEDIUM
+                      <div className="flex min-w-0 flex-col gap-2">
+                        <SettingsRow
+                          label="Render Quality"
+                          description={
+                            <>
+                              {uiConfig.renderQuality ===
+                                RenderQualityOptions.LOW &&
+                                "Minimal effects, sharp image for low-end devices"}
+                              {(uiConfig.renderQuality ===
+                                RenderQualityOptions.MEDIUM ||
+                                !uiConfig.renderQuality) &&
+                                "Subtle bloom highlights"}
+                              {uiConfig.renderQuality ===
+                                RenderQualityOptions.HIGH &&
+                                "Smooth edges and soft glow"}
+                              {uiConfig.renderQuality ===
+                                RenderQualityOptions.ULTRA &&
+                                "Maximum clarity with 8x anti-aliasing"}
+                              {uiConfig.renderQuality ===
+                                RenderQualityOptions.CUSTOM &&
+                                "Fine-tune all rendering parameters"}
+                            </>
                           }
-                          onChange={(e) =>
-                            updateUIConfig("renderQuality", e.target.value)
-                          }
-                          variant={isLightBackground ? "dark" : "default"}
-                          options={[
-                            {
-                              value: RenderQualityOptions.LOW,
-                              label: "Low (Best Performance)",
-                            },
-                            {
-                              value: RenderQualityOptions.MEDIUM,
-                              label: "Medium (Balanced)",
-                            },
-                            {
-                              value: RenderQualityOptions.HIGH,
-                              label: "High (Better Quality)",
-                            },
-                            {
-                              value: RenderQualityOptions.ULTRA,
-                              label: "Ultra (Maximum Quality)",
-                            },
-                            {
-                              value: RenderQualityOptions.CUSTOM,
-                              label: "Custom (Advanced)",
-                            },
-                          ]}
-                        />
-                        <p className="text-xs text-white/50">
-                          {uiConfig.renderQuality ===
-                            RenderQualityOptions.LOW &&
-                            "Minimal effects, sharp image for low-end devices"}
-                          {(uiConfig.renderQuality ===
-                            RenderQualityOptions.MEDIUM ||
-                            !uiConfig.renderQuality) &&
-                            "Subtle bloom highlights"}
-                          {uiConfig.renderQuality ===
-                            RenderQualityOptions.HIGH &&
-                            "Smooth edges and soft glow"}
-                          {uiConfig.renderQuality ===
-                            RenderQualityOptions.ULTRA &&
-                            "Maximum clarity with 8x anti-aliasing"}
-                          {uiConfig.renderQuality ===
-                            RenderQualityOptions.CUSTOM &&
-                            "Fine-tune all rendering parameters"}
-                        </p>
-
-                        {/* Custom Quality Settings */}
+                          layout="stacked"
+                        >
+                          <Select
+                            value={
+                              uiConfig.renderQuality ||
+                              RenderQualityOptions.MEDIUM
+                            }
+                            onChange={(e) =>
+                              updateUIConfig("renderQuality", e.target.value)
+                            }
+                            variant={isLightBackground ? "dark" : "default"}
+                            options={[
+                              {
+                                value: RenderQualityOptions.LOW,
+                                label: "Low (Best Performance)",
+                              },
+                              {
+                                value: RenderQualityOptions.MEDIUM,
+                                label: "Medium (Balanced)",
+                              },
+                              {
+                                value: RenderQualityOptions.HIGH,
+                                label: "High (Better Quality)",
+                              },
+                              {
+                                value: RenderQualityOptions.ULTRA,
+                                label: "Ultra (Maximum Quality)",
+                              },
+                              {
+                                value: RenderQualityOptions.CUSTOM,
+                                label: "Custom (Advanced)",
+                              },
+                            ]}
+                          />
+                        </SettingsRow>
                         {uiConfig.renderQuality ===
                           RenderQualityOptions.CUSTOM && (
-                          <div className="mt-3 pt-3 border-t border-white/10 space-y-4">
-                            <p className="text-xs font-medium text-white/70">
+                          <div className="pt-3 pt-3  flex flex-col gap-4">
+                            <p className="text-xs font-medium vassist-text-secondary">
                               Custom Quality Settings
                             </p>
 
-                            <div className="space-y-1">
-                              <div className="flex items-center justify-between">
-                                <label className="text-xs text-white/70">
-                                  Anti-Aliasing (MSAA)
-                                </label>
-                                <span className="text-xs text-white/50">
+                            <SettingsRow
+                              label={<>Anti-Aliasing (MSAA)</>}
+                              layout="stacked"
+                            >
+                              <div className="flex min-w-0 items-center justify-between gap-3">
+                                <Select
+                                  value={
+                                    uiConfig.customQuality?.samples ||
+                                    DefaultCustomQualitySettings.samples
+                                  }
+                                  onChange={(e) =>
+                                    handleCustomQualityChange(
+                                      "samples",
+                                      parseInt(e.target.value),
+                                    )
+                                  }
+                                  variant={
+                                    isLightBackground ? "dark" : "default"
+                                  }
+                                  options={[
+                                    { value: 1, label: "1x (Off)" },
+                                    { value: 2, label: "2x" },
+                                    { value: 4, label: "4x" },
+                                    { value: 8, label: "8x (High GPU)" },
+                                  ]}
+                                />
+                                <span className="text-xs vassist-text-muted">
                                   {uiConfig.customQuality?.samples ||
                                     DefaultCustomQualitySettings.samples}
                                   x
                                 </span>
                               </div>
-                              <Select
-                                value={
-                                  uiConfig.customQuality?.samples ||
-                                  DefaultCustomQualitySettings.samples
-                                }
-                                onChange={(e) =>
-                                  handleCustomQualityChange(
-                                    "samples",
-                                    parseInt(e.target.value),
-                                  )
-                                }
-                                variant={isLightBackground ? "dark" : "default"}
-                                options={[
-                                  { value: 1, label: "1x (Off)" },
-                                  { value: 2, label: "2x" },
-                                  { value: 4, label: "4x" },
-                                  { value: 8, label: "8x (High GPU)" },
-                                ]}
-                              />
-                            </div>
+                            </SettingsRow>
 
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <label className="text-xs text-white/70">
-                                  FXAA (Fast Anti-Aliasing)
-                                </label>
-                                <p className="text-[10px] text-white/40">
-                                  Smooth edges without blur
-                                </p>
-                              </div>
+                            <SettingsRow
+                              label="FXAA (Fast Anti-Aliasing)"
+                              description="Smooth edges without blur"
+                            >
                               <Toggle
                                 checked={
                                   uiConfig.customQuality?.fxaaEnabled ??
@@ -2495,17 +2370,12 @@ const ThreeDSettings = ({
                                 size="sm"
                                 isLightBackground={isLightBackground}
                               />
-                            </div>
+                            </SettingsRow>
 
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <label className="text-xs text-white/70">
-                                  Bloom Effect
-                                </label>
-                                <p className="text-[10px] text-white/40">
-                                  Glow on bright areas
-                                </p>
-                              </div>
+                            <SettingsRow
+                              label="Bloom Effect"
+                              description="Glow on bright areas"
+                            >
                               <Toggle
                                 checked={
                                   uiConfig.customQuality?.bloomEnabled ??
@@ -2520,17 +2390,37 @@ const ThreeDSettings = ({
                                 size="sm"
                                 isLightBackground={isLightBackground}
                               />
-                            </div>
+                            </SettingsRow>
 
                             {(uiConfig.customQuality?.bloomEnabled ??
                               DefaultCustomQualitySettings.bloomEnabled) && (
-                              <div className="pl-3 border-l border-white/10 space-y-3">
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <label className="text-xs text-white/60">
-                                      Bloom Threshold
-                                    </label>
-                                    <span className="text-xs text-white/40">
+                              <div className="pl-3 border-l border-current/10 flex flex-col gap-3">
+                                <SettingsRow
+                                  label={<>Bloom Threshold</>}
+                                  description={
+                                    <>Higher = only brightest areas glow</>
+                                  }
+                                  layout="stacked"
+                                >
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <RangeSlider
+                                      aria-label="Bloom Threshold"
+                                      min="0.5"
+                                      max="1.0"
+                                      step="0.05"
+                                      value={
+                                        uiConfig.customQuality
+                                          ?.bloomThreshold ||
+                                        DefaultCustomQualitySettings.bloomThreshold
+                                      }
+                                      onValueChange={(nextValue) =>
+                                        handleCustomQualityChange(
+                                          "bloomThreshold",
+                                          nextValue,
+                                        )
+                                      }
+                                    />
+                                    <span className="shrink-0 text-xs tabular-nums vassist-text-secondary">
                                       {(
                                         uiConfig.customQuality
                                           ?.bloomThreshold ||
@@ -2538,218 +2428,187 @@ const ThreeDSettings = ({
                                       ).toFixed(2)}
                                     </span>
                                   </div>
-                                  <input
-                                    type="range"
-                                    min="0.5"
-                                    max="1.0"
-                                    step="0.05"
-                                    value={
-                                      uiConfig.customQuality?.bloomThreshold ||
-                                      DefaultCustomQualitySettings.bloomThreshold
-                                    }
-                                    onChange={(e) =>
-                                      handleCustomQualityChange(
-                                        "bloomThreshold",
-                                        parseFloat(e.target.value),
-                                      )
-                                    }
-                                    className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                                  />
-                                  <p className="text-[10px] text-white/30">
-                                    Higher = only brightest areas glow
-                                  </p>
-                                </div>
+                                </SettingsRow>
 
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <label className="text-xs text-white/60">
-                                      Bloom Intensity
-                                    </label>
-                                    <span className="text-xs text-white/40">
+                                <SettingsRow
+                                  label={<>Bloom Intensity</>}
+                                  layout="stacked"
+                                >
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <RangeSlider
+                                      aria-label="Bloom Intensity"
+                                      min="0.05"
+                                      max="0.5"
+                                      step="0.05"
+                                      value={
+                                        uiConfig.customQuality?.bloomWeight ||
+                                        DefaultCustomQualitySettings.bloomWeight
+                                      }
+                                      onValueChange={(nextValue) =>
+                                        handleCustomQualityChange(
+                                          "bloomWeight",
+                                          nextValue,
+                                        )
+                                      }
+                                    />
+                                    <span className="shrink-0 text-xs tabular-nums vassist-text-secondary">
                                       {(
                                         uiConfig.customQuality?.bloomWeight ||
                                         DefaultCustomQualitySettings.bloomWeight
                                       ).toFixed(2)}
                                     </span>
                                   </div>
-                                  <input
-                                    type="range"
-                                    min="0.05"
-                                    max="0.5"
-                                    step="0.05"
-                                    value={
-                                      uiConfig.customQuality?.bloomWeight ||
-                                      DefaultCustomQualitySettings.bloomWeight
-                                    }
-                                    onChange={(e) =>
-                                      handleCustomQualityChange(
-                                        "bloomWeight",
-                                        parseFloat(e.target.value),
-                                      )
-                                    }
-                                    className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                                  />
-                                </div>
+                                </SettingsRow>
 
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <label className="text-xs text-white/60">
-                                      Bloom Scale
-                                    </label>
-                                    <span className="text-xs text-white/40">
+                                <SettingsRow
+                                  label={<>Bloom Scale</>}
+                                  layout="stacked"
+                                >
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <RangeSlider
+                                      aria-label="Bloom Scale"
+                                      min="0.1"
+                                      max="1.0"
+                                      step="0.1"
+                                      value={
+                                        uiConfig.customQuality?.bloomScale ||
+                                        DefaultCustomQualitySettings.bloomScale
+                                      }
+                                      onValueChange={(nextValue) =>
+                                        handleCustomQualityChange(
+                                          "bloomScale",
+                                          nextValue,
+                                        )
+                                      }
+                                    />
+                                    <span className="shrink-0 text-xs tabular-nums vassist-text-secondary">
                                       {(
                                         uiConfig.customQuality?.bloomScale ||
                                         DefaultCustomQualitySettings.bloomScale
                                       ).toFixed(1)}
                                     </span>
                                   </div>
-                                  <input
-                                    type="range"
-                                    min="0.1"
-                                    max="1.0"
-                                    step="0.1"
-                                    value={
-                                      uiConfig.customQuality?.bloomScale ||
-                                      DefaultCustomQualitySettings.bloomScale
-                                    }
-                                    onChange={(e) =>
-                                      handleCustomQualityChange(
-                                        "bloomScale",
-                                        parseFloat(e.target.value),
-                                      )
-                                    }
-                                    className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                                  />
-                                </div>
+                                </SettingsRow>
 
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <label className="text-xs text-white/60">
-                                      Bloom Kernel Size
-                                    </label>
-                                    <span className="text-xs text-white/40">
+                                <SettingsRow
+                                  label={<>Bloom Kernel Size</>}
+                                  layout="stacked"
+                                >
+                                  <div className="flex min-w-0 items-center justify-between gap-3">
+                                    <Select
+                                      value={
+                                        uiConfig.customQuality?.bloomKernel ||
+                                        DefaultCustomQualitySettings.bloomKernel
+                                      }
+                                      onChange={(e) =>
+                                        handleCustomQualityChange(
+                                          "bloomKernel",
+                                          parseInt(e.target.value),
+                                        )
+                                      }
+                                      variant={
+                                        isLightBackground ? "dark" : "default"
+                                      }
+                                      options={[
+                                        { value: 16, label: "16 (Tight)" },
+                                        { value: 32, label: "32 (Normal)" },
+                                        { value: 48, label: "48 (Wide)" },
+                                        { value: 64, label: "64 (Very Wide)" },
+                                      ]}
+                                    />
+                                    <span className="text-xs vassist-text-muted">
                                       {uiConfig.customQuality?.bloomKernel ||
                                         DefaultCustomQualitySettings.bloomKernel}
                                     </span>
                                   </div>
-                                  <Select
-                                    value={
-                                      uiConfig.customQuality?.bloomKernel ||
-                                      DefaultCustomQualitySettings.bloomKernel
-                                    }
-                                    onChange={(e) =>
-                                      handleCustomQualityChange(
-                                        "bloomKernel",
-                                        parseInt(e.target.value),
-                                      )
-                                    }
-                                    variant={
-                                      isLightBackground ? "dark" : "default"
-                                    }
-                                    options={[
-                                      { value: 16, label: "16 (Tight)" },
-                                      { value: 32, label: "32 (Normal)" },
-                                      { value: 48, label: "48 (Wide)" },
-                                      { value: 64, label: "64 (Very Wide)" },
-                                    ]}
-                                  />
-                                </div>
+                                </SettingsRow>
                               </div>
                             )}
 
-                            <div className="space-y-1">
-                              <div className="flex items-center justify-between">
-                                <label className="text-xs text-white/70">
-                                  Contrast
-                                </label>
-                                <span className="text-xs text-white/50">
+                            <SettingsRow label={<>Contrast</>} layout="stacked">
+                              <div className="flex min-w-0 items-center gap-3">
+                                <RangeSlider
+                                  aria-label="Contrast"
+                                  min="0.5"
+                                  max="2.0"
+                                  step="0.05"
+                                  value={
+                                    uiConfig.customQuality?.contrast ||
+                                    DefaultCustomQualitySettings.contrast
+                                  }
+                                  onValueChange={(nextValue) =>
+                                    handleCustomQualityChange(
+                                      "contrast",
+                                      nextValue,
+                                    )
+                                  }
+                                />
+                                <span className="shrink-0 text-xs tabular-nums vassist-text-secondary">
                                   {(
                                     uiConfig.customQuality?.contrast ||
                                     DefaultCustomQualitySettings.contrast
                                   ).toFixed(2)}
                                 </span>
                               </div>
-                              <input
-                                type="range"
-                                min="0.5"
-                                max="2.0"
-                                step="0.05"
-                                value={
-                                  uiConfig.customQuality?.contrast ||
-                                  DefaultCustomQualitySettings.contrast
-                                }
-                                onChange={(e) =>
-                                  handleCustomQualityChange(
-                                    "contrast",
-                                    parseFloat(e.target.value),
-                                  )
-                                }
-                                className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                              />
-                            </div>
+                            </SettingsRow>
 
-                            <div className="space-y-1">
-                              <div className="flex items-center justify-between">
-                                <label className="text-xs text-white/70">
-                                  Exposure
-                                </label>
-                                <span className="text-xs text-white/50">
+                            <SettingsRow label={<>Exposure</>} layout="stacked">
+                              <div className="flex min-w-0 items-center gap-3">
+                                <RangeSlider
+                                  aria-label="Exposure"
+                                  min="0.5"
+                                  max="2.0"
+                                  step="0.05"
+                                  value={
+                                    uiConfig.customQuality?.exposure ||
+                                    DefaultCustomQualitySettings.exposure
+                                  }
+                                  onValueChange={(nextValue) =>
+                                    handleCustomQualityChange(
+                                      "exposure",
+                                      nextValue,
+                                    )
+                                  }
+                                />
+                                <span className="shrink-0 text-xs tabular-nums vassist-text-secondary">
                                   {(
                                     uiConfig.customQuality?.exposure ||
                                     DefaultCustomQualitySettings.exposure
                                   ).toFixed(2)}
                                 </span>
                               </div>
-                              <input
-                                type="range"
-                                min="0.5"
-                                max="2.0"
-                                step="0.05"
-                                value={
-                                  uiConfig.customQuality?.exposure ||
-                                  DefaultCustomQualitySettings.exposure
-                                }
-                                onChange={(e) =>
-                                  handleCustomQualityChange(
-                                    "exposure",
-                                    parseFloat(e.target.value),
-                                  )
-                                }
-                                className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                              />
-                            </div>
+                            </SettingsRow>
 
-                            <div className="space-y-1">
-                              <div className="flex items-center justify-between">
-                                <label className="text-xs text-white/70">
-                                  Saturation
-                                </label>
-                                <span className="text-xs text-white/50">
+                            <SettingsRow
+                              label={<>Saturation</>}
+                              description={
+                                <>0 = neutral, positive = more vibrant</>
+                              }
+                              layout="stacked"
+                            >
+                              <div className="flex min-w-0 items-center gap-3">
+                                <RangeSlider
+                                  aria-label="Saturation"
+                                  min="-50"
+                                  max="50"
+                                  step="5"
+                                  value={
+                                    uiConfig.customQuality?.saturation ??
+                                    DefaultCustomQualitySettings.saturation
+                                  }
+                                  onValueChange={(nextValue) =>
+                                    handleCustomQualityChange(
+                                      "saturation",
+                                      Math.trunc(nextValue),
+                                    )
+                                  }
+                                />
+                                <span className="shrink-0 text-xs tabular-nums vassist-text-secondary">
                                   {uiConfig.customQuality?.saturation ??
                                     DefaultCustomQualitySettings.saturation}
                                 </span>
                               </div>
-                              <input
-                                type="range"
-                                min="-50"
-                                max="50"
-                                step="5"
-                                value={
-                                  uiConfig.customQuality?.saturation ??
-                                  DefaultCustomQualitySettings.saturation
-                                }
-                                onChange={(e) =>
-                                  handleCustomQualityChange(
-                                    "saturation",
-                                    parseInt(e.target.value),
-                                  )
-                                }
-                                className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                              />
-                              <p className="text-[10px] text-white/30">
-                                0 = neutral, positive = more vibrant
-                              </p>
-                            </div>
+                            </SettingsRow>
 
                             <Button
                               variant={isLightBackground ? "dark" : "default"}
@@ -2793,41 +2652,16 @@ const ThreeDSettings = ({
 
                   {/* Models Tab */}
                   {activeSubTab === "models" && (
-                    <div className="h-full overflow-y-auto scrollbar-glass">
-                      <div className="relative">
-                        <div
-                          className="absolute bottom-0 z-10 h-0.5 bg-white transition-all duration-300 ease-out"
-                          style={{
-                            left: `${assetTabIndicatorStyle.left}px`,
-                            width: `${assetTabIndicatorStyle.width}px`,
-                          }}
-                        />
-                        <TabBar
-                          tabs={[
-                            { id: "avatars", label: "Avatars" },
-                            ...(xr.enabled ||
-                            canConfigureStages(uiConfig.desktopMode.mode)
-                              ? [{ id: "stages", label: "Stages" }]
-                              : []),
-                          ]}
-                          size="compact"
-                          activeTab={activeAssetTab}
-                          onTabChange={(tabId) =>
-                            setActiveAssetTab(tabId as AssetTabId)
-                          }
-                          tabsRef={assetTabsRef}
-                        />
-                      </div>
-
+                    <SettingsScrollArea className="h-full overflow-y-auto scrollbar-glass">
                       {/* Model Management Section */}
                       {activeAssetTab === "avatars" && (
-                        <div className="space-y-4 px-4 md:px-6 py-2 md:py-4">
-                          <h4 className="text-sm font-semibold text-white mb-3">
+                        <div className="flex flex-col gap-4">
+                          <h4 className="settings-group-heading">
                             Custom Models
                           </h4>
 
                           {/* Model Upload */}
-                          <div className="space-y-3">
+                          <div className="flex flex-col gap-3">
                             <input
                               ref={modelFileInputRef}
                               type="file"
@@ -2841,19 +2675,19 @@ const ThreeDSettings = ({
                               variant="unstyled"
                               onClick={() => modelFileInputRef.current?.click()}
                               disabled={modelUploadState.uploading}
-                              className="flex w-full flex-col p-2 md:p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="flex w-full flex-col p-2 md:p-4 border-2 border-dashed border-current/20 hover:border-current/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <Icon
                                 name="upload"
                                 size={32}
-                                className="mx-auto mb-2 text-white/70"
+                                className="self-center pb-2 vassist-text-secondary"
                               />
-                              <p className="text-sm text-white/90 mb-1">
+                              <p className="text-sm vassist-text-primary pb-1">
                                 {modelUploadState.uploading
                                   ? modelUploadState.progress
                                   : "Upload PMX Model (ZIP)"}
                               </p>
-                              <p className="text-xs text-white/50">
+                              <p className="text-xs vassist-text-muted">
                                 Click to browse (supports multiple ZIP files)
                               </p>
                             </Button>
@@ -2868,15 +2702,15 @@ const ThreeDSettings = ({
                           </div>
 
                           {/* Model List */}
-                          <div className="max-h-[400px] overflow-y-auto space-y-2 hover-scrollbar">
+                          <SettingsScrollArea className="max-h-[400px] overflow-y-auto flex flex-col gap-2 hover-scrollbar">
                             {/* Default Built-in Model */}
-                            <div className="rounded-lg bg-white/5 border border-white/10">
-                              <div className="p-3 flex items-center justify-between gap-3">
+                            <div className="settings-list-row">
+                              <div className="flex items-center justify-between gap-3">
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm text-white font-medium truncate">
+                                  <p className="text-sm vassist-text-primary font-medium truncate">
                                     VAssist Default
                                   </p>
-                                  <p className="text-xs text-white/50">
+                                  <p className="text-xs vassist-text-muted">
                                     Built-in model
                                   </p>
                                 </div>
@@ -2891,8 +2725,11 @@ const ThreeDSettings = ({
                                           : "default",
                                       )
                                     }
-                                    className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors"
+                                    className="p-1 rounded hover:bg-current/10 vassist-text-muted hover:vassist-text-primary transition-colors"
                                     title="Configure textures & meshes"
+                                    aria-expanded={
+                                      expandedModelSettings === "default"
+                                    }
                                   >
                                     <Icon
                                       name={
@@ -2919,8 +2756,10 @@ const ThreeDSettings = ({
                               </div>
 
                               {/* Expandable Settings for Default Model */}
-                              {expandedModelSettings === "default" && (
-                                <div className="px-3 pb-3 pt-0 space-y-4 border-t border-white/10 max-h-[400px] overflow-y-auto scrollbar-glass">
+                              <SettingsExpander
+                                open={expandedModelSettings === "default"}
+                              >
+                                <SettingsScrollArea className="px-3 pb-3 pt-0 flex flex-col gap-4 border-t border-current/10 max-h-[400px] overflow-y-auto scrollbar-glass">
                                   {/* Textures Section - Grouped by Type */}
                                   {builtinModelMetadata.textures &&
                                   builtinModelMetadata.textures.length > 0
@@ -2930,8 +2769,8 @@ const ThreeDSettings = ({
                                             builtinModelMetadata.textures,
                                           );
                                         return (
-                                          <div className="space-y-3">
-                                            <p className="text-xs font-medium text-white/70 py-1">
+                                          <div className="flex flex-col gap-3">
+                                            <p className="text-xs font-medium vassist-text-secondary py-1">
                                               Textures
                                             </p>
                                             {Object.entries(
@@ -2939,12 +2778,12 @@ const ThreeDSettings = ({
                                             ).map(([type, textures]) => (
                                               <div
                                                 key={type}
-                                                className="space-y-2"
+                                                className="flex flex-col gap-2"
                                               >
-                                                <p className="text-[10px] font-medium text-white/50 uppercase tracking-wide">
+                                                <p className="text-[10px] font-medium vassist-text-muted uppercase tracking-wide">
                                                   {type}
                                                 </p>
-                                                <div className="grid grid-cols-3 gap-2">
+                                                <div className="flex flex-wrap gap-2 [&>button]:min-w-0 [&>button]:flex-1">
                                                   {textures.map((texture) => (
                                                     <Button
                                                       variant="unstyled"
@@ -2956,14 +2795,14 @@ const ThreeDSettings = ({
                                                         )
                                                       }
                                                       className={cn(
-                                                        "relative p-2 rounded-lg text-left transition-all duration-200 backdrop-blur-sm",
+                                                        "relative p-2 rounded-lg text-left transition-all duration-200 backdrop-blur-sm shrink-0",
                                                         texture.isActive
-                                                          ? "bg-white/10 hover:bg-white/15 shadow-sm"
-                                                          : "bg-white/5 hover:bg-white/10 opacity-40",
+                                                          ? "bg-current/10 hover:bg-current/15 shadow-sm"
+                                                          : "bg-current/5 hover:bg-current/10 opacity-40",
                                                       )}
                                                       title={texture.name}
                                                     >
-                                                      <span className="text-xs text-white/90 truncate block">
+                                                      <span className="text-xs vassist-text-primary truncate block">
                                                         {(() => {
                                                           const cleanName =
                                                             texture.name
@@ -3004,8 +2843,8 @@ const ThreeDSettings = ({
                                             builtinModelMetadata.meshParts,
                                           );
                                         return (
-                                          <div className="space-y-3">
-                                            <p className="text-xs font-medium text-white/70 py-1">
+                                          <div className="flex flex-col gap-3">
+                                            <p className="text-xs font-medium vassist-text-secondary py-1">
                                               Mesh Parts
                                             </p>
                                             {Object.entries(
@@ -3013,12 +2852,12 @@ const ThreeDSettings = ({
                                             ).map(([category, meshParts]) => (
                                               <div
                                                 key={category}
-                                                className="space-y-2"
+                                                className="flex flex-col gap-2"
                                               >
-                                                <p className="text-[10px] font-medium text-white/50 uppercase tracking-wide">
+                                                <p className="text-[10px] font-medium vassist-text-muted uppercase tracking-wide">
                                                   {category}
                                                 </p>
-                                                <div className="grid grid-cols-3 gap-2">
+                                                <div className="flex flex-wrap gap-2 [&>button]:min-w-0 [&>button]:flex-1">
                                                   {meshParts.map((meshPart) => (
                                                     <Button
                                                       variant="unstyled"
@@ -3030,14 +2869,14 @@ const ThreeDSettings = ({
                                                         )
                                                       }
                                                       className={cn(
-                                                        "relative p-2 rounded-lg text-left transition-all duration-200 backdrop-blur-sm",
+                                                        "relative p-2 rounded-lg text-left transition-all duration-200 backdrop-blur-sm shrink-0",
                                                         meshPart.isVisible
-                                                          ? "bg-white/10 hover:bg-white/15 shadow-sm"
-                                                          : "bg-white/5 hover:bg-white/10 opacity-40",
+                                                          ? "bg-current/10 hover:bg-current/15 shadow-sm"
+                                                          : "bg-current/5 hover:bg-current/10 opacity-40",
                                                       )}
                                                       title={meshPart.name}
                                                     >
-                                                      <span className="text-xs text-white/90 truncate block">
+                                                      <span className="text-xs vassist-text-primary truncate block">
                                                         {(() => {
                                                           const cleanName =
                                                             meshPart.name
@@ -3073,23 +2912,20 @@ const ThreeDSettings = ({
                                     (!builtinModelMetadata.meshParts ||
                                       builtinModelMetadata.meshParts.length ===
                                         0) && (
-                                      <p className="text-xs text-white/50 text-center py-2 md:py-4">
+                                      <p className="text-xs vassist-text-muted text-center py-2 md:py-4">
                                         Texture and mesh configuration will be
                                         available after the model loads
                                       </p>
                                     )}
-                                </div>
-                              )}
+                                </SettingsScrollArea>
+                              </SettingsExpander>
                             </div>
 
                             {/* Custom Models */}
                             {models.map((model) => (
-                              <div
-                                key={model.id}
-                                className="relative rounded-lg bg-white/5 border border-white/10"
-                              >
+                              <div key={model.id} className="settings-list-row">
                                 {/* Model info and name editing */}
-                                <div className="flex items-center justify-between gap-3 p-3">
+                                <div className="flex min-w-0 items-center justify-between gap-3">
                                   <div className="flex-1 min-w-0">
                                     {editingModelId === model.id ? (
                                       <input
@@ -3104,15 +2940,15 @@ const ThreeDSettings = ({
                                           if (e.key === "Escape")
                                             handleCancelEditModel();
                                         }}
-                                        className="text-sm text-white font-medium bg-transparent border-none outline-none w-full p-0"
+                                        className="text-sm vassist-text-primary font-medium bg-transparent border-none outline-none w-full p-0"
                                         autoFocus
                                       />
                                     ) : (
-                                      <p className="text-sm text-white font-medium truncate">
+                                      <p className="text-sm vassist-text-primary font-medium truncate">
                                         {model.name}
                                       </p>
                                     )}
-                                    <p className="text-xs text-white/50">
+                                    <p className="text-xs vassist-text-muted">
                                       {(
                                         (model.metadata?.fileSize ?? 0) /
                                         1024 /
@@ -3157,8 +2993,11 @@ const ThreeDSettings = ({
                                                 : model.id,
                                             )
                                           }
-                                          className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors"
+                                          className="p-1 rounded hover:bg-current/10 vassist-text-muted hover:vassist-text-primary transition-colors"
                                           title="Configure textures & meshes"
+                                          aria-expanded={
+                                            expandedModelSettings === model.id
+                                          }
                                         >
                                           <Icon
                                             name={
@@ -3178,7 +3017,7 @@ const ThreeDSettings = ({
                                               model.name,
                                             )
                                           }
-                                          className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors"
+                                          className="p-1 rounded hover:bg-current/10 vassist-text-muted hover:vassist-text-primary transition-colors"
                                           title="Edit name"
                                         >
                                           <Icon name="edit-2" size={16} />
@@ -3188,7 +3027,7 @@ const ThreeDSettings = ({
                                           onClick={() =>
                                             handleDeleteModel(model.id)
                                           }
-                                          className="p-1 rounded hover:bg-red-500/20 text-white/50 hover:text-red-300 transition-colors"
+                                          className="p-1 rounded hover:bg-red-500/20 vassist-text-muted hover:text-red-300 transition-colors"
                                           title="Delete"
                                         >
                                           <Icon name="trash-2" size={16} />
@@ -3207,8 +3046,10 @@ const ThreeDSettings = ({
                                 </div>
 
                                 {/* Expandable Texture & Mesh Settings */}
-                                {expandedModelSettings === model.id && (
-                                  <div className="px-3 pb-3 pt-0 space-y-4 border-t border-white/10 max-h-[400px] overflow-y-auto scrollbar-glass">
+                                <SettingsExpander
+                                  open={expandedModelSettings === model.id}
+                                >
+                                  <SettingsScrollArea className="px-3 pb-3 pt-0 flex flex-col gap-4 border-t border-current/10 max-h-[400px] overflow-y-auto scrollbar-glass">
                                     {/* Textures Section - Grouped by Type */}
                                     {model.metadata?.textures &&
                                       model.metadata.textures.length > 0 &&
@@ -3218,8 +3059,8 @@ const ThreeDSettings = ({
                                             model.metadata.textures,
                                           );
                                         return (
-                                          <div className="space-y-3">
-                                            <p className="text-xs font-medium text-white/70 py-1">
+                                          <div className="flex flex-col gap-3">
+                                            <p className="text-xs font-medium vassist-text-secondary py-1">
                                               Textures
                                             </p>
                                             {Object.entries(
@@ -3227,12 +3068,12 @@ const ThreeDSettings = ({
                                             ).map(([type, textures]) => (
                                               <div
                                                 key={type}
-                                                className="space-y-2"
+                                                className="flex flex-col gap-2"
                                               >
-                                                <p className="text-[10px] font-medium text-white/50 uppercase tracking-wide">
+                                                <p className="text-[10px] font-medium vassist-text-muted uppercase tracking-wide">
                                                   {type}
                                                 </p>
-                                                <div className="grid grid-cols-3 gap-2">
+                                                <div className="flex flex-wrap gap-2 [&>button]:min-w-0 [&>button]:flex-1">
                                                   {textures.map((texture) => (
                                                     <Button
                                                       variant="unstyled"
@@ -3244,14 +3085,14 @@ const ThreeDSettings = ({
                                                         )
                                                       }
                                                       className={cn(
-                                                        "relative p-2 rounded-lg text-left transition-all duration-200 backdrop-blur-sm",
+                                                        "relative p-2 rounded-lg text-left transition-all duration-200 backdrop-blur-sm shrink-0",
                                                         texture.isActive
-                                                          ? "bg-white/10 hover:bg-white/15 shadow-sm"
-                                                          : "bg-white/5 hover:bg-white/10 opacity-40",
+                                                          ? "bg-current/10 hover:bg-current/15 shadow-sm"
+                                                          : "bg-current/5 hover:bg-current/10 opacity-40",
                                                       )}
                                                       title={texture.name}
                                                     >
-                                                      <span className="text-xs text-white/90 truncate block">
+                                                      <span className="text-xs vassist-text-primary truncate block">
                                                         {(() => {
                                                           // Clean up texture name: remove "mat##_type" pattern
                                                           const cleanName =
@@ -3292,8 +3133,8 @@ const ThreeDSettings = ({
                                             model.metadata.meshParts,
                                           );
                                         return (
-                                          <div className="space-y-3">
-                                            <p className="text-xs font-medium text-white/70 py-1">
+                                          <div className="flex flex-col gap-3">
+                                            <p className="text-xs font-medium vassist-text-secondary py-1">
                                               Mesh Parts
                                             </p>
                                             {Object.entries(
@@ -3301,12 +3142,12 @@ const ThreeDSettings = ({
                                             ).map(([category, meshParts]) => (
                                               <div
                                                 key={category}
-                                                className="space-y-2"
+                                                className="flex flex-col gap-2"
                                               >
-                                                <p className="text-[10px] font-medium text-white/50 uppercase tracking-wide">
+                                                <p className="text-[10px] font-medium vassist-text-muted uppercase tracking-wide">
                                                   {category}
                                                 </p>
-                                                <div className="grid grid-cols-3 gap-2">
+                                                <div className="flex flex-wrap gap-2 [&>button]:min-w-0 [&>button]:flex-1">
                                                   {meshParts.map((meshPart) => (
                                                     <Button
                                                       variant="unstyled"
@@ -3320,12 +3161,12 @@ const ThreeDSettings = ({
                                                       className={cn(
                                                         "relative p-2 rounded-lg text-left transition-all duration-200 backdrop-blur-sm",
                                                         meshPart.isVisible
-                                                          ? "bg-white/10 hover:bg-white/15 shadow-sm"
-                                                          : "bg-white/5 hover:bg-white/10 opacity-40",
+                                                          ? "bg-current/10 hover:bg-current/15 shadow-sm"
+                                                          : "bg-current/5 hover:bg-current/10 opacity-40",
                                                       )}
                                                       title={meshPart.name}
                                                     >
-                                                      <span className="text-xs text-white/90 truncate block">
+                                                      <span className="text-xs vassist-text-primary truncate block">
                                                         {(() => {
                                                           // Clean up mesh part name
                                                           const cleanName =
@@ -3360,20 +3201,20 @@ const ThreeDSettings = ({
                                       (!model.metadata?.meshParts ||
                                         model.metadata.meshParts.length ===
                                           0) && (
-                                        <p className="text-xs text-white/50 text-center py-2">
+                                        <p className="text-xs vassist-text-muted text-center py-2">
                                           No textures or mesh parts available
                                         </p>
                                       )}
-                                  </div>
-                                )}
+                                  </SettingsScrollArea>
+                                </SettingsExpander>
                               </div>
                             ))}
-                          </div>
+                          </SettingsScrollArea>
                         </div>
                       )}
 
                       {activeAssetTab === "stages" && (
-                        <div className="min-w-0 px-4 py-2 md:px-6 md:py-4">
+                        <div className="min-w-0">
                           <StageSettings
                             refreshTrigger={refreshTrigger}
                             onRequestDeleteStageDialog={
@@ -3382,21 +3223,21 @@ const ThreeDSettings = ({
                           />
                         </div>
                       )}
-                    </div>
+                    </SettingsScrollArea>
                   )}
 
                   {/* Animations Tab */}
                   {activeSubTab === "animations" && (
-                    <div className="h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4 scrollbar-glass">
+                    <div className="flex flex-col gap-4">
                       {/* Motion Management */}
-                      <div className="space-y-2">
-                        <h4 className="text-sm font-semibold text-white">
+                      <div className="flex flex-col gap-2">
+                        <h4 className="settings-group-heading">
                           Custom Animations
                         </h4>
                       </div>
 
                       {/* Motion Upload */}
-                      <div className="space-y-2">
+                      <div className="flex flex-col gap-2">
                         <input
                           ref={motionFileInputRef}
                           type="file"
@@ -3410,19 +3251,19 @@ const ThreeDSettings = ({
                           variant="unstyled"
                           onClick={() => motionFileInputRef.current?.click()}
                           disabled={motionUploadState.uploading}
-                          className="flex w-full flex-col p-2 md:p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="flex w-full flex-col p-2 md:p-4 border-2 border-dashed border-current/20 hover:border-current/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Icon
                             name="upload"
                             size={32}
-                            className="mx-auto mb-2 text-white/70"
+                            className="self-center pb-2 vassist-text-secondary"
                           />
-                          <p className="text-sm text-white/90 mb-1">
+                          <p className="text-sm vassist-text-primary pb-1">
                             {motionUploadState.uploading
                               ? motionUploadState.progress
                               : "Upload VMD Animations"}
                           </p>
-                          <p className="text-xs text-white/50">
+                          <p className="text-xs vassist-text-muted">
                             Click to browse (supports multiple files)
                           </p>
                         </Button>
@@ -3438,16 +3279,16 @@ const ThreeDSettings = ({
 
                       {/* Motion List */}
                       {motions.length > 0 && (
-                        <div className="space-y-2">
-                          <div className="max-h-[400px] overflow-y-auto space-y-2 hover-scrollbar scrollbar-glass">
+                        <div className="flex flex-col gap-2">
+                          <SettingsScrollArea className="max-h-[400px] overflow-y-auto flex flex-col gap-2 hover-scrollbar scrollbar-glass">
                             {motions.map((motion) => {
                               return (
                                 <div
                                   key={motion.id}
-                                  className="relative rounded-lg bg-white/5 border border-white/10"
+                                  className="settings-list-row"
                                 >
                                   {/* Motion info and name editing */}
-                                  <div className="flex items-center justify-between gap-3 p-3">
+                                  <div className="flex min-w-0 items-center justify-between gap-3">
                                     <div className="flex-1 min-w-0">
                                       {editingMotionId === motion.id ? (
                                         <input
@@ -3462,15 +3303,15 @@ const ThreeDSettings = ({
                                             if (e.key === "Escape")
                                               handleCancelEditMotion();
                                           }}
-                                          className="text-sm text-white font-medium bg-transparent border-none outline-none w-full p-0"
+                                          className="text-sm vassist-text-primary font-medium bg-transparent border-none outline-none w-full p-0"
                                           autoFocus
                                         />
                                       ) : (
-                                        <p className="text-sm text-white font-medium truncate">
+                                        <p className="text-sm vassist-text-primary font-medium truncate">
                                           {motion.name}
                                         </p>
                                       )}
-                                      <p className="text-xs text-white/50">
+                                      <p className="text-xs vassist-text-muted">
                                         {(
                                           (motion.metadata?.fileSize ?? 0) /
                                           1024
@@ -3515,8 +3356,12 @@ const ThreeDSettings = ({
                                                   : motion.id,
                                               )
                                             }
-                                            className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors"
+                                            className="p-1 rounded hover:bg-current/10 vassist-text-muted hover:vassist-text-primary transition-colors"
                                             title="Configure categories"
+                                            aria-expanded={
+                                              expandedMotionSettings ===
+                                              motion.id
+                                            }
                                           >
                                             <Icon
                                               name={
@@ -3537,7 +3382,7 @@ const ThreeDSettings = ({
                                                 motion.name,
                                               )
                                             }
-                                            className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors"
+                                            className="p-1 rounded hover:bg-current/10 vassist-text-muted hover:vassist-text-primary transition-colors"
                                             title="Edit name"
                                           >
                                             <Icon name="edit-2" size={16} />
@@ -3547,7 +3392,7 @@ const ThreeDSettings = ({
                                             onClick={() =>
                                               handleDeleteMotion(motion.id)
                                             }
-                                            className="p-1 rounded hover:bg-red-500/20 text-white/50 hover:text-red-300 transition-colors"
+                                            className="p-1 rounded hover:bg-red-500/20 vassist-text-muted hover:text-red-300 transition-colors"
                                             title="Delete"
                                           >
                                             <Icon name="trash-2" size={16} />
@@ -3558,9 +3403,11 @@ const ThreeDSettings = ({
                                   </div>
 
                                   {/* Expandable Category Settings */}
-                                  {expandedMotionSettings === motion.id && (
-                                    <div className="px-3 pb-3 pt-0 space-y-2 border-t border-white/10">
-                                      <p className="text-xs font-medium text-white/70 mb-1">
+                                  <SettingsExpander
+                                    open={expandedMotionSettings === motion.id}
+                                  >
+                                    <div className="px-3 pb-3 pt-0 flex flex-col gap-2">
+                                      <p className="text-xs font-medium vassist-text-secondary pb-1">
                                         Animation Categories
                                       </p>
                                       {Object.values(AnimationCategory).map(
@@ -3575,7 +3422,7 @@ const ThreeDSettings = ({
                                               key={category}
                                               className="flex items-center justify-between gap-2"
                                             >
-                                              <span className="text-xs capitalize text-white/80">
+                                              <span className="text-xs capitalize vassist-text-primary">
                                                 {category}
                                               </span>
                                               <Toggle
@@ -3597,21 +3444,21 @@ const ThreeDSettings = ({
                                         },
                                       )}
                                     </div>
-                                  )}
+                                  </SettingsExpander>
                                 </div>
                               );
                             })}
-                          </div>
+                          </SettingsScrollArea>
                         </div>
                       )}
 
                       {/* Animation Management */}
-                      <h4 className="text-sm font-semibold text-white pt-6 border-t border-white/10">
+                      <h4 className="settings-group-heading border-t border-current/10">
                         Animation Management
                       </h4>
 
                       {/* Animation Categories */}
-                      <div className="space-y-4">
+                      <div className="flex flex-col gap-4">
                         {Object.keys(AnimationCategory).map((categoryKey) => {
                           const category =
                             AnimationCategory[
@@ -3636,20 +3483,20 @@ const ThreeDSettings = ({
 
                   {/* Emotes Tab */}
                   {activeSubTab === "emotes" && (
-                    <div className="h-full overflow-y-auto px-4 md:px-6 py-2 md:py-4 space-y-4 scrollbar-glass">
+                    <div className="flex flex-col gap-4">
+                      <EmotePlaybackSettings
+                        isLightBackground={isLightBackground}
+                      />
                       {/* Emote Upload */}
-                      <div className="space-y-2">
-                        <h4 className="text-sm font-semibold text-white">
+                      <div className="flex flex-col gap-2">
+                        <h4 className="settings-group-heading">
                           Emote Management
                         </h4>
                       </div>
 
-                      <div className="space-y-2">
+                      <div className="flex flex-col gap-2">
                         {/* Emote Name Input */}
-                        <div className="space-y-1">
-                          <label className="text-xs text-white/70">
-                            Emote Name
-                          </label>
+                        <SettingsRow label="Emote Name" layout="stacked">
                           <Input
                             type="text"
                             value={emoteName}
@@ -3658,12 +3505,12 @@ const ThreeDSettings = ({
                             disabled={emoteUploadState.uploading}
                             variant={isLightBackground ? "dark" : "default"}
                           />
-                        </div>
+                        </SettingsRow>
 
-                        <div className="space-y-1">
-                          <label className="text-xs text-white/70">
-                            Categories (comma separated)
-                          </label>
+                        <SettingsRow
+                          label="Categories (comma separated)"
+                          layout="stacked"
+                        >
                           <Input
                             type="text"
                             value={emoteCategoriesInput}
@@ -3674,7 +3521,7 @@ const ThreeDSettings = ({
                             disabled={emoteUploadState.uploading}
                             variant={isLightBackground ? "dark" : "default"}
                           />
-                        </div>
+                        </SettingsRow>
 
                         {/* Hidden File Inputs */}
                         <input
@@ -3707,8 +3554,8 @@ const ThreeDSettings = ({
                         />
 
                         {/* Bulk Import Label */}
-                        <div className="space-y-1">
-                          <label className="text-xs text-white/70">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-xs vassist-text-secondary">
                             Bulk Import
                           </label>
                           <Button
@@ -3717,20 +3564,20 @@ const ThreeDSettings = ({
                               emoteZipFileInputRef.current?.click()
                             }
                             disabled={emoteUploadState.uploading}
-                            className="flex w-full flex-col p-3 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="flex w-full flex-col p-3 border-2 border-dashed border-current/20 hover:border-current/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <Icon
                               name="upload"
                               size={24}
-                              className="mx-auto mb-1 text-white/70"
+                              className="self-center pb-1 vassist-text-secondary"
                             />
-                            <p className="text-sm text-white/90">
+                            <p className="text-sm vassist-text-primary">
                               {emoteUploadState.uploading &&
                               emoteUploadState.progress
                                 ? emoteUploadState.progress
                                 : "Import ZIP Package"}
                             </p>
-                            <p className="text-xs text-white/50">
+                            <p className="text-xs vassist-text-muted">
                               Multiple emotes from ZIP
                             </p>
                           </Button>
@@ -3738,10 +3585,10 @@ const ThreeDSettings = ({
 
                         <div className="relative">
                           <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t border-white/10"></div>
+                            <div className="w-full"></div>
                           </div>
                           <div className="relative flex justify-center text-xs">
-                            <span className="px-2 bg-transparent text-white/40">
+                            <span className="px-2 bg-transparent vassist-text-muted">
                               OR
                             </span>
                           </div>
@@ -3754,17 +3601,17 @@ const ThreeDSettings = ({
                             emoteAudioFileInputRef.current?.click()
                           }
                           disabled={emoteUploadState.uploading}
-                          className="flex w-full flex-col p-3 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="flex w-full flex-col p-3 border-2 border-dashed border-current/20 hover:border-current/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Icon
                             name="upload"
                             size={24}
-                            className="mx-auto mb-1 text-white/70"
+                            className="self-center pb-1 vassist-text-secondary"
                           />
-                          <p className="text-sm text-white/90">
+                          <p className="text-sm vassist-text-primary">
                             {selectedEmoteAudioFile?.name || "Upload Audio"}
                           </p>
-                          <p className="text-xs text-white/50">
+                          <p className="text-xs vassist-text-muted">
                             MP3, WAV, OGG, M4A
                           </p>
                         </Button>
@@ -3776,17 +3623,17 @@ const ThreeDSettings = ({
                             emoteMotionFileInputRef.current?.click()
                           }
                           disabled={emoteUploadState.uploading}
-                          className="flex w-full flex-col p-3 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="flex w-full flex-col p-3 border-2 border-dashed border-current/20 hover:border-current/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Icon
                             name="upload"
                             size={24}
-                            className="mx-auto mb-1 text-white/70"
+                            className="self-center pb-1 vassist-text-secondary"
                           />
-                          <p className="text-sm text-white/90">
+                          <p className="text-sm vassist-text-primary">
                             {selectedEmoteMotionFile?.name || "Upload Motion"}
                           </p>
-                          <p className="text-xs text-white/50">VMD file</p>
+                          <p className="text-xs vassist-text-muted">VMD file</p>
                         </Button>
 
                         {/* Camera File Upload Button (Optional) */}
@@ -3796,18 +3643,18 @@ const ThreeDSettings = ({
                             emoteCameraFileInputRef.current?.click()
                           }
                           disabled={emoteUploadState.uploading}
-                          className="flex w-full flex-col p-3 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="flex w-full flex-col p-3 border-2 border-dashed border-current/20 hover:border-current/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Icon
                             name="camera"
                             size={24}
-                            className="mx-auto mb-1 text-white/70"
+                            className="self-center pb-1 vassist-text-secondary"
                           />
-                          <p className="text-sm text-white/90">
+                          <p className="text-sm vassist-text-primary">
                             {selectedEmoteCameraFile?.name ||
                               "Upload Camera (Optional)"}
                           </p>
-                          <p className="text-xs text-white/50">
+                          <p className="text-xs vassist-text-muted">
                             VMD camera animation
                           </p>
                         </Button>
@@ -3847,7 +3694,7 @@ const ThreeDSettings = ({
 
                       {/* Emote List */}
                       {emotes.length > 0 && (
-                        <div className="space-y-2">
+                        <div className="flex flex-col gap-2">
                           <div className="flex items-center gap-2">
                             <div className="flex-1 min-w-0">
                               <Select
@@ -3865,7 +3712,7 @@ const ThreeDSettings = ({
                               disabled={filteredEmotes.length === 0}
                               className={cn(
                                 "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
-                                "bg-white/5 border border-white/10 text-white/60",
+                                "bg-current/5 border border-current/10 vassist-text-muted",
                                 filteredEmotes.length > 0
                                   ? "hover:bg-red-500/20 hover:text-red-300 hover:border-red-400/30"
                                   : "opacity-40 cursor-not-allowed",
@@ -3885,15 +3732,15 @@ const ThreeDSettings = ({
                             </Button>
                           </div>
 
-                          <div className="max-h-[300px] overflow-y-auto space-y-2 hover-scrollbar scrollbar-glass">
+                          <SettingsScrollArea className="max-h-[300px] overflow-y-auto flex flex-col gap-2 hover-scrollbar scrollbar-glass">
                             {filteredEmotes.map((emote) => {
                               const isEditing = editingEmoteId === emote.id;
                               return (
                                 <div
                                   key={emote.id}
-                                  className="relative rounded-lg bg-white/5 border border-white/10"
+                                  className="settings-list-row"
                                 >
-                                  <div className="flex items-start justify-between gap-3 p-3">
+                                  <div className="flex min-w-0 items-start justify-between gap-3">
                                     <div className="flex-1 min-w-0">
                                       {isEditing ? (
                                         <input
@@ -3908,22 +3755,22 @@ const ThreeDSettings = ({
                                             if (e.key === "Escape")
                                               handleCancelEditEmote();
                                           }}
-                                          className="text-sm text-white font-medium bg-transparent border-none outline-none w-full p-0"
+                                          className="text-sm vassist-text-primary font-medium bg-transparent border-none outline-none w-full p-0"
                                           autoFocus
                                         />
                                       ) : (
-                                        <p className="text-sm text-white font-medium truncate">
+                                        <p className="text-sm vassist-text-primary font-medium truncate">
                                           {emote.name}
                                         </p>
                                       )}
                                       {isEditing && (
                                         <>
-                                          <p className="text-xs text-white/50 truncate">
+                                          <p className="text-xs vassist-text-muted truncate">
                                             {emote.metadata
                                               ?.originalAudioFileName ||
                                               "Unknown"}
                                           </p>
-                                          <p className="text-xs text-white/50 truncate">
+                                          <p className="text-xs vassist-text-muted truncate">
                                             {emote.metadata
                                               ?.originalMotionFileName ||
                                               "Unknown"}
@@ -3939,7 +3786,7 @@ const ThreeDSettings = ({
                                             onClick={() =>
                                               handleSaveEmoteName(emote.id)
                                             }
-                                            className="p-1 rounded hover:bg-green-500/20 text-white/50 hover:text-green-300 transition-colors"
+                                            className="p-1 rounded hover:bg-green-500/20 vassist-text-muted hover:text-green-300 transition-colors"
                                             title="Save"
                                           >
                                             <Icon name="check" size={16} />
@@ -3947,7 +3794,7 @@ const ThreeDSettings = ({
                                           <Button
                                             variant="unstyled"
                                             onClick={handleCancelEditEmote}
-                                            className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors"
+                                            className="p-1 rounded hover:bg-current/10 vassist-text-muted hover:vassist-text-primary transition-colors"
                                             title="Cancel"
                                           >
                                             <Icon name="x" size={16} />
@@ -3965,8 +3812,11 @@ const ThreeDSettings = ({
                                                   : emote.id,
                                               )
                                             }
-                                            className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors"
+                                            className="p-1 rounded hover:bg-current/10 vassist-text-muted hover:vassist-text-primary transition-colors"
                                             title="Configure categories"
+                                            aria-expanded={
+                                              expandedEmoteSettings === emote.id
+                                            }
                                           >
                                             <Icon
                                               name={
@@ -3986,7 +3836,7 @@ const ThreeDSettings = ({
                                                 emote.name,
                                               )
                                             }
-                                            className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors"
+                                            className="p-1 rounded hover:bg-current/10 vassist-text-muted hover:vassist-text-primary transition-colors"
                                             title="Edit name"
                                           >
                                             <Icon name="edit-2" size={16} />
@@ -3996,7 +3846,7 @@ const ThreeDSettings = ({
                                             onClick={() =>
                                               handleDeleteEmote(emote.id)
                                             }
-                                            className="p-1 rounded hover:bg-red-500/20 text-white/50 hover:text-red-300 transition-colors"
+                                            className="p-1 rounded hover:bg-red-500/20 vassist-text-muted hover:text-red-300 transition-colors"
                                             title="Delete"
                                           >
                                             <Icon name="trash-2" size={16} />
@@ -4020,9 +3870,11 @@ const ThreeDSettings = ({
                                     </div>
                                   </div>
 
-                                  {expandedEmoteSettings === emote.id && (
-                                    <div className="px-3 pb-3 pt-0 space-y-2 border-t border-white/10">
-                                      <p className="text-xs font-medium text-white/70 mb-1">
+                                  <SettingsExpander
+                                    open={expandedEmoteSettings === emote.id}
+                                  >
+                                    <div className="px-3 pb-3 pt-0 flex flex-col gap-2">
+                                      <p className="text-xs font-medium vassist-text-secondary pb-1">
                                         Auto-play Categories
                                       </p>
                                       {[
@@ -4041,7 +3893,7 @@ const ThreeDSettings = ({
                                             key={`${emote.id}-${category}`}
                                             className="flex items-center justify-between gap-2"
                                           >
-                                            <span className="text-xs capitalize text-white/80">
+                                            <span className="text-xs capitalize vassist-text-primary">
                                               {category}
                                             </span>
                                             <Toggle
@@ -4062,16 +3914,16 @@ const ThreeDSettings = ({
                                         );
                                       })}
                                     </div>
-                                  )}
+                                  </SettingsExpander>
                                 </div>
                               );
                             })}
                             {filteredEmotes.length === 0 && (
-                              <div className="rounded-lg bg-white/5 border border-white/10 p-3 text-xs text-white/60 text-center">
+                              <div className="text-xs vassist-text-muted text-center settings-section">
                                 No emotes in this category
                               </div>
                             )}
-                          </div>
+                          </SettingsScrollArea>
                         </div>
                       )}
                     </div>
@@ -4130,12 +3982,13 @@ const AnimationCategorySection = ({
   const totalEnabledCount = enabledDefaultCount + enabledCustomCount;
 
   return (
-    <div className="rounded-lg bg-white/5 border border-white/10 overflow-hidden">
+    <div className="settings-list-row settings-list-disclosure overflow-hidden">
       {/* Category Header */}
       <Button
         variant="unstyled"
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full p-3 flex items-center justify-between hover:bg-white/5 transition-colors"
+        className="w-full p-3 flex items-center justify-between hover:bg-current/5 transition-colors"
+        aria-expanded={isExpanded}
       >
         <div className="flex items-center gap-3">
           <Icon
@@ -4143,41 +3996,43 @@ const AnimationCategorySection = ({
             size={16}
           />
           <div className="text-left">
-            <p className="text-sm font-medium text-white capitalize">
+            <p className="text-sm font-medium vassist-text-primary capitalize">
               {category}
             </p>
-            <p className="text-xs text-white/50">
+            <p className="text-xs vassist-text-muted">
               {enabledDefaultCount}/{defaultAnimations.length} default +{" "}
               {enabledCustomCount}/{customMotionsInCategory.length} custom
             </p>
           </div>
         </div>
-        <span className="text-xs text-white/50">{totalAnimations} total</span>
+        <span className="text-xs vassist-text-muted">
+          {totalAnimations} total
+        </span>
       </Button>
 
       {/* Expanded Content */}
-      {isExpanded && (
-        <div className="p-3 pt-0 space-y-2 border-t border-white/10">
+      <SettingsExpander open={isExpanded}>
+        <div className="p-3 pt-0 flex flex-col gap-2">
           {/* Default Animations */}
           {defaultAnimations.length > 0 && (
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-white/70 mb-2">
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-medium vassist-text-secondary pb-2">
                 Default Animations
               </p>
-              <div className="max-h-[200px] overflow-y-auto space-y-1 hover-scrollbar scrollbar-glass">
+              <SettingsScrollArea className="max-h-[200px] overflow-y-auto flex flex-col gap-1 hover-scrollbar scrollbar-glass">
                 {defaultAnimations.map((anim) => {
                   const isEnabled = !disabledDefaultAnimations[anim.id];
                   const isLastEnabled = isEnabled && totalEnabledCount === 1;
                   return (
                     <div
                       key={anim.id}
-                      className="p-2 rounded bg-white/3 flex items-center justify-between gap-2"
+                      className="settings-list-row settings-list-row-inline"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-white/80 truncate">
+                        <p className="text-xs vassist-text-primary truncate">
                           {anim.name}
                         </p>
-                        <p className="text-[10px] text-white/40 truncate">
+                        <p className="text-[10px] vassist-text-muted truncate">
                           {anim.metadata?.description || "Built-in animation"}
                         </p>
                       </div>
@@ -4193,17 +4048,17 @@ const AnimationCategorySection = ({
                     </div>
                   );
                 })}
-              </div>
+              </SettingsScrollArea>
             </div>
           )}
 
           {/* Custom Animations */}
           {customMotionsInCategory.length > 0 && (
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-white/70 mb-2">
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-medium vassist-text-secondary pb-2">
                 Custom Animations
               </p>
-              <div className="max-h-[200px] overflow-y-auto space-y-1 hover-scrollbar scrollbar-glass">
+              <SettingsScrollArea className="max-h-[200px] overflow-y-auto flex flex-col gap-1 hover-scrollbar scrollbar-glass">
                 {customMotionsInCategory.map((motion) => {
                   const isEnabled =
                     motion.enabledByCategory &&
@@ -4212,13 +4067,13 @@ const AnimationCategorySection = ({
                   return (
                     <div
                       key={motion.id}
-                      className="p-2 rounded bg-white/3 flex items-center justify-between gap-2"
+                      className="settings-list-row settings-list-row-inline"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-white/80 truncate">
+                        <p className="text-xs vassist-text-primary truncate">
                           {motion.name}
                         </p>
-                        <p className="text-[10px] text-white/40 truncate">
+                        <p className="text-[10px] vassist-text-muted truncate">
                           {((motion.metadata?.fileSize ?? 0) / 1024).toFixed(1)}{" "}
                           KB
                         </p>
@@ -4241,18 +4096,18 @@ const AnimationCategorySection = ({
                     </div>
                   );
                 })}
-              </div>
+              </SettingsScrollArea>
             </div>
           )}
 
           {/* Empty State */}
           {customMotions.length === 0 && (
-            <p className="text-xs text-white/40 text-center py-2">
+            <p className="text-xs vassist-text-muted text-center py-2">
               No custom animations in this category
             </p>
           )}
         </div>
-      )}
+      </SettingsExpander>
     </div>
   );
 };

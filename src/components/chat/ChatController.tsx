@@ -3,6 +3,17 @@
  */
 
 import {
+  AIProviderSections,
+  getAIProviderSection,
+  getThinkingSelection,
+  thinkingEffortOptions,
+  isAIProvider,
+  isRemoteAIProvider,
+} from "../../config/aiConfig";
+import { readContextUsage } from "../../types/contextUsage";
+import { dispatchOpenSettingsCommand } from "../../embed/hostCommands";
+import { getAIContextSettingsTarget } from "../../embed/settingsPolicy";
+import {
   sendChatMessage,
   regenerateChatResponse,
   sendVoiceChatMessage,
@@ -81,7 +92,18 @@ import {
 import { useToolingActions } from "../../hooks/app/useTooling";
 import { useDesktopWindowResize } from "../../hooks/useDesktopWindowResize";
 import { useDesktopApi } from "../../hooks/useDesktopStore";
-import { useConfigAIActions } from "../../hooks/config/useConfigAI";
+import {
+  useAIConfig,
+  useConfigAIActions,
+  useApplyAIProfile,
+} from "../../hooks/config/useConfigAI";
+import { useConfigStore } from "../../stores/useConfigStore";
+import {
+  useConfigUIActions,
+  useUIConfig,
+} from "../../hooks/config/useConfigUI";
+import { ComposerMenu } from "./ComposerMenu";
+import { ANDROID_SYSTEM_INSET_TOP } from "./historyLayout";
 import Logger from "../../services/common/LoggerService";
 import {
   isAndroid,
@@ -289,6 +311,8 @@ const ChatController = ({
   embedConfig,
 }: ChatControllerProps) => {
   const xr = useXrRuntime();
+  const uiConfig = useUIConfig();
+  const { updateUIConfig } = useConfigUIActions();
   const appStore = useAppStoreApi();
   const isGeneratingReply = useIsProcessing();
 
@@ -317,6 +341,9 @@ const ChatController = ({
     };
   }, [api, appStore, isGeneratingReply]);
   const { updateAIConfig } = useConfigAIActions();
+  const applyAIProfile = useApplyAIProfile();
+  const composerAIConfig = useAIConfig();
+  const modelConnection = useRef({ key: "", revision: 0 });
   const chatInputRef = useRef<HTMLElement | null>(null);
   const streamAbortControllerRef = useRef<AbortController | null>(null); // Track current stream to allow cancellation
   const hasAutoOpenedAndroidChatRef = useRef(false);
@@ -332,6 +359,9 @@ const ChatController = ({
   const isChatInputVisible = useIsChatInputVisible();
   const isChatContainerVisible = useIsChatContainerVisible();
   const chatMessages = useChatMessages();
+  const lastContextUsage = chatMessages.findLast(
+    (message) => message.role === "assistant",
+  )?.contextUsage;
   const currentChatId = useCurrentChatId();
   const isTempChat = useIsTempChat();
   const pendingDropData = usePendingDropData();
@@ -1527,18 +1557,29 @@ const ChatController = ({
       },
     );
 
+    const unsubscribeContextSettings = api.ipc.on(
+      "chatInput:openContextSettings",
+      () => {
+        if (!embedConfig.features.settings) return;
+        setIsChatContainerVisible(true);
+        const config = useConfigStore.getState().aiConfig;
+        const provider = config.provider;
+        const connection = config[getAIProviderSection(provider)];
+        dispatchOpenSettingsCommand(embedConfig.mount.hostId, {
+          tab: "llm",
+          target: getAIContextSettingsTarget(
+            provider,
+            "apiFormat" in connection ? connection.apiFormat : undefined,
+          ),
+        });
+      },
+    );
     const unsubscribeConfig = api.ipc.on(
       "chatInput:thinkingChanged",
       (data: unknown) => {
         if (!data || typeof data !== "object") return;
         const payload = data as { section?: unknown; enabled?: unknown };
-        const validSections = new Set([
-          "chromeAi",
-          "openai",
-          "ollama",
-          "android-local",
-          "desktop-local",
-        ]);
+        const validSections = new Set<string>(AIProviderSections);
         if (
           typeof payload.section !== "string" ||
           !validSections.has(payload.section) ||
@@ -1561,6 +1602,7 @@ const ChatController = ({
       unsubscribePendingDrop?.();
       unsubscribeClose?.();
       unsubscribeQuickPanel?.();
+      unsubscribeContextSettings?.();
       unsubscribeConfig?.();
     };
   }, [
@@ -1570,7 +1612,158 @@ const ChatController = ({
     handleDesktopChatInputClose,
     handleDesktopQuickPanelToggle,
     handleDesktopChatInputSend,
+    embedConfig.features.settings,
+    embedConfig.mount.hostId,
+    setIsChatContainerVisible,
   ]);
+
+  useEffect(() => {
+    if (!isDesktop || isInputWindow || !api?.ipc) return;
+    const ipc = api.ipc;
+    const broadcast = () => {
+      const config = useConfigStore.getState().aiConfig;
+      const connection = config[getAIProviderSection(config.provider)];
+      const connectionKey = JSON.stringify([
+        config.provider,
+        "endpoint" in connection ? connection.endpoint : undefined,
+        "apiKey" in connection ? connection.apiKey : undefined,
+        "customModelsPath" in connection
+          ? connection.customModelsPath
+          : undefined,
+        "selectedBackendProfileId" in connection
+          ? connection.selectedBackendProfileId
+          : undefined,
+      ]);
+      if (modelConnection.current.key !== connectionKey)
+        modelConnection.current = {
+          key: connectionKey,
+          revision: modelConnection.current.revision + 1,
+        };
+      const sections = AIProviderSections;
+      const values = Object.fromEntries(
+        sections.map((key) => {
+          const item = config[key];
+          return [
+            key,
+            {
+              model: "model" in item ? item.model : undefined,
+              contextSize: "contextSize" in item ? item.contextSize : undefined,
+              thinkingEnabled: item?.thinkingEnabled,
+              thinkingEffort: item?.thinkingEffort,
+              selectedBackendProfileId:
+                "selectedBackendProfileId" in item
+                  ? item.selectedBackendProfileId
+                  : "",
+            },
+          ];
+        }),
+      );
+      ipc.send("state:chatModel", {
+        provider: config.provider,
+        contextUsage: readContextUsage(lastContextUsage),
+        sections: values,
+        connectionRevision: modelConnection.current.revision,
+        profiles: config.remoteProfiles.map(({ id, name, provider }) => ({
+          id,
+          name,
+          provider,
+        })),
+      });
+    };
+    const unsubscribe = ipc.on("chatInput:requestModelState", broadcast);
+    broadcast();
+    return () => unsubscribe?.();
+  }, [api, composerAIConfig, lastContextUsage]);
+
+  useEffect(() => {
+    if (!isDesktop || isInputWindow || !api?.ipc) return;
+    return api.ipc.on("chatInput:listModels", (data: unknown) => {
+      if (!data || typeof data !== "object") return;
+      const { id, provider, backend, connectionRevision } = data as {
+        id?: unknown;
+        provider?: unknown;
+        backend?: unknown;
+        connectionRevision?: unknown;
+      };
+      const config = useConfigStore.getState().aiConfig;
+      if (typeof id !== "string" || !isRemoteAIProvider(provider)) return;
+      if (
+        provider !== config.provider ||
+        (typeof backend === "string" &&
+          backend !== config[provider].selectedBackendProfileId) ||
+        (typeof connectionRevision === "number" &&
+          connectionRevision !== modelConnection.current.revision)
+      ) {
+        api.ipc?.send("state:chatModelList", {
+          id,
+          provider,
+          models: [],
+          error: "Connection changed. Search again.",
+        });
+        return;
+      }
+      const section = config[provider];
+      void AIServiceProxy.listRemoteModels({
+        provider,
+        customModelsPath:
+          "customModelsPath" in section ? section.customModelsPath : undefined,
+        ...(section?.endpoint ? { endpoint: section.endpoint } : {}),
+        ...("apiKey" in section && section.apiKey
+          ? { apiKey: section.apiKey }
+          : {}),
+      })
+        .then((result) =>
+          api.ipc?.send("state:chatModelList", { id, provider, ...result }),
+        )
+        .catch((error: unknown) =>
+          api.ipc?.send("state:chatModelList", {
+            id,
+            provider,
+            models: [],
+            error:
+              error instanceof Error ? error.message : "Unable to load models",
+          }),
+        );
+    });
+  }, [api]);
+
+  useEffect(() => {
+    if (!isDesktop || isInputWindow || !api?.ipc) return;
+    return api.ipc.on("chatInput:modelSelection", (data: unknown) => {
+      if (!data || typeof data !== "object") return;
+      const { path, value } = data as { path?: unknown; value?: unknown };
+      const config = useConfigStore.getState().aiConfig;
+      const section = getAIProviderSection(config.provider);
+      if (path === "provider" && isAIProvider(value))
+        updateAIConfig("provider", value);
+      else if (path === "thinking" && typeof value === "string") {
+        const selection = getThinkingSelection(value);
+        if (selection)
+          updateAIConfig(section, { ...config[section], ...selection });
+      } else if (path === "backend" && typeof value === "string") {
+        const profile = config.remoteProfiles.find(
+          (item) => item.id === value && item.provider === config.provider,
+        );
+        if (!profile) return;
+        applyAIProfile(profile);
+      } else if (
+        typeof path === "string" &&
+        (path === `${section}.model` ||
+          path === `${section}.thinkingEnabled` ||
+          path === `${section}.thinkingEffort`)
+      ) {
+        if (
+          path.endsWith(".thinkingEnabled")
+            ? typeof value === "boolean"
+            : path.endsWith(".thinkingEffort")
+              ? value === undefined ||
+                thinkingEffortOptions.some((option) => option.value === value)
+              : typeof value === "string"
+        )
+          updateAIConfig(path, value);
+      }
+    });
+  }, [api, updateAIConfig, applyAIProfile]);
 
   /**
    * IPC state broadcast for desktop mode - send state changes to input window
@@ -1799,17 +1992,100 @@ const ChatController = ({
 
       {chatEnabled ? (
         <>
+          {isAndroid &&
+            !isChatContainerVisible &&
+            !(_isVoiceMode && uiConfig.enableModelLoading) &&
+            !xr.active && (
+              <div
+                className="fixed right-3 z-[10020]"
+                style={{ top: `calc(${ANDROID_SYSTEM_INSET_TOP} + 10px)` }}
+              >
+                <ComposerMenu
+                  isLightBackground={false}
+                  triggerIcon="chat-controls"
+                  triggerLabel="Chat options"
+                  triggerClassName="glass-button flex h-12 w-12 items-center justify-center rounded-full"
+                  side="bottom"
+                  align="end"
+                  compact
+                  items={[
+                    {
+                      label: "New chat",
+                      icon: "add",
+                      onClick: () => {
+                        void clearChat();
+                        setIsChatContainerVisible(true);
+                        setIsChatInputVisible(true);
+                      },
+                    },
+                    {
+                      label: uiConfig.fadeChatMessages
+                        ? "Show full chat"
+                        : "Fade messages",
+                      icon: "chat",
+                      onClick: () =>
+                        updateUIConfig(
+                          "fadeChatMessages",
+                          !uiConfig.fadeChatMessages,
+                        ),
+                    },
+                    ...(embedConfig.features.history
+                      ? [
+                          {
+                            label: "Temporary",
+                            icon: "temporary-chat",
+                            active: isTempChat,
+                            onClick: () => setIsTempChat(!isTempChat),
+                          },
+                        ]
+                      : []),
+                    ...(embedConfig.features.liveAssistant3d
+                      ? [
+                          {
+                            label: uiConfig.enableModelLoading
+                              ? "Hide character"
+                              : "Show character",
+                            icon: uiConfig.enableModelLoading
+                              ? "eye-off"
+                              : "eye",
+                            onClick: () =>
+                              updateUIConfig(
+                                "enableModelLoading",
+                                !uiConfig.enableModelLoading,
+                              ),
+                          },
+                        ]
+                      : []),
+                    ...(embedConfig.features.settings
+                      ? [
+                          {
+                            label: "Settings",
+                            icon: "settings",
+                            onClick: () => {
+                              setIsChatContainerVisible(true);
+                              setIsChatInputVisible(true);
+                              setIsHistoryPanelOpen(false);
+                              setIsQuickPanelOpen(false);
+                              setIsSettingsPanelOpen(true);
+                            },
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              </div>
+            )}
           {/* Assistant control dock visibility logic:
               - Model enabled: visible when model ready, HIDE when chat opens (model is anchor)
               - Model disabled: ALWAYS visible (button is anchor, needed for dragging) */}
-          {(!avatarOnly || !modelDisabled) && (
+          {(!avatarOnly || !modelDisabled) && !(isAndroid && modelDisabled) && (
             <Suspense fallback={null}>
               <AssistantControlDock
                 onClick={handleAssistantControlClick}
                 isVisible={
                   xr.active || modelDisabled
                     ? true
-                    : isDesktop || isNormalDesktop
+                    : !isAndroid || isNormalDesktop
                       ? true
                       : isAssistantReady &&
                         !(isChatContainerVisible || isChatInputVisible)

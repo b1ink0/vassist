@@ -24,6 +24,7 @@ import { LLM_RUNTIME_REQUEST_KEYS } from "../../src/config/llmParameters";
 import type {
   LlamaContextOptions,
   LLamaChatGenerateResponseOptions,
+  LlamaContextSequence,
 } from "node-llama-cpp";
 import {
   DEFAULT_SERVICE_PORTS,
@@ -97,6 +98,7 @@ type LlamaApi = {
     }>;
   }>;
   LlamaChat: new (opts: { contextSequence: unknown }) => {
+    readonly sequence: LlamaContextSequence;
     generateResponse: (
       history: unknown[],
       opts: LLamaChatGenerateResponseOptions,
@@ -319,6 +321,7 @@ export class LocalAIServer {
   } | null;
   whisperContext: WhisperContextLike | null;
   llamaChat: {
+    readonly sequence: LlamaContextSequence;
     generateResponse: (
       history: unknown[],
       opts: LLamaChatGenerateResponseOptions,
@@ -857,6 +860,19 @@ export class LocalAIServer {
       response: [],
     });
 
+    const sequence = this.llamaChat.sequence;
+    const tokenMeterBefore = sequence.tokenMeter.getState();
+    const getUsage = () => {
+      const generated =
+        sequence.tokenMeter.diff(tokenMeterBefore).usedOutputTokens;
+      return {
+        completion_tokens: generated,
+        // Occupied context survives cache reuse/shifts; evaluated input counts do not.
+        context_tokens: sequence.nextTokenIndex,
+        context_size: sequence.context.contextSize,
+      };
+    };
+
     if (stream) {
       const streamThinkStripper = new ThinkTagStripper();
       const writeDelta = (text: string, isReasoning = false) => {
@@ -941,6 +957,7 @@ export class LocalAIServer {
               finish_reason: "stop",
             },
           ],
+          usage: getUsage(),
         };
 
         res.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
@@ -1001,11 +1018,7 @@ export class LocalAIServer {
             finish_reason: "stop",
           },
         ],
-        usage: {
-          prompt_tokens: 0,
-          completion_tokens: 0,
-          total_tokens: 0,
-        },
+        usage: getUsage(),
       });
     }
   }

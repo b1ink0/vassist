@@ -34,12 +34,12 @@ If the Live Assistant runs slowly or drops frames, work through this list in ord
 3. **Physics Simulation** → turn off. Hair and cloth physics are expensive.
 4. If you're on **Custom** quality: drop **Anti-Aliasing (MSAA)** to `1x` and turn off **Bloom Effect**.
 
-| Control            | Default  | Behavior                                                                               |
-| ------------------ | -------- | -------------------------------------------------------------------------------------- |
-| Physics Simulation | On       | Enables hair and cloth physics reactions.                                              |
-| Physics Engine     | Bullet   | `Bullet Physics (Recommended)` or `Havok Physics`. Only when Physics is on.            |
-| Frame Rate Limit   | `60 FPS` | `15`, `24`, `30`, `60`, `90`, or `Native`. `Native` warns about high-refresh monitors. |
-| Render Quality     | Medium   | `Low`, `Medium`, `High`, `Ultra`, or `Custom`.                                         |
+| Control            | Default  | Behavior                                                                                             |
+| ------------------ | -------- | ---------------------------------------------------------------------------------------------------- |
+| Physics Simulation | On       | Enables hair and cloth physics reactions.                                                            |
+| Physics Engine     | Bullet   | `Bullet Physics (Recommended)` or `Havok Physics`. Only when Physics is on.                          |
+| Frame Rate Limit   | `60 FPS` | `15`, `24`, `30`, `60`, `90`, `120`, `144`, or `Native`. `Native` warns about high-refresh monitors. |
+| Render Quality     | Medium   | `Low`, `Medium`, `High`, `Ultra`, or `Custom`.                                                       |
 
 ### Render quality presets
 

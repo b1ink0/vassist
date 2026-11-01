@@ -372,7 +372,7 @@ const AssistantControlDock = ({
   }, [isAvatarPanelOpen, panelMode, uiConfig.stage?.selection]);
 
   useEffect(() => {
-    if ((isChatOpen && !isDesktop && !xr.active) || modelDisabled) {
+    if ((isChatOpen && isAndroid && !xr.active) || modelDisabled) {
       setIsEmotePanelOpen(false);
       setIsAvatarPanelOpen(false);
       setIsZoomExpanded(false);
@@ -1385,6 +1385,7 @@ const AssistantControlDock = ({
     };
     let dismissTimer: ReturnType<typeof setTimeout> | undefined;
     const onPointerDown = (event: PointerEvent) => {
+      if (xr.active && event.target instanceof HTMLCanvasElement) return;
       clearTimeout(dismissTimer);
       pointerInsideDock.current = event.composedPath().includes(boundary);
       // React capture also includes controls rendered in child portals.
@@ -1403,7 +1404,13 @@ const AssistantControlDock = ({
       document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [isXrPanelOpen, isEmotePanelOpen, isAvatarPanelOpen, isZoomExpanded]);
+  }, [
+    isXrPanelOpen,
+    isEmotePanelOpen,
+    isAvatarPanelOpen,
+    isZoomExpanded,
+    xr.active,
+  ]);
 
   if (!shouldRender && !xrAvailable) return null;
 
@@ -1431,9 +1438,13 @@ const AssistantControlDock = ({
   const stageControlsHeight =
     8 + (selectedStageId ? 39 : 0) + Math.ceil(stageControlCount / 3) * 39 - 4;
   const showUtilityButtons =
-    (xr.active || !isChatOpen || isDesktopAttachedModeWindow || isDesktop) &&
+    (xr.active ||
+      !isChatOpen ||
+      isDesktopAttachedModeWindow ||
+      isDesktop ||
+      !isAndroid) &&
     !modelDisabled;
-  const canOpenControlPanels = xr.active || !isChatOpen || isDesktop;
+  const canOpenControlPanels = xr.active || !isChatOpen || !isAndroid;
   const layout = getAssistantControlLayout({
     viewport,
     insets: xr.active
@@ -1450,14 +1461,12 @@ const AssistantControlDock = ({
     stageControlsHeight,
     isAndroid,
     isDesktop,
-    isNormalDesktop:
-      isDesktopAttachedModeWindow || (xr.enabled && !xr.active && !isAndroid),
+    isNormalDesktop: isDesktopAttachedModeWindow,
     showUtilityButtons,
     showStageButton: stagesAvailable && !isARMode,
     showXrButton,
     showCollapseButton: !modelDisabled,
-    forcePanelToLeft:
-      isChatOpen && isDesktop && !isAndroid && !isDesktopAttachedModeWindow,
+    forcePanelToLeft: isChatOpen && !isAndroid && !isDesktopAttachedModeWindow,
   });
 
   const showEmotePlaybackBar =
@@ -1517,24 +1526,29 @@ const AssistantControlDock = ({
       <XrSurface
         id="tool-dock"
         widthMeters={
-          isXrPanelOpen ||
-          isEmotePanelOpen ||
-          isAvatarPanelOpen ||
-          isZoomExpanded
+          xr.active
             ? 0.65
-            : 0.15
+            : isXrPanelOpen ||
+                isEmotePanelOpen ||
+                isAvatarPanelOpen ||
+                isZoomExpanded
+              ? 0.65
+              : 0.15
         }
         heightMeters={0.8}
         widthPixels={
-          isXrPanelOpen ||
-          isEmotePanelOpen ||
-          isAvatarPanelOpen ||
-          isZoomExpanded
+          xr.active
             ? 520
-            : 120
+            : isXrPanelOpen ||
+                isEmotePanelOpen ||
+                isAvatarPanelOpen ||
+                isZoomExpanded
+              ? 520
+              : 120
         }
         heightPixels={640}
         offsetMeters={[
+          xr.active ||
           isXrPanelOpen ||
           isEmotePanelOpen ||
           isAvatarPanelOpen ||
@@ -1696,7 +1710,7 @@ const AssistantControlDock = ({
             draggable={modelDisabled || allowFloatingDockDrag}
             chatControlsWidth={isTempChat ? 100 : 48}
             chatControls={
-              isDesktop && !isDesktopAttachedModeWindow && !xr.active ? (
+              !isAndroid && !isDesktopAttachedModeWindow && !xr.active ? (
                 <div className="flex items-center gap-1">
                   {isTempChat && (
                     <Button
@@ -1840,10 +1854,12 @@ const AssistantControlDock = ({
                         : []),
                     ]}
                   >
-                    <DesktopModeSettings
-                      isLightBackground={isLightBackground}
-                      menu
-                    />
+                    {isDesktop && (
+                      <DesktopModeSettings
+                        isLightBackground={isLightBackground}
+                        menu
+                      />
+                    )}
                   </ComposerMenu>
                 </div>
               ) : undefined

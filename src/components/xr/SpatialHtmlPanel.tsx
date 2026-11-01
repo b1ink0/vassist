@@ -15,7 +15,7 @@ import {
   HtmlTexture,
   IsHtmlInCanvasUploadSupported,
 } from "@babylonjs/core/Materials/Textures/HTML/htmlTexture";
-import { HtmlRaycastInteractionManager } from "@babylonjs/core/Materials/Textures/HTML/htmlRaycastInteractionManager";
+import { HtmlPanelRayInput } from "../../babylon/xr/HtmlPanelRayInput";
 import "@babylonjs/core/Culling/ray";
 import {
   SpatialPanel,
@@ -165,11 +165,7 @@ export function SpatialHtmlPanel({
         controller.experience.baseExperience,
         savedPose.current?.anchor === "hand",
       );
-    const interaction = new HtmlRaycastInteractionManager(
-      scene,
-      texture,
-      panel.mesh,
-    );
+    const interaction = new HtmlPanelRayInput(scene, panel.mesh, host);
     const input = new HtmlPanelInput(scene, panel.mesh, host, setTextInput);
     const unregisterInput = controller?.registerHtmlPanel(panel.mesh, (delta) =>
       input.scroll(delta),
@@ -275,15 +271,24 @@ export function SpatialHtmlPanel({
                 )}
               </div>
             )}
-            {active && textInput && (
-              <XrKeyboard
-                input={textInput}
-                onClose={() => setTextInput(null)}
-              />
-            )}
           </SpatialHtmlPanelContext.Provider>
         </EmbedHostProvider>,
         host,
+      )}
+      {active && textInput && (
+        <SpatialHtmlPanel
+          id={`${id}-keyboard`}
+          scene={scene}
+          worldUnitsPerMeter={worldUnitsPerMeter}
+          widthMeters={0.85}
+          heightMeters={0.42}
+          widthPixels={850}
+          heightPixels={420}
+          anchor="follow"
+          offsetMeters={[0, -0.82, -0.08]}
+        >
+          <XrKeyboard input={textInput} onClose={() => setTextInput(null)} />
+        </SpatialHtmlPanel>
       )}
     </div>
   );

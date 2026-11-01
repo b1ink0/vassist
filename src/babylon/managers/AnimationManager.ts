@@ -188,6 +188,7 @@ export class AnimationManager {
   private _liveLipSyncMorphsApplied: boolean;
   private liveLipSyncMorphNames: Record<LiveLipSyncVowel, string | null> | null;
   private genericLipSyncAudio: HTMLAudioElement | null;
+  private genericSpeechStartedAt: number | null = null;
   private genericLipSyncAnimation: LoadedAnimationLike | null;
   private genericLipSyncLoadToken: number;
 
@@ -1497,6 +1498,14 @@ export class AnimationManager {
   ): Promise<void> {
     if (this.disposed) return;
 
+    if (
+      newState !== AssistantState.SPEAKING &&
+      this.genericSpeechStartedAt !== null
+    ) {
+      this.genericSpeechStartedAt = null;
+      if (this._liveLipSyncMorphsApplied) this._clearTtsLipSyncMorphs();
+    }
+
     Logger.log(
       "AnimationManager",
       `[TRANSITION START] ${this.currentState} -> ${newState}`,
@@ -2414,7 +2423,10 @@ export class AnimationManager {
       } else if (!shouldLoop) {
         // No queue items and non-looping animation ending
         // Check if this was a COMPOSITE (speak) animation and if more TTS is in the audio queue
-        const wasSpeak = this.currentState === AssistantState.COMPOSITE;
+        const wasSpeak =
+          this.currentState === AssistantState.COMPOSITE ||
+          (this.currentState === AssistantState.SPEAKING &&
+            TTSService.isAudioActive());
 
         if (wasSpeak) {
           // Check if audio is still playing or queued (singleton instance)
@@ -2625,7 +2637,7 @@ export class AnimationManager {
     this.genericLipSyncAudio = audio;
     const loadToken = ++this.genericLipSyncLoadToken;
 
-    if (!audio) {
+    if (!audio && this.genericSpeechStartedAt === null) {
       if (this._liveLipSyncMorphsApplied) this._clearTtsLipSyncMorphs();
       return;
     }
@@ -2643,7 +2655,8 @@ export class AnimationManager {
           !animation ||
           this.disposed ||
           loadToken !== this.genericLipSyncLoadToken ||
-          this.genericLipSyncAudio !== audio
+          (this.genericLipSyncAudio !== audio &&
+            this.genericSpeechStartedAt === null)
         ) {
           return;
         }
@@ -2679,11 +2692,19 @@ export class AnimationManager {
   private _sampleGenericLipSyncWeights(): LiveLipSyncMouthWeights | null {
     const audio = this.genericLipSyncAudio;
     const animation = this.genericLipSyncAnimation;
-    if (!audio || !animation || audio.ended || animation.endFrame <= 0) {
+    if (
+      (!audio && this.genericSpeechStartedAt === null) ||
+      !animation ||
+      audio?.ended ||
+      animation.endFrame <= 0
+    ) {
       return null;
     }
 
-    const frame = (audio.currentTime * 30) % animation.endFrame;
+    const elapsed = audio
+      ? audio.currentTime
+      : (performance.now() - this.genericSpeechStartedAt!) / 1000;
+    const frame = (elapsed * 30) % animation.endFrame;
     const weights: LiveLipSyncMouthWeights = { a: 0, i: 0, u: 0, e: 0, o: 0 };
     for (const vowel of Object.keys(weights) as LiveLipSyncVowel[]) {
       const track = animation.morphTracks?.find((candidate) =>
@@ -3004,6 +3025,12 @@ export class AnimationManager {
         break;
 
       case "speak":
+        await this.transitionToState(AssistantState.SPEAKING);
+        break;
+
+      case "speakWithoutAudio":
+        this.genericSpeechStartedAt = performance.now();
+        this.setGenericLipSyncAudio(null);
         await this.transitionToState(AssistantState.SPEAKING);
         break;
 

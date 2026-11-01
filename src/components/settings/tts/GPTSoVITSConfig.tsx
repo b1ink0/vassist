@@ -3,6 +3,7 @@
  * Reusable component for voice cloning setup (used in both setup wizard and settings)
  */
 
+import SettingsScrollArea from "../shared/SettingsScrollArea";
 import { useState, useEffect, useRef } from "react";
 import { Icon } from "../../icons";
 import Toggle from "../../common/Toggle";
@@ -32,6 +33,9 @@ interface VoiceItem {
 }
 
 import SupertonicEngineSection from "./SupertonicEngineSection";
+import RangeSlider from "../../ui/RangeSlider";
+import SettingsDisclosure from "../shared/SettingsDisclosure";
+import SettingsRow from "../../ui/SettingsRow";
 
 interface GPTSoVITSConfigShape {
   engine?: string;
@@ -297,10 +301,10 @@ const GPTSoVITSConfig = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex min-w-0 flex-col gap-4">
       {isDesktop && (
-        <div className="space-y-3">
-          <h4 className="text-sm font-semibold text-white mb-2">TTS Engine</h4>
+        <div className="flex flex-col gap-3">
+          <h4 className="settings-group-heading">TTS Engine</h4>
           <Select
             data-testid="desktop-tts-engine-select"
             value={engine}
@@ -342,9 +346,7 @@ const GPTSoVITSConfig = ({
               {/* Setup section (desktop only) - skip for remote servers */}
               {!skipSetup && (
                 <div>
-                  <h4 className="text-sm font-semibold text-white mb-3">
-                    Installation
-                  </h4>
+                  <h4 className="settings-group-heading">Installation</h4>
                   <GPTSoVITSSetup
                     isLightBackground={isLightBackground}
                     config={config}
@@ -360,20 +362,15 @@ const GPTSoVITSConfig = ({
       {/* Voice configuration section (GPT-SoVITS only — Supertonic uses built-in voices) */}
       <div
         className={cn(
-          "space-y-4",
+          "flex flex-col gap-4",
           isDesktop && engine === "supertonic" && "hidden",
         )}
       >
         {showTitle && (
-          <h4 className="text-sm font-semibold text-white mb-3">
-            Reference Voices
-          </h4>
+          <h4 className="settings-group-heading">Reference Voices</h4>
         )}
 
-        <div>
-          <label className="block text-sm font-medium text-white/90 mb-2">
-            Voice Name
-          </label>
+        <SettingsRow label="Voice Name" layout="stacked">
           <Input
             type="text"
             value={newVoiceName}
@@ -381,12 +378,13 @@ const GPTSoVITSConfig = ({
             placeholder="My Voice"
             variant={isLightBackground ? "dark" : "default"}
           />
-        </div>
+        </SettingsRow>
 
-        <div>
-          <label className="block text-sm font-medium text-white/90 mb-2">
-            Reference Text
-          </label>
+        <SettingsRow
+          label={<>Reference Text</>}
+          description={<>Must match the audio exactly</>}
+          layout="stacked"
+        >
           <textarea
             value={newReferenceText}
             onChange={(e) => setNewReferenceText(e.target.value)}
@@ -397,24 +395,18 @@ const GPTSoVITSConfig = ({
               isLightBackground && "glass-input-dark",
             )}
           />
-          <p className="text-xs text-white/50 mt-1">
-            Must match the audio exactly
-          </p>
-        </div>
+        </SettingsRow>
 
-        <div>
-          <label className="block text-sm font-medium text-white/90 mb-2">
-            Language
-          </label>
+        <SettingsRow label="Language" layout="stacked">
           <Select
             value={newLanguage}
             onChange={(e) => setNewLanguage(e.target.value)}
             variant={isLightBackground ? "dark" : "default"}
             options={GPTSOVITS_LANG_OPTIONS}
           />
-        </div>
+        </SettingsRow>
 
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           <input
             ref={voiceFileInputRef}
             type="file"
@@ -427,19 +419,19 @@ const GPTSoVITSConfig = ({
             variant="unstyled"
             onClick={() => voiceFileInputRef.current?.click()}
             disabled={uploadingVoice}
-            className="flex w-full flex-col p-2 md:p-4 border-2 border-dashed border-white/20 hover:border-white/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex w-full flex-col p-2 md:p-4 border-2 border-dashed border-current/20 hover:border-current/40 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Icon
               name="upload"
               size={32}
-              className="mx-auto mb-2 text-white/70"
+              className="self-center pb-2 vassist-text-secondary"
             />
-            <p className="text-sm text-white/90 mb-1">
+            <p className="text-sm vassist-text-primary pb-1">
               {uploadingVoice
                 ? "Uploading..."
                 : "Upload Audio File (MP3/WAV/M4A)"}
             </p>
-            <p className="text-xs text-white/50">
+            <p className="text-xs vassist-text-muted">
               {newAudioFile ? newAudioFile.name : "Click to browse"}
             </p>
           </Button>
@@ -484,21 +476,18 @@ const GPTSoVITSConfig = ({
         </div>
 
         {/* Voice List */}
-        <div className="max-h-[400px] overflow-y-auto space-y-2 hover-scrollbar">
+        <SettingsScrollArea className="max-h-[400px] overflow-y-auto flex flex-col gap-2 hover-scrollbar">
           {voices.map((voice) => {
             const isDefault = config?.referenceVoiceId === voice.id;
             const isEditing = editingVoiceId === voice.id;
 
             return (
-              <div
-                key={voice.id}
-                className="relative rounded-lg bg-white/5 border border-white/10"
-              >
+              <div key={voice.id} className="relative settings-section">
                 {/* Voice info and name editing */}
                 <div className="flex items-center justify-between gap-3 p-3">
                   <div className="flex-1 min-w-0">
                     {isEditing ? (
-                      <div className="space-y-2">
+                      <div className="flex flex-col gap-2">
                         <input
                           type="text"
                           value={editVoiceName}
@@ -508,7 +497,7 @@ const GPTSoVITSConfig = ({
                               handleSaveVoiceName(voice.id);
                             if (e.key === "Escape") handleCancelEditVoice();
                           }}
-                          className="text-sm text-white font-medium bg-transparent border-none outline-none w-full p-0 mb-2"
+                          className="text-sm vassist-text-primary font-medium bg-transparent border-none outline-none w-full p-0 pb-2"
                           autoFocus
                         />
                         <textarea
@@ -530,10 +519,10 @@ const GPTSoVITSConfig = ({
                       </div>
                     ) : (
                       <>
-                        <p className="text-sm text-white font-medium truncate">
+                        <p className="text-sm vassist-text-primary font-medium truncate">
                           {voice.name}
                         </p>
-                        <p className="text-xs text-white/50">
+                        <p className="text-xs vassist-text-muted">
                           {(voice.audioData.size / 1024).toFixed(1)} KB •{" "}
                           {voice.language}
                         </p>
@@ -567,7 +556,7 @@ const GPTSoVITSConfig = ({
                         <Button
                           variant="unstyled"
                           onClick={() => handleEditVoice(voice.id)}
-                          className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors"
+                          className="p-1 rounded hover:bg-current/10 vassist-text-muted hover:vassist-text-primary transition-colors"
                           title="Edit"
                         >
                           <Icon name="edit-2" size={16} />
@@ -575,7 +564,7 @@ const GPTSoVITSConfig = ({
                         <Button
                           variant="unstyled"
                           onClick={() => handleDeleteVoice(voice.id)}
-                          className="p-1 rounded hover:bg-red-500/20 text-white/50 hover:text-red-300 transition-colors"
+                          className="p-1 rounded hover:bg-red-500/20 vassist-text-muted hover:text-red-300 transition-colors"
                           title="Delete"
                         >
                           <Icon name="trash-2" size={16} />
@@ -595,92 +584,87 @@ const GPTSoVITSConfig = ({
               </div>
             );
           })}
-        </div>
+        </SettingsScrollArea>
 
         {/* Advanced TTS Parameters */}
-        <details className="group">
-          <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
-            <span>
-              {isSetupMode
-                ? "Advanced Settings (Optional)"
-                : "Advanced Settings"}
-            </span>
-            <Icon
-              name="chevron-down"
-              size={14}
-              className="group-open:rotate-180 transition-transform"
-            />
-          </summary>
-          <div className="mt-2 p-3 rounded-lg backdrop-blur-sm bg-white/5 border border-white/10 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-white/90 mb-1">
-                  Speed ({config?.speed || 1.0})
-                </label>
-                <input
-                  type="range"
+        <SettingsDisclosure
+          title={
+            <>
+              <span>
+                {isSetupMode
+                  ? "Advanced Settings (Optional)"
+                  : "Advanced Settings"}
+              </span>
+            </>
+          }
+        >
+          <div className="pt-2 backdrop-blur-sm flex flex-col gap-3 settings-section">
+            <div className="flex flex-wrap gap-3 [&>div]:min-w-0 [&>div]:flex-1">
+              <SettingsRow
+                label={<>Speed ({config?.speed || 1.0})</>}
+                layout="stacked"
+              >
+                <RangeSlider
+                  aria-label="Speed"
                   min="0.5"
                   max="2.0"
                   step="0.1"
                   value={config?.speed || 1.0}
-                  onChange={(e) =>
-                    onChange && onChange("speed", parseFloat(e.target.value))
+                  onValueChange={(nextValue) =>
+                    onChange && onChange("speed", nextValue)
                   }
-                  className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
                 />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-white/90 mb-1">
-                  Top K ({config?.topK || 15})
-                </label>
-                <input
-                  type="range"
+              </SettingsRow>
+              <SettingsRow
+                label={<>Top K ({config?.topK || 15})</>}
+                layout="stacked"
+              >
+                <RangeSlider
+                  aria-label="Top K"
                   min="10"
                   max="20"
                   step="1"
                   value={config?.topK || 15}
-                  onChange={(e) =>
-                    onChange && onChange("topK", parseInt(e.target.value))
+                  onValueChange={(nextValue) =>
+                    onChange && onChange("topK", Math.trunc(nextValue))
                   }
-                  className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
                 />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-white/90 mb-1">
-                  Top P ({(config?.topP || 0.7).toFixed(2)})
-                </label>
-                <input
-                  type="range"
+              </SettingsRow>
+              <SettingsRow
+                label={<>Top P ({(config?.topP || 0.7).toFixed(2)})</>}
+                layout="stacked"
+              >
+                <RangeSlider
+                  aria-label="Top P"
                   min="0.5"
                   max="0.9"
                   step="0.05"
                   value={config?.topP || 0.7}
-                  onChange={(e) =>
-                    onChange && onChange("topP", parseFloat(e.target.value))
+                  onValueChange={(nextValue) =>
+                    onChange && onChange("topP", nextValue)
                   }
-                  className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
                 />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-white/90 mb-1">
-                  Temperature ({(config?.temperature || 0.7).toFixed(2)})
-                </label>
-                <input
-                  type="range"
+              </SettingsRow>
+              <SettingsRow
+                label={
+                  <>Temperature ({(config?.temperature || 0.7).toFixed(2)})</>
+                }
+                layout="stacked"
+              >
+                <RangeSlider
+                  aria-label="Temperature"
                   min="0.5"
                   max="1.0"
                   step="0.05"
                   value={config?.temperature || 0.7}
-                  onChange={(e) =>
-                    onChange &&
-                    onChange("temperature", parseFloat(e.target.value))
+                  onValueChange={(nextValue) =>
+                    onChange && onChange("temperature", nextValue)
                   }
-                  className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
                 />
-              </div>
+              </SettingsRow>
             </div>
           </div>
-        </details>
+        </SettingsDisclosure>
       </div>
     </div>
   );

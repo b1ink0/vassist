@@ -16,7 +16,7 @@ import {
   DecisionClient,
 } from "../../../services/ai/DecisionClient";
 import { useConfigAIActions } from "../../../hooks/config/useConfigAI";
-import { Button, Card, Input, Select, SettingsRow } from "../../ui";
+import { Button, Input, Select, SettingsRow } from "../../ui";
 import Toggle from "../../common/Toggle";
 import { Icon } from "../../icons";
 import { isDesktop } from "../../../utils/PlatformUtils";
@@ -204,12 +204,8 @@ const DecisionSettings = ({
   };
 
   return (
-    <div className="space-y-6">
-      <h3 className="text-base font-semibold text-white mb-4">
-        Decision Configuration
-      </h3>
-
-      <Card variant="default">
+    <div className="flex min-w-0 flex-col gap-4">
+      <section className="settings-section">
         <SettingsRow
           label="Enable Decision API"
           targetId="llm.decision.enabled"
@@ -220,7 +216,7 @@ const DecisionSettings = ({
             onChange={(checked) => updateDecision("enabled", checked)}
           />
         </SettingsRow>
-      </Card>
+      </section>
 
       {decision.enabled && (
         <>
@@ -250,20 +246,20 @@ const DecisionSettings = ({
           </SettingsRow>
 
           {hostManagedDecision && (
-            <Card variant="default">
-              <p className="text-sm text-white/75">
+            <section className="settings-section">
+              <p className="text-sm vassist-text-secondary">
                 Decision requests are handled by the embedding host through
-                <code className="mx-1 text-white">
+                <code className="px-1 vassist-text-primary">
                   transport.bridge.decision
                 </code>
                 . Credentials and endpoint configuration stay with the host.
               </p>
-            </Card>
+            </section>
           )}
 
           {!hostManagedDecision && (
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-white/90">
+            <div className="flex flex-col gap-2">
+              <label className="block text-sm font-medium vassist-text-primary">
                 Saved Backends
               </label>
               <Input
@@ -274,7 +270,7 @@ const DecisionSettings = ({
                 size="xs"
                 variant={isLightBackground ? "dark" : "default"}
               />
-              <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+              <div className="flex flex-wrap items-center gap-2 [&>button:first-child]:min-w-0 [&>button:first-child]:flex-1">
                 <Select
                   value={selectedProfileId}
                   onChange={(event) => {
@@ -431,7 +427,7 @@ const DecisionSettings = ({
                   disableDebounce
                   variant={isLightBackground ? "dark" : "default"}
                 />
-                <span className="text-xs text-white/50">ms</span>
+                <span className="text-xs vassist-text-muted">ms</span>
               </div>
             </SettingsRow>
           )}
@@ -462,29 +458,30 @@ const DecisionSettings = ({
       )}
 
       {decision.enabled && provider === "android-local" && (
-        <Card variant="default">
+        <section className="settings-section">
           <p className="text-xs text-amber-200/80">
             Android Local does not currently expose the native decision API.
             Configure a remote Decision API URL above if you want to use
             decisions on Android.
           </p>
-        </Card>
+        </section>
       )}
 
       {decision.enabled &&
         storageService &&
         decision.provider === "desktop-local" &&
         provider === "desktop-local" && (
-          <Card variant="default">
-            <div className="text-sm font-medium text-white/90">
+          <section className="settings-section">
+            <div className="text-sm font-medium vassist-text-primary">
               Local decision models
             </div>
-            <p className="mt-1 text-xs text-white/55">
+            <p className="pt-1 text-xs vassist-text-muted">
               These models use the same Desktop Local model storage and are kept
-              in its <code className="text-white/75">decisions</code> folder.
-              They run in a separate router so your chat model is unaffected.
+              in its <code className="vassist-text-secondary">decisions</code>{" "}
+              folder. They run in a separate router so your chat model is
+              unaffected.
             </p>
-            <div className="mt-4">
+            <div className="pt-4">
               <LocalLLMModelManager
                 storageService={storageService}
                 selectedModel={decision.model || null}
@@ -497,15 +494,15 @@ const DecisionSettings = ({
                 isLightBackground={isLightBackground}
               />
             </div>
-          </Card>
+          </section>
         )}
 
       {decision.enabled &&
         decision.provider === "desktop-local" &&
         provider === "desktop-local" &&
         decisionRuntime && (
-          <Card variant="default">
-            <div className="text-sm font-medium text-white/90">
+          <section className="settings-section">
+            <div className="text-sm font-medium vassist-text-primary">
               Local runtime
             </div>
             <LlamaServerRuntimeManager
@@ -521,7 +518,7 @@ const DecisionSettings = ({
               isLightBackground={isLightBackground}
               testIdPrefix="decision-llama-backend"
             />
-          </Card>
+          </section>
         )}
 
       {decision.enabled && (

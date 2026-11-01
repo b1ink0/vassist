@@ -8,6 +8,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useSpatialHtmlPanelHost } from "../../../xr/SpatialHtmlPanelContext";
+import { DockScrollPanel } from "./DockScrollPanel";
 import { Button, Card, Select } from "../../../ui";
 import Icon from "../../../icons/Icon";
 import {
@@ -285,7 +286,8 @@ export function StageControlPanel({
 
   return (
     <>
-      <Card
+      <DockScrollPanel
+        progressive={!isDesktop || isDesktopAttachedModeWindow}
         {...transitionProps}
         padding="none"
         variant="none"
@@ -326,7 +328,7 @@ export function StageControlPanel({
             <span className="min-w-0 flex-1 truncate">{stage.name}</span>
           </Button>
         ))}
-      </Card>
+      </DockScrollPanel>
       <Card
         {...transitionProps}
         padding="none"

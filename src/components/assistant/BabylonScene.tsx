@@ -634,6 +634,10 @@ const BabylonScene = ({
         }
       };
       window.addEventListener("resize", handleResize);
+      const previewResizeObserver = isPreview
+        ? new ResizeObserver(handleResize)
+        : null;
+      previewResizeObserver?.observe(canvas);
 
       // Android wallpaper visibility handler - pause/resume rendering
       const handleWallpaperVisibility = (event: Event): void => {
@@ -679,6 +683,7 @@ const BabylonScene = ({
         }
 
         window.removeEventListener("resize", handleResize);
+        previewResizeObserver?.disconnect();
 
         // Remove wallpaper visibility listener
         if (isAndroid) {
@@ -772,6 +777,7 @@ const BabylonScene = ({
   }, [
     activePositionManagerRef,
     fpsLimit,
+    isPreview,
     sceneBuilder,
     setShowModelLoadingOverlay,
     updateUIConfig,

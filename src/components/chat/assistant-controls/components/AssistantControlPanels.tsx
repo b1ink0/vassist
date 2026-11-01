@@ -6,6 +6,7 @@ import { canRenderStages } from "../../../../babylon/stages/stageAvailability";
 import { useXrRuntime } from "../../../../contexts/XrRuntimeContext";
 import { XrSurface } from "../../../xr/XrSurface";
 import { StageControlPanel } from "./StageControlPanel";
+import { DockScrollPanel } from "./DockScrollPanel";
 import {
   panelClassName,
   itemClassName,
@@ -90,7 +91,8 @@ function EmotePanel({
   | "actions"
 >) {
   return (
-    <Card
+    <DockScrollPanel
+      progressive={!isDesktop || isDesktopAttachedModeWindow}
       {...transitionProps}
       padding="none"
       style={{
@@ -233,7 +235,7 @@ function EmotePanel({
           )}
         </>
       )}
-    </Card>
+    </DockScrollPanel>
   );
 }
 
@@ -271,7 +273,8 @@ function AvatarPanel({
   ];
 
   return (
-    <Card
+    <DockScrollPanel
+      progressive={!isDesktop || isDesktopAttachedModeWindow}
       {...transitionProps}
       padding="none"
       style={{
@@ -308,7 +311,7 @@ function AvatarPanel({
           <span className="truncate flex-1">{option.label}</span>
         </Button>
       ))}
-    </Card>
+    </DockScrollPanel>
   );
 }
 
@@ -470,7 +473,7 @@ export function AssistantControlPanels({
 }: AssistantControlPanelsProps) {
   const xr = useXrRuntime();
   const canShowPanels =
-    xr.active || !isChatOpen || isDesktop || isNormalDesktop;
+    xr.active || !isChatOpen || !isAndroid || isNormalDesktop;
   const layout = xr.active
     ? {
         ...domLayout,

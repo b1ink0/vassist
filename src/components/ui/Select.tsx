@@ -6,6 +6,8 @@ import { useEmbedHost } from "../../embed/EmbedHostContext";
 import { resolveConfiguredPortalContainer } from "../../embed/portalContainers";
 import { Icon } from "../icons";
 import { cn } from "../../utils/cn";
+import { useSettingsTheme } from "../settings/SettingsThemeContext";
+import { ScrollArea } from "@base-ui/react/scroll-area";
 import { resolvePortalContainer } from "../../utils/resolvePortalContainer";
 import { Tooltip, type TooltipVariant } from "./Tooltip";
 
@@ -80,6 +82,7 @@ const Select = ({
   placeholder,
   disabled,
   name,
+  id,
   required,
   onChange,
   trigger,
@@ -100,6 +103,7 @@ const Select = ({
   "aria-label": ariaLabel,
 }: SelectProps) => {
   const { embedConfig } = useEmbedHost();
+  const settingsTheme = useSettingsTheme();
   const [portalAnchor, setPortalAnchor] = React.useState<HTMLDivElement | null>(
     null,
   );
@@ -186,13 +190,13 @@ const Select = ({
     ? className
     : cn(
         selectVariants({ variant }),
-        "relative",
+        "relative min-w-0 max-w-full",
         ghost && textClass,
         className,
       );
 
   return (
-    <div ref={setPortalAnchor}>
+    <div ref={setPortalAnchor} className="min-w-0 max-w-full">
       <BaseSelect.Root
         value={selectedValue}
         onValueChange={triggerChange}
@@ -208,6 +212,7 @@ const Select = ({
           variant={tooltipVariant ?? (inverse ? "dark" : "default")}
         >
           <BaseSelect.Trigger
+            id={id}
             className={triggerClassName}
             render={trigger}
             data-testid={dataTestId}
@@ -263,65 +268,77 @@ const Select = ({
               className={cn(
                 "composer-menu rounded-xl border p-1 shadow-xl [font-family:inherit]",
                 popupClass,
+                settingsTheme &&
+                  "settings-control-popup settings-" + settingsTheme,
                 popupClassName,
               )}
             >
               <BaseSelect.ScrollUpArrow className="flex h-5 items-center justify-center vassist-text-muted">
                 <Icon name="chevron-up" size={16} />
               </BaseSelect.ScrollUpArrow>
-              <BaseSelect.List
-                className={cn(
-                  // Never grow wider than the trigger: long labels truncate
-                  "max-h-64 min-w-[var(--anchor-width)] max-w-[calc(var(--anchor-width)+1rem)] overflow-y-auto scrollbar-glass [font-family:inherit]",
-                  listClassName,
-                )}
-              >
-                {grouped
-                  ? groups.map((group) => (
-                      <React.Fragment key={group.label}>
-                        <div
-                          className={cn(
-                            "px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.08em]",
-                            groupLabelClass,
-                          )}
-                        >
-                          {group.label}
-                        </div>
-                        {group.options.map((opt) => (
+              <ScrollArea.Root className="flex min-h-0 flex-col overflow-hidden">
+                <BaseSelect.List
+                  render={<ScrollArea.Viewport />}
+                  className={cn(
+                    // Never grow wider than the trigger: long labels truncate
+                    "max-h-64 min-w-[var(--anchor-width)] max-w-[calc(var(--anchor-width)+1rem)] outline-none [font-family:inherit]",
+                    listClassName,
+                  )}
+                >
+                  <ScrollArea.Content style={{ minWidth: 0 }}>
+                    {grouped
+                      ? groups.map((group) => (
+                          <React.Fragment key={group.label}>
+                            <div
+                              className={cn(
+                                "px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                                groupLabelClass,
+                              )}
+                            >
+                              {group.label}
+                            </div>
+                            {group.options.map((opt) => (
+                              <BaseSelect.Item
+                                key={`${group.label}-${opt.value}`}
+                                value={String(opt.value)}
+                                disabled={opt.disabled}
+                                className={itemClass}
+                              >
+                                <BaseSelect.ItemIndicator
+                                  className={indicatorClass}
+                                >
+                                  <Icon name="check" size={16} />
+                                </BaseSelect.ItemIndicator>
+                                <BaseSelect.ItemText className="truncate">
+                                  {opt.label}
+                                </BaseSelect.ItemText>
+                              </BaseSelect.Item>
+                            ))}
+                          </React.Fragment>
+                        ))
+                      : optionItems.map((opt) => (
                           <BaseSelect.Item
-                            key={`${group.label}-${opt.value}`}
+                            key={opt.value}
                             value={String(opt.value)}
                             disabled={opt.disabled}
-                            className={itemClass}
+                            className={singleItemClass}
                           >
+                            <BaseSelect.ItemText className="truncate">
+                              {opt.label}
+                            </BaseSelect.ItemText>
                             <BaseSelect.ItemIndicator
                               className={indicatorClass}
                             >
                               <Icon name="check" size={16} />
                             </BaseSelect.ItemIndicator>
-                            <BaseSelect.ItemText className="truncate">
-                              {opt.label}
-                            </BaseSelect.ItemText>
                           </BaseSelect.Item>
                         ))}
-                      </React.Fragment>
-                    ))
-                  : optionItems.map((opt) => (
-                      <BaseSelect.Item
-                        key={opt.value}
-                        value={String(opt.value)}
-                        disabled={opt.disabled}
-                        className={singleItemClass}
-                      >
-                        <BaseSelect.ItemText className="truncate">
-                          {opt.label}
-                        </BaseSelect.ItemText>
-                        <BaseSelect.ItemIndicator className={indicatorClass}>
-                          <Icon name="check" size={16} />
-                        </BaseSelect.ItemIndicator>
-                      </BaseSelect.Item>
-                    ))}
-              </BaseSelect.List>
+                  </ScrollArea.Content>
+                </BaseSelect.List>
+                <ScrollArea.Scrollbar className="flex w-1.5 p-px">
+                  <ScrollArea.Thumb className="w-full rounded-full bg-current/25" />
+                </ScrollArea.Scrollbar>
+              </ScrollArea.Root>
             </BaseSelect.Popup>
           </BaseSelect.Positioner>
         </BaseSelect.Portal>

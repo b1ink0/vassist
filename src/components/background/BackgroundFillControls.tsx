@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import type { BackgroundFillSettings, BackgroundMode } from "../../config/uiConfig";
+import type {
+  BackgroundFillSettings,
+  BackgroundMode,
+} from "../../config/uiConfig";
 import { Select } from "../ui";
+import RangeSlider from "../ui/RangeSlider";
 
 const gradientPresets = {
   midnight: { start: "#101827", end: "#243b63", angle: 135 },
@@ -27,7 +31,8 @@ export default function BackgroundFillControls({
   const draftRef = useRef(fill);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasDraftChangesRef = useRef(false);
-  const [gradientPreset, setGradientPreset] = useState<GradientPreset>("custom");
+  const [gradientPreset, setGradientPreset] =
+    useState<GradientPreset>("custom");
   const [angle, setAngle] = useState(fill.gradientAngleDegrees);
   const variant = isLightBackground ? "dark" : "default";
 
@@ -90,8 +95,8 @@ export default function BackgroundFillControls({
   };
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-white/10 bg-white/5 p-3">
-      <label className="flex flex-col gap-1 text-xs text-white/80">
+    <div className="flex flex-col gap-2 rounded-lg border border-current/10 bg-current/5 p-3">
+      <label className="flex flex-col gap-1 text-xs vassist-text-secondary">
         <span>Background type</span>
         <Select
           value={draft.mode}
@@ -106,7 +111,7 @@ export default function BackgroundFillControls({
       </label>
 
       {draft.mode === "solid" && (
-        <label className="flex items-center justify-between gap-3 text-xs text-white/80">
+        <label className="flex items-center justify-between gap-3 text-xs vassist-text-secondary">
           <span>Background color</span>
           <span className="flex items-center gap-2">
             <span>{draft.solidColor.toUpperCase()}</span>
@@ -115,10 +120,13 @@ export default function BackgroundFillControls({
               aria-label="Background color"
               value={draft.solidColor}
               onChange={(event) =>
-                updateColor({ ...draftRef.current, solidColor: event.target.value })
+                updateColor({
+                  ...draftRef.current,
+                  solidColor: event.target.value,
+                })
               }
               onBlur={() => commit()}
-              className="h-8 w-10 cursor-pointer rounded border border-white/20 bg-transparent p-0.5"
+              className="h-8 w-10 cursor-pointer rounded border border-current/20 bg-transparent p-0.5"
             />
           </span>
         </label>
@@ -126,7 +134,7 @@ export default function BackgroundFillControls({
 
       {draft.mode === "gradient" && (
         <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-xs text-white/80">
+          <label className="flex flex-col gap-1 text-xs vassist-text-secondary">
             <span>Gradient preset</span>
             <Select
               value={gradientPreset}
@@ -146,13 +154,15 @@ export default function BackgroundFillControls({
           </label>
 
           <div className="flex gap-3">
-            {([
-              ["Start color", "gradientStartColor"],
-              ["End color", "gradientEndColor"],
-            ] as const).map(([label, key]) => (
+            {(
+              [
+                ["Start color", "gradientStartColor"],
+                ["End color", "gradientEndColor"],
+              ] as const
+            ).map(([label, key]) => (
               <label
                 key={key}
-                className="flex min-w-0 flex-1 items-center justify-between gap-2 text-xs text-white/80"
+                className="flex min-w-0 flex-1 items-center justify-between gap-2 text-xs vassist-text-secondary"
               >
                 <span>{label}</span>
                 <input
@@ -167,26 +177,25 @@ export default function BackgroundFillControls({
                     });
                   }}
                   onBlur={() => commit()}
-                  className="h-8 w-10 cursor-pointer rounded border border-white/20 bg-transparent p-0.5"
+                  className="h-8 w-10 cursor-pointer rounded border border-current/20 bg-transparent p-0.5"
                 />
               </label>
             ))}
           </div>
 
-          <label className="flex flex-col gap-1 text-xs text-white/80">
+          <label className="flex flex-col gap-1 text-xs vassist-text-secondary">
             <span className="flex items-center justify-between gap-2">
               <span>Gradient angle</span>
               <span>{angle}°</span>
             </span>
-            <input
-              type="range"
+            <RangeSlider
               aria-label="Gradient angle"
               min={0}
               max={360}
               step={5}
               value={angle}
-              onChange={(event) => {
-                const nextAngle = Number(event.target.value);
+              onValueChange={(nextValue) => {
+                const nextAngle = nextValue;
                 setGradientPreset("custom");
                 setAngle(nextAngle);
                 updateDraft({
@@ -197,13 +206,12 @@ export default function BackgroundFillControls({
               onPointerUp={() => commit()}
               onKeyUp={() => commit()}
               onBlur={() => commit()}
-              className="w-full accent-current"
             />
           </label>
 
           <div
             aria-hidden="true"
-            className="h-12 rounded-md border border-white/15"
+            className="h-12 rounded-md border border-current/15"
             style={{
               background: `linear-gradient(${angle}deg, ${draft.gradientStartColor}, ${draft.gradientEndColor})`,
             }}

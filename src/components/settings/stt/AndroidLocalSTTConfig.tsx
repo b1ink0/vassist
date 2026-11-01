@@ -1,6 +1,7 @@
 import { Select } from "../../ui";
 import WhisperModelDownloader from "./WhisperModelDownloader";
 import type { AndroidAPI } from "../../../types/android";
+import SettingsRow from "../../ui/SettingsRow";
 
 interface AndroidLocalSTTConfigProps {
   androidAPI: AndroidAPI | null;
@@ -23,17 +24,16 @@ const AndroidLocalSTTConfig = ({
   onRequestDeleteDialog,
   externalDeleteTick,
 }: AndroidLocalSTTConfigProps) => (
-  <div className="space-y-4">
+  <div className="flex flex-col gap-4">
     <WhisperModelDownloader
       androidAPI={androidAPI}
       isLightBackground={isLightBackground}
       onRequestDeleteDialog={onRequestDeleteDialog}
       externalDeleteTick={externalDeleteTick}
     />
-    <h4 className="text-sm font-semibold text-white/90">Android Local STT</h4>
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <label className="block text-sm font-medium text-white/90">Model</label>
+    <h4 className="settings-group-heading">Android Local STT</h4>
+    <div className="flex flex-col gap-4">
+      <SettingsRow label="Model" layout="stacked">
         <Select
           value={model}
           onChange={(event) => onChange("model", event.target.value)}
@@ -61,9 +61,8 @@ const AndroidLocalSTTConfig = ({
             { value: "dolphin-small", label: "Dolphin Small CTC · 239 MB" },
           ]}
         />
-      </div>
-      <div className="space-y-1.5">
-        <label className="block text-sm font-medium text-white/90">Language</label>
+      </SettingsRow>
+      <SettingsRow label="Language" layout="stacked">
         <Select
           value={language}
           onChange={(event) => onChange("language", event.target.value)}
@@ -78,9 +77,8 @@ const AndroidLocalSTTConfig = ({
             { value: "fr", label: "French" },
           ]}
         />
-      </div>
-      <div className="space-y-1.5">
-        <label className="block text-sm font-medium text-white/90">Compute Provider</label>
+      </SettingsRow>
+      <SettingsRow label="Compute Provider" layout="stacked">
         <Select
           value={provider}
           onChange={(event) => onChange("provider", event.target.value)}
@@ -96,9 +94,9 @@ const AndroidLocalSTTConfig = ({
             { value: "qnn", label: "QNN Snapdragon NPU (experimental)" },
           ]}
         />
-      </div>
+      </SettingsRow>
     </div>
-    <p className="text-xs text-white/50">
+    <p className="text-xs vassist-text-muted">
       Powered by Whisper / SenseVoice running locally on your device.
       Chinese/Japanese: use a <b>Multilingual</b> Whisper model or{" "}
       <b>SenseVoice</b> (supports zh/ja/ko/yue/en only). English-only models

@@ -1,3 +1,4 @@
+import { readContextUsage, type ContextUsage } from "../../types/contextUsage";
 import { ConversationStates } from "../audio/VoiceConversationService";
 import { PromptConfig } from "../../config/promptConfig";
 import type { ChatService } from "./ChatService";
@@ -17,6 +18,7 @@ export interface AIMessage {
 }
 
 export interface AIResult {
+  contextUsage?: ContextUsage;
   success: boolean;
   cancelled?: boolean;
   error?: { message?: string } | unknown;
@@ -465,7 +467,7 @@ export async function streamChatResponse({
           fullResponse.length > 10 &&
           canUseAssistant()
         ) {
-          await triggerAssistantAction("speak");
+          await triggerAssistantAction("speakWithoutAudio");
           hasSwitchedToSpeaking = true;
         }
 
@@ -537,6 +539,12 @@ export async function streamChatResponse({
       streamAbortControllerRef.current = null;
       setIsProcessing(false);
       return { success: false, error: errorMessage };
+    }
+
+    const usage = readContextUsage(result.contextUsage);
+    if (usage) {
+      chatService.setLastContextUsage(usage);
+      setChatMessages(toChatMessageItems(chatService.getMessages()));
     }
 
     if (ttsEnabled && textBuffer.trim().length > 0) {
@@ -637,11 +645,14 @@ export const getSystemPromptFromConfig = (
   const selectedProfile = profiles.find(
     (profile) => profile?.id === selectedProfileId,
   );
-  if (
-    typeof selectedProfile?.prompt === "string" &&
-    selectedProfile.prompt.trim().length > 0
-  ) {
+  if (typeof selectedProfile?.prompt === "string") {
     return selectedProfile.prompt;
+  }
+
+  if (selectedProfileId in PromptConfig.systemPrompts) {
+    return PromptConfig.systemPrompts[
+      selectedProfileId as keyof typeof PromptConfig.systemPrompts
+    ].prompt;
   }
 
   return PromptConfig.systemPrompts.default.prompt;
@@ -971,7 +982,7 @@ export async function streamVoiceChatResponse({
           "ChatController",
           "[Voice] Starting speaking animation (no TTS)",
         );
-        await triggerAssistantAction("speak");
+        await triggerAssistantAction("speakWithoutAudio");
         hasSwitchedToSpeaking = true;
       }
 
@@ -1029,6 +1040,11 @@ export async function streamVoiceChatResponse({
     return;
   }
 
+  const usage = readContextUsage(result.contextUsage);
+  if (usage) {
+    chatService.setLastContextUsage(usage);
+    setChatMessages(toChatMessageItems(chatService.getMessages()));
+  }
   Logger.log("ChatController", "[Voice] AI response complete:", fullResponse);
 
   if (ttsEnabled && textBuffer.trim().length > 0) {

@@ -645,8 +645,14 @@ class AndroidLLMModelStorage extends LLMModelStorageBase {
 
       const androidApi = this.api as any;
       if (androidApi && androidApi[method + "Async"]) {
-        androidApi[method + "Async"](...args, callbackId);
+        try {
+          androidApi[method + "Async"](...args, callbackId);
+        } catch (e) {
+          delete globalWindow.AndroidAICallbacks[callbackId];
+          resolve({ success: false, error: toErrorMessage(e) } as unknown as T);
+        }
       } else if (androidApi && androidApi[method]) {
+        delete globalWindow.AndroidAICallbacks[callbackId];
         // Fallback to sync
         try {
           const resultJson = androidApi[method](...args);
@@ -655,6 +661,7 @@ class AndroidLLMModelStorage extends LLMModelStorageBase {
           resolve({ success: false, error: toErrorMessage(e) } as unknown as T);
         }
       } else {
+        delete globalWindow.AndroidAICallbacks[callbackId];
         resolve({
           success: false,
           items: [],
@@ -706,12 +713,12 @@ class AndroidLLMModelStorage extends LLMModelStorageBase {
     pageSize = 20,
     filter = "",
   ): Promise<DiscoveryResult> {
+    void filter;
     const result = await this.callAndroidAsync<DiscoveryResult>(
       "searchHuggingFaceModels",
       query,
       cursor,
       pageSize,
-      filter,
     );
     return {
       ...result,

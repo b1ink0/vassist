@@ -4,8 +4,13 @@
  * Unified interface for Chrome AI, OpenAI, and Ollama.
  */
 
+import type { ContextUsage } from "../../types/contextUsage";
 import OpenAI from "openai";
-import { AIProviders, DefaultAIConfig } from "../../config/aiConfig";
+import {
+  AIProviders,
+  DefaultAIConfig,
+  type AIRemoteProfileProvider,
+} from "../../config/aiConfig";
 import {
   buildLLMRequestParameters,
   getLLMProfileParameters,
@@ -32,9 +37,10 @@ type SendResult = {
   cancelled: boolean;
   error: Error | null;
   thinking?: string;
+  contextUsage?: ContextUsage;
 };
 type RemoteModelListConfig = {
-  provider: "openai" | "ollama" | "android-local" | "desktop-local";
+  provider: AIRemoteProfileProvider;
   endpoint?: string;
   apiKey?: string;
 };
@@ -767,6 +773,7 @@ class AIService {
       messages: formattedMessages,
       ...buildLLMRequestParameters(state.provider, state.config),
       stream: true,
+      stream_options: { include_usage: true },
     };
 
     const cfg = state.config as any;
@@ -784,11 +791,9 @@ class AIService {
       if (thinkingOn && cfg.thinkingEffort) {
         body.reasoning_effort = cfg.thinkingEffort;
       }
-    } else if (thinkingOn || cfg.thinkingEffort) {
-      // Reasoning parameters are opt-in because support is model-dependent.
-      body.reasoning_effort = thinkingOn
-        ? cfg.thinkingEffort || "medium"
-        : "none";
+    } else if (cfg.thinkingEffort) {
+      // Auto omits the parameter so the model keeps its own default.
+      body.reasoning_effort = thinkingOn ? cfg.thinkingEffort : "none";
     }
 
     if (
@@ -1405,6 +1410,7 @@ class AIService {
 
       let fullResponse = "";
       let fullThinking = "";
+      let contextUsage: ContextUsage | undefined;
       const thinkingEnabled = (requestConfig as any).thinkingEnabled === true;
       const onReasoning: ((chunk: string) => void) | undefined =
         options.onReasoning;
@@ -1412,6 +1418,50 @@ class AIService {
 
       // Process streaming chunks
       for await (const chunk of stream) {
+        const usage = chunk.usage as
+          | (NonNullable<typeof chunk.usage> & {
+              context_tokens?: number;
+              context_size?: number;
+            })
+          | undefined;
+        const inputTokens = usage?.prompt_tokens;
+        const outputTokens = usage?.completion_tokens;
+        const usedTokens =
+          usage?.context_tokens ??
+          (Number.isSafeInteger(inputTokens) &&
+          inputTokens! >= 0 &&
+          Number.isSafeInteger(outputTokens) &&
+          outputTokens! >= 0
+            ? inputTokens! + outputTokens!
+            : undefined);
+        if (
+          usage &&
+          typeof usedTokens === "number" &&
+          Number.isSafeInteger(usedTokens) &&
+          usedTokens > 0
+        ) {
+          const limit = usage.context_size ?? requestConfig.contextSize;
+          contextUsage = {
+            provider: requestProvider,
+            model: options.modelOverride || requestConfig.model,
+            backendId: requestConfig.selectedBackendProfileId || "",
+            usedTokens,
+            ...(typeof inputTokens === "number" &&
+            Number.isSafeInteger(inputTokens) &&
+            inputTokens >= 0
+              ? { inputTokens }
+              : {}),
+            ...(typeof outputTokens === "number" &&
+            Number.isSafeInteger(outputTokens) &&
+            outputTokens >= 0
+              ? { outputTokens }
+              : {}),
+            ...(Number.isSafeInteger(limit) && limit > 0
+              ? { contextLimit: limit }
+              : {}),
+          };
+        }
+
         // Check if request was aborted - return cancelled, don't throw
         if (!state.abortController) {
           Logger.log("other", `${logPrefix} - Streaming aborted by user`);
@@ -1425,7 +1475,7 @@ class AIService {
           };
         }
 
-        const delta = chunk.choices[0]?.delta || {};
+        const delta = chunk.choices?.[0]?.delta || {};
         let reasoning: string =
           delta.reasoning_content || delta.reasoning || "";
         let content: string = delta.content || "";
@@ -1480,6 +1530,7 @@ class AIService {
         cancelled: false,
         error: null,
         thinking: fullThinking,
+        ...(contextUsage ? { contextUsage } : {}),
       };
     } catch (error) {
       state.abortController = null;
@@ -1651,7 +1702,25 @@ class AIService {
       // Clean up excessive whitespace and newlines
       fullResponse = fullResponse.trim().replace(/\n\s*\n\s*\n/g, "\n\n");
 
+      const contextTokens =
+        sessionToUse.contextUsage ?? sessionToUse.inputUsage;
+      const contextLimit =
+        sessionToUse.contextWindow ?? sessionToUse.inputQuota;
       return {
+        ...(Number.isSafeInteger(contextTokens) &&
+        contextTokens > 0 &&
+        Number.isSafeInteger(contextLimit) &&
+        contextLimit > 0
+          ? {
+              contextUsage: {
+                provider: AIProviders.CHROME_AI,
+                model: "",
+                backendId: "",
+                usedTokens: contextTokens,
+                contextLimit,
+              },
+            }
+          : {}),
         success: true,
         response: fullResponse,
         cancelled: false,
@@ -1861,10 +1930,21 @@ class AIService {
       }
 
       const payload = (await response.json()) as {
-        data?: Array<{ id?: string | null }>;
+        data?: Array<{
+          id?: string | null;
+          architecture?: { output_modalities?: string[] };
+        }>;
       };
       const models = Array.isArray(payload.data)
         ? payload.data
+            .filter((entry) => {
+              const outputs = entry?.architecture?.output_modalities;
+              return (
+                !Array.isArray(outputs) ||
+                !outputs.includes("decisions") ||
+                outputs.includes("text")
+              );
+            })
             .map((entry) =>
               typeof entry?.id === "string" ? entry.id.trim() : "",
             )

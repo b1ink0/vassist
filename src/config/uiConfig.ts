@@ -135,7 +135,7 @@ export type PositionPresetOverride = Omit<
   "name" | "description"
 >;
 
-export type FPSLimit = 15 | 24 | 30 | 60 | 90 | "native";
+export type FPSLimit = 15 | 24 | 30 | 60 | 90 | 120 | 144 | "native";
 export type PhysicsEngine = "bullet" | "havok";
 export type RenderQuality = "low" | "medium" | "high" | "ultra" | "custom";
 
@@ -461,6 +461,8 @@ export const FPSLimitOptions: {
   FPS_30: Extract<FPSLimit, 30>;
   FPS_60: Extract<FPSLimit, 60>;
   FPS_90: Extract<FPSLimit, 90>;
+  FPS_120: Extract<FPSLimit, 120>;
+  FPS_144: Extract<FPSLimit, 144>;
   NATIVE: Extract<FPSLimit, "native">;
 } = {
   FPS_15: 15,
@@ -468,6 +470,8 @@ export const FPSLimitOptions: {
   FPS_30: 30,
   FPS_60: 60,
   FPS_90: 90,
+  FPS_120: 120,
+  FPS_144: 144,
   NATIVE: "native", // No limit - matches monitor refresh rate
 };
 
@@ -617,7 +621,7 @@ export const DefaultUIConfig: UIConfig = {
   modelSizePx: null,
 
   camera: {
-    mode: "2D",
+    mode: "3D",
     locked: true,
     savePosition: false,
     saved3D: {

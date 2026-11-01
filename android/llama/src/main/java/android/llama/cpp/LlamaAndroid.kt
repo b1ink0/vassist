@@ -321,7 +321,8 @@ class LlamaAndroid private constructor() {
     fun complete(
         prompt: String, 
         maxNewTokens: Int = maxTokens,
-        images: List<ByteArray>? = null
+        images: List<ByteArray>? = null,
+        onUsage: ((Int, Int) -> Unit)? = null
     ): Flow<String> = flow {
         when (val state = threadLocalState.get()) {
             is State.Loaded -> {
@@ -345,6 +346,7 @@ class LlamaAndroid private constructor() {
                     IntVar(completion_init(state.context, state.batch, safePrompt, maxNewTokens))
                 }
                 
+                val promptTokens = ncur.value
                 while (ncur.value <= maxNewTokens) {
                     val token = completion_loop(
                         state.context,
@@ -362,6 +364,7 @@ class LlamaAndroid private constructor() {
                         emit(token)
                     }
                 }
+                onUsage?.invoke(promptTokens, ncur.value - promptTokens)
             }
             else -> throw IllegalStateException("No model loaded")
         }
@@ -378,10 +381,11 @@ class LlamaAndroid private constructor() {
     suspend fun generate(
         prompt: String, 
         maxNewTokens: Int = maxTokens,
-        images: List<ByteArray>? = null
+        images: List<ByteArray>? = null,
+        onUsage: ((Int, Int) -> Unit)? = null
     ): String {
         val builder = StringBuilder()
-        complete(prompt, maxNewTokens, images).collect { token ->
+        complete(prompt, maxNewTokens, images, onUsage).collect { token ->
             builder.append(token)
         }
         return builder.toString()

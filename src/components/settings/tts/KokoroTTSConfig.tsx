@@ -11,6 +11,9 @@ import { KokoroVoices, KokoroDevice } from "../../../config/aiConfig";
 import StatusMessage from "../../common/StatusMessage";
 import { cn } from "../../../utils/cn";
 import { Button, Select, Input } from "../../ui";
+import RangeSlider from "../../ui/RangeSlider";
+import SettingsDisclosure from "../shared/SettingsDisclosure";
+import SettingsRow from "../../ui/SettingsRow";
 
 interface KokoroConfigShape {
   voice?: string;
@@ -155,25 +158,23 @@ const KokoroTTSConfig = ({
   const deviceOptions = getDeviceOptions();
 
   return (
-    <div className="space-y-4 p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
+    <div className="flex flex-col gap-4 settings-section">
       {showTitle && (
-        <h4 className="text-sm font-semibold text-white/90">
-          Kokoro TTS Configuration
-        </h4>
+        <h4 className="settings-group-heading">Kokoro TTS Configuration</h4>
       )}
 
       {/* Setup Instructions - Only show in setup mode */}
       {isSetupMode && (
-        <div className="space-y-3 p-2 md:p-4 rounded-lg bg-blue-500/10 border border-blue-400/30">
+        <div className="flex flex-col gap-3 p-2 md:p-4 rounded-lg bg-blue-500/10 border border-blue-400/30">
           <div className="flex items-start gap-3">
             <Icon
               name="info"
               size={20}
-              className="text-blue-400 flex-shrink-0 mt-0.5"
+              className="text-blue-400 flex-shrink-0 pt-0.5"
             />
-            <div className="space-y-2 text-sm text-blue-100">
+            <div className="flex flex-col gap-2 text-sm text-blue-100">
               <p className="font-semibold">How to Configure Kokoro TTS</p>
-              <ol className="list-decimal list-inside space-y-2 text-blue-200/90 ml-2">
+              <ol className="list-decimal list-inside flex flex-col gap-2 text-blue-200/90 pl-2">
                 <li>
                   <strong>Choose a Voice:</strong> Select from the dropdown
                   below. Try different voices to find your favorite!
@@ -203,20 +204,20 @@ const KokoroTTSConfig = ({
 
       {/* Consolidated Performance & Compatibility Warnings - Only show in setup mode */}
       {isSetupMode && (
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           {/* Main Performance Warning */}
           <div className="rounded-lg p-3 border border-yellow-500/30 bg-yellow-500/10">
             <div className="flex items-start gap-3">
               <Icon
                 name="warning"
                 size={20}
-                className="text-yellow-400 flex-shrink-0 mt-0.5"
+                className="text-yellow-400 flex-shrink-0 pt-0.5"
               />
-              <div className="space-y-2 text-sm text-yellow-100">
+              <div className="flex flex-col gap-2 text-sm text-yellow-100">
                 <p className="font-semibold">
                   Important Performance & Compatibility Notes
                 </p>
-                <ol className="list-decimal list-inside space-y-2 text-yellow-200/90 ml-2">
+                <ol className="list-decimal list-inside flex flex-col gap-2 text-yellow-200/90 pl-2">
                   <li className="pl-2">
                     <strong>Page Lag:</strong> If you experience lag or poor
                     performance with WebGPU or Auto backend, switch to{" "}
@@ -243,54 +244,59 @@ const KokoroTTSConfig = ({
       )}
 
       {/* Voice Selection */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">
-          Voice{" "}
-          {isSetupMode && (
-            <span className="text-xs text-white/60">(Step 1)</span>
-          )}
-        </label>
+      <div className="flex min-w-0 flex-col gap-2">
+        <SettingsRow
+          label={
+            <>
+              Voice{" "}
+              {isSetupMode && (
+                <span className="text-xs vassist-text-muted">(Step 1)</span>
+              )}
+            </>
+          }
+          layout="stacked"
+        >
+          <Select
+            value={config.voice || KokoroVoices.AF_HEART}
+            onChange={(e) => handleChange("voice", e.target.value)}
+            variant={isLightBackground ? "dark" : "default"}
+            groups={voiceGroups.map((g) => ({
+              label: g.label,
+              options: g.voices,
+            }))}
+          />
+        </SettingsRow>
         {isSetupMode && (
-          <p className="text-xs text-white/60 mb-2">
+          <p className="text-xs vassist-text-muted pb-2">
             Choose the voice that will speak to you. Each voice has a unique
             personality and accent.
           </p>
         )}
-        <Select
-          value={config.voice || KokoroVoices.AF_HEART}
-          onChange={(e) => handleChange("voice", e.target.value)}
-          variant={isLightBackground ? "dark" : "default"}
-          groups={voiceGroups.map((g) => ({
-            label: g.label,
-            options: g.voices,
-          }))}
-        />
       </div>
 
       {/* Speed Control */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">
+      <div className="flex flex-col gap-2">
+        <label className="block text-sm font-medium vassist-text-primary">
           Speech Speed: {(config.speed || 1.0).toFixed(1)}x{" "}
           {isSetupMode && (
-            <span className="text-xs text-white/60">(Step 2)</span>
+            <span className="text-xs vassist-text-muted">(Step 2)</span>
           )}
         </label>
         {isSetupMode && (
-          <p className="text-xs text-white/60 mb-2">
+          <p className="text-xs vassist-text-muted pb-2">
             Drag the slider to adjust how fast or slow the voice speaks. 1.0x is
             normal speed.
           </p>
         )}
-        <input
-          type="range"
+        <RangeSlider
+          aria-label="Speech Speed: x"
           min="0.5"
           max="2.0"
           step="0.1"
           value={config.speed || 1.0}
-          onChange={(e) => handleChange("speed", parseFloat(e.target.value))}
-          className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer slider-thumb"
+          onValueChange={(nextValue) => handleChange("speed", nextValue)}
         />
-        <div className="flex justify-between text-xs text-white/50">
+        <div className="flex justify-between text-xs vassist-text-muted">
           <span>0.5x (Slower)</span>
           <span>1.0x (Normal)</span>
           <span>2.0x (Faster)</span>
@@ -298,15 +304,29 @@ const KokoroTTSConfig = ({
       </div>
 
       {/* Device Backend Selection - Moved outside Advanced Settings for visibility */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">
-          Device Backend{" "}
-          {isSetupMode && (
-            <span className="text-xs text-white/60">(Step 3 - Optional)</span>
-          )}
-        </label>
+      <div className="flex min-w-0 flex-col gap-2">
+        <SettingsRow
+          label={
+            <>
+              Device Backend{" "}
+              {isSetupMode && (
+                <span className="text-xs vassist-text-muted">
+                  (Step 3 - Optional)
+                </span>
+              )}
+            </>
+          }
+          layout="stacked"
+        >
+          <Select
+            value={config.device || KokoroDevice.AUTO}
+            onChange={(e) => handleChange("device", e.target.value)}
+            variant={isLightBackground ? "dark" : "default"}
+            options={deviceOptions}
+          />
+        </SettingsRow>
         {isSetupMode && (
-          <p className="text-xs text-white/60 mb-2">
+          <p className="text-xs vassist-text-muted pb-2">
             Choose how the model runs: <strong>Auto</strong> (recommended)
             automatically picks the best option.
             <strong>WebGPU</strong> is faster (~350MB download) but needs a good
@@ -315,19 +335,13 @@ const KokoroTTSConfig = ({
             device.
           </p>
         )}
-        <Select
-          value={config.device || KokoroDevice.AUTO}
-          onChange={(e) => handleChange("device", e.target.value)}
-          variant={isLightBackground ? "dark" : "default"}
-          options={deviceOptions}
-        />
         {isSetupMode && (
-          <div className="mt-2 p-2 rounded-lg bg-blue-500/10 border border-blue-400/20">
+          <div className="pt-2 p-2 rounded-lg bg-blue-500/10 border border-blue-400/20">
             <p className="text-xs text-blue-200/90 flex items-start gap-1.5">
               <Icon
                 name="idea"
                 size={14}
-                className="text-blue-300 flex-shrink-0 mt-0.5"
+                className="text-blue-300 flex-shrink-0 pt-0.5"
               />
               <span>
                 <strong>Tip:</strong> Select "Auto" to let the system choose the
@@ -341,15 +355,15 @@ const KokoroTTSConfig = ({
         )}
         {!isSetupMode && (
           <>
-            <p className="text-xs text-white/50">
+            <p className="text-xs vassist-text-muted">
               Quantization is automatic: WebGPU uses fp32 (~350MB), WASM uses q8
               (~86MB)
             </p>
-            <div className="mt-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-start gap-2">
+            <div className="pt-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-start gap-2">
               <Icon
                 name="warning"
                 size={16}
-                className="text-yellow-200/90 flex-shrink-0 mt-0.5"
+                className="text-yellow-200/90 flex-shrink-0 pt-0.5"
               />
               <p className="text-xs text-yellow-200/90 leading-relaxed">
                 <strong>Performance Note:</strong> If the model or page lags,
@@ -365,19 +379,22 @@ const KokoroTTSConfig = ({
       </div>
 
       {/* Advanced Settings Collapsible - Collapsed by default now */}
-      <details className="space-y-2">
-        <summary className="text-sm font-medium text-white/70 cursor-pointer hover:text-white/90">
-          Advanced Settings{" "}
-          {isSetupMode && (
-            <span className="text-xs text-white/60">(Optional)</span>
-          )}
-        </summary>
-
-        <div className="space-y-4 pt-2">
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/90">
-              Model ID
-            </label>
+      <SettingsDisclosure
+        title={
+          <>
+            Advanced Settings{" "}
+            {isSetupMode && (
+              <span className="text-xs vassist-text-muted">(Optional)</span>
+            )}
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4 pt-2">
+          <SettingsRow
+            label="Model ID"
+            description="HuggingFace model ID (Leave empty to use default: onnx-community/Kokoro-82M-v1.0-ONNX)"
+            layout="stacked"
+          >
             <Input
               type="text"
               value={config.modelId || ""}
@@ -385,20 +402,16 @@ const KokoroTTSConfig = ({
               placeholder="onnx-community/Kokoro-82M-v1.0-ONNX"
               variant={isLightBackground ? "dark" : "default"}
             />
-            <p className="text-xs text-white/50">
-              HuggingFace model ID (Leave empty to use default:
-              onnx-community/Kokoro-82M-v1.0-ONNX)
-            </p>
-          </div>
+          </SettingsRow>
 
           {/* Keep Model Loaded */}
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <label className="flex items-center justify-between cursor-pointer">
               <div>
-                <span className="text-sm font-medium text-white/90">
+                <span className="text-sm font-medium vassist-text-primary">
                   Keep Model Loaded
                 </span>
-                <p className="text-xs text-white/50">
+                <p className="text-xs vassist-text-muted">
                   Periodically generates audio to keep model in memory (prevents
                   unload lag)
                 </p>
@@ -410,21 +423,21 @@ const KokoroTTSConfig = ({
             </label>
           </div>
         </div>
-      </details>
+      </SettingsDisclosure>
 
       {/* Initialization & Status */}
       {kokoroStatus && onInitialize && (
-        <div className="space-y-3 pt-2 border-t border-white/10">
+        <div className="flex flex-col gap-3 pt-2">
           {isSetupMode && !kokoroStatus.initialized && (
             <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-400/30">
               <div className="flex items-start gap-2">
                 <Icon
                   name="download"
                   size={18}
-                  className="text-purple-400 flex-shrink-0 mt-0.5"
+                  className="text-purple-400 flex-shrink-0 pt-0.5"
                 />
                 <div className="text-sm text-purple-100">
-                  <p className="font-semibold mb-1">
+                  <p className="font-semibold pb-1">
                     Step 4: Download the Model
                   </p>
                   <p className="text-purple-200/90">
@@ -502,14 +515,14 @@ const KokoroTTSConfig = ({
 
           {/* Progress Bar */}
           {kokoroStatus.downloading && (
-            <div className="space-y-1">
-              <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+            <div className="flex flex-col gap-1">
+              <div className="w-full bg-current/10 rounded-full h-2 overflow-hidden">
                 <div
                   className="bg-blue-500 h-full transition-all duration-300 rounded-full"
                   style={{ width: `${kokoroStatus.progress}%` }}
                 />
               </div>
-              <p className="text-xs text-white/60 text-center">
+              <p className="text-xs vassist-text-muted text-center">
                 {kokoroStatus.progress.toFixed(1)}% - {kokoroStatus.details}
               </p>
             </div>
@@ -534,10 +547,10 @@ const KokoroTTSConfig = ({
                 <Icon
                   name="volume"
                   size={18}
-                  className="text-green-400 flex-shrink-0 mt-0.5"
+                  className="text-green-400 flex-shrink-0 pt-0.5"
                 />
                 <div className="text-sm text-green-100">
-                  <p className="font-semibold mb-1">Step 5: Test Your Voice</p>
+                  <p className="font-semibold pb-1">Step 5: Test Your Voice</p>
                   <p className="text-green-200/90">
                     Click "Test Voice" below to hear a sample with your selected
                     voice and speed. This helps you confirm everything is
@@ -580,7 +593,7 @@ const KokoroTTSConfig = ({
             <Icon
               name="info"
               size={14}
-              className="text-blue-300 flex-shrink-0 mt-0.5"
+              className="text-blue-300 flex-shrink-0 pt-0.5"
             />
             <span>
               If you hear gibberish, switch to <strong>WASM backend</strong> or

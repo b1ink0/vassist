@@ -33,6 +33,7 @@ export interface CustomBoundaryInsets {
 }
 
 export interface PositionManagerOptionsLike {
+  preview?: boolean;
   boundaryPadding?: number;
   allowPartialOffscreen?: boolean;
   partialOffscreenAmount?: number;

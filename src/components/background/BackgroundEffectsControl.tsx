@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { BackgroundImageEffects } from "../../config/uiConfig";
 import { Select } from "../ui";
+import RangeSlider from "../ui/RangeSlider";
+import SettingsDisclosure from "../settings/shared/SettingsDisclosure";
 
 type EffectKey = keyof BackgroundImageEffects;
 type EffectPreset =
@@ -152,42 +154,34 @@ export default function BackgroundEffectsControl({
   };
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-white/10 bg-white/5 p-3">
-      <label className="flex flex-col gap-1 text-xs text-white/80">
+    <div className="flex flex-col gap-2 rounded-lg border border-current/10 bg-current/5 p-3">
+      <label className="flex flex-col gap-1 text-xs vassist-text-secondary">
         <span className="flex items-center justify-between gap-2">
           <span>Background brightness</span>
           <span>{draftEffects.brightnessPercent}%</span>
         </span>
-        <input
-          type="range"
+        <RangeSlider
           aria-label="Background brightness"
           min={20}
           max={100}
           step={5}
           value={draftEffects.brightnessPercent}
-          onChange={(event) =>
-            changeEffect("brightnessPercent", Number(event.target.value))
+          onValueChange={(nextValue) =>
+            changeEffect("brightnessPercent", nextValue)
           }
           onPointerUp={commitEffects}
           onKeyUp={commitEffects}
           onBlur={commitEffects}
-          className="w-full accent-current"
         />
       </label>
 
-      <button
-        type="button"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
-        className="flex items-center justify-between text-left text-xs font-medium text-white/75 hover:text-white"
+      <SettingsDisclosure
+        title="More image effects"
+        open={expanded}
+        onOpenChange={setExpanded}
       >
-        <span>More image effects</span>
-        <span>{expanded ? "Hide" : "Show"}</span>
-      </button>
-
-      {expanded && (
-        <div className="flex flex-col gap-3 border-t border-white/10 pt-3">
-          <label className="flex items-center justify-between gap-2 text-xs text-white/80">
+        <div className="flex flex-col gap-3 border-t border-current/10 pt-3">
+          <label className="flex items-center justify-between gap-2 text-xs vassist-text-secondary">
             <span>Quick effect</span>
             <Select
               variant={isLightBackground ? "dark" : "default"}
@@ -211,7 +205,7 @@ export default function BackgroundEffectsControl({
           {effectSliders.map((effect) => (
             <label
               key={effect.key}
-              className="flex flex-col gap-1 text-xs text-white/80"
+              className="flex flex-col gap-1 text-xs vassist-text-secondary"
             >
               <span className="flex items-center justify-between gap-2">
                 <span>{effect.label}</span>
@@ -220,25 +214,23 @@ export default function BackgroundEffectsControl({
                   {effect.unit}
                 </span>
               </span>
-              <input
-                type="range"
+              <RangeSlider
                 aria-label={effect.label}
                 min={effect.min}
                 max={effect.max}
                 step={effect.step}
                 value={draftEffects[effect.key]}
-                onChange={(event) =>
-                  changeEffect(effect.key, Number(event.target.value))
+                onValueChange={(nextValue) =>
+                  changeEffect(effect.key, nextValue)
                 }
                 onPointerUp={commitEffects}
                 onKeyUp={commitEffects}
                 onBlur={commitEffects}
-                className="w-full accent-current"
               />
             </label>
           ))}
         </div>
-      )}
+      </SettingsDisclosure>
     </div>
   );
 }
