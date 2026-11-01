@@ -3,9 +3,19 @@
  * Handles delete confirmations (chat, model, motion) and edit operations.
  */
 
-import { useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useState, useRef, useEffect, type KeyboardEvent } from "react";
 import { cn } from "../../utils/cn";
-import { Button } from "../ui";
+import { Button, Input } from "../ui";
+import { Dialog as BaseDialog } from "@base-ui/react/dialog";
+import { Icon } from "../icons";
+import { useEmbedHost } from "../../embed/EmbedHostContext";
+import { resolveConfiguredPortalContainer } from "../../embed/portalContainers";
+import { resolvePortalContainer } from "../../utils/resolvePortalContainer";
+import { useSpatialHtmlPanelHost } from "../xr/SpatialHtmlPanelContext";
+import { useSettingsTheme } from "../settings/SettingsThemeContext";
+import SettingsScrollArea from "../settings/shared/SettingsScrollArea";
+import { useUIConfig } from "../../hooks/config/useConfigUI";
+import { isDesktop } from "../../utils/PlatformUtils";
 
 type DialogType = "delete" | "edit" | "confirm" | "input";
 
@@ -24,6 +34,8 @@ interface DialogProps {
   cancelLabel?: string;
   onConfirm: (itemId?: string, value?: string) => Promise<void> | void;
   onCancel: () => void;
+  /** Clear caller-owned dialog state after the successful exit animation. */
+  onConfirmComplete?: () => void;
 }
 
 const getErrorMessage = (error: unknown): string => {
@@ -69,10 +81,30 @@ const Dialog = ({
   cancelLabel = "Cancel",
   onConfirm,
   onCancel,
+  onConfirmComplete,
 }: DialogProps) => {
+  const { embedConfig } = useEmbedHost();
+  const spatialHost = useSpatialHtmlPanelHost();
+  const settingsTheme = useSettingsTheme();
+  const uiConfig = useUIConfig();
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const portalContainer =
+    spatialHost ??
+    resolveConfiguredPortalContainer(
+      embedConfig,
+      "popovers",
+      resolvePortalContainer(undefined, anchor),
+    );
   const [inputValue, setInputValue] = useState(initialValue);
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [open, setOpen] = useState(true);
+  const cancelled = useRef(false);
+  useEffect(() => {
+    if (animationClass.includes("animate-fade-out")) setOpen(false);
+  }, [animationClass]);
 
   /**
    * Handles confirm button click.
@@ -92,106 +124,138 @@ const Dialog = ({
         await onConfirm(itemId);
       }
       setIsProcessing(false);
+      if (onConfirmComplete) setOpen(false);
     } catch (error: unknown) {
       setErrorMessage(getErrorMessage(error));
       setIsProcessing(false);
     }
   };
 
-  /**
-   * Handles backdrop click.
-   */
-  const handleBackdropClick = (e: MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    if (!isProcessing) {
-      onCancel();
-    }
-  };
-
-  /**
-   * Handles dialog content click (prevents backdrop close).
-   */
-  const handleDialogClick = (e: MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-  };
-
-  const isErrorConfirm = confirmStyle === "error";
-
+  const inputDialog = type === "edit" || type === "input";
+  const theme =
+    settingsTheme ??
+    (isLightBackground
+      ? "dark"
+      : isDesktop && uiConfig.desktopMode.mode === "floating-app"
+        ? "opaque-light"
+        : "light");
   return (
-    <div
-      className={cn(
-        "vassist-modal-backdrop absolute inset-0 flex items-center justify-center z-50 p-6",
-        animationClass,
-      )}
-      onClick={handleBackdropClick}
+    <BaseDialog.Root
+      open={open}
+      disablePointerDismissal={isProcessing}
+      onOpenChange={(open, event) => {
+        if (!open) {
+          if (isProcessing) event.cancel();
+          else {
+            cancelled.current = true;
+            setOpen(false);
+          }
+        }
+      }}
+      onOpenChangeComplete={(isOpen) => {
+        if (!isOpen) {
+          if (cancelled.current) onCancel();
+          else onConfirmComplete?.();
+        }
+      }}
     >
-      <div
-        className={cn(
-          "relative p-6 rounded-2xl w-full max-w-sm glass-container",
-          isLightBackground && "glass-container-dark",
-        )}
-        onClick={handleDialogClick}
-      >
-        <h3 className="vassist-text-primary text-lg font-semibold mb-2">
-          {title}
-        </h3>
-
-        {message && (
-          <p className="vassist-text-secondary text-sm mb-6">{message}</p>
-        )}
-
-        {/* Error message */}
-        {errorMessage && (
-          <div className="vassist-dialog-error mb-4 p-3 rounded-lg">
-            <p className="vassist-text-primary text-sm">{errorMessage}</p>
-          </div>
-        )}
-
-        {/* Input field for edit/input types */}
-        {(type === "edit" || type === "input") && (
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            placeholder={inputPlaceholder}
-            className="glass-input w-full mb-4"
-            maxLength={inputMaxLength}
-            autoFocus
-            disabled={isProcessing}
-            onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-              if (e.key === "Enter") handleConfirm();
-              if (e.key === "Escape") onCancel();
-            }}
-          />
-        )}
-
-        {/* Action buttons */}
-        <div className="flex gap-3 justify-end">
-          <Button
-            onClick={onCancel}
-            disabled={isProcessing}
-            variant={isLightBackground ? "dark" : "default"}
-            className="px-2 md:px-4 py-2 rounded-lg text-sm"
+      <span ref={setAnchor} />
+      <BaseDialog.Portal container={portalContainer}>
+        <BaseDialog.Backdrop
+          className={cn(
+            "settings-dialog-backdrop fixed inset-0 z-[10100] bg-black/45 backdrop-blur-sm",
+          )}
+        />
+        <BaseDialog.Viewport className="fixed inset-0 z-[10101] flex items-center justify-center overflow-hidden p-4">
+          <BaseDialog.Popup
+            initialFocus={inputDialog ? inputRef : cancelRef}
+            className={cn(
+              "settings-dialog settings-control-popup flex max-h-full w-full max-w-sm flex-col overflow-hidden rounded-2xl border shadow-xl outline-none",
+              "settings-" + theme,
+            )}
           >
-            {cancelLabel}
-          </Button>
-          <Button
-            onClick={handleConfirm}
-            disabled={
-              isProcessing ||
-              ((type === "edit" || type === "input") && !inputValue.trim())
-            }
-            variant={
-              isErrorConfirm ? "error" : isLightBackground ? "dark" : "default"
-            }
-            className="px-2 md:px-4 py-2 rounded-lg text-sm font-medium"
-          >
-            {isProcessing ? "Processing..." : confirmLabel}
-          </Button>
-        </div>
-      </div>
-    </div>
+            <SettingsScrollArea
+              className="max-h-[min(36rem,calc(100dvh-2rem))]"
+              contentClassName="flex flex-col gap-4 p-5"
+            >
+              <div className="flex items-center gap-3">
+                <Icon
+                  name={
+                    type === "delete" ? "trash" : inputDialog ? "edit" : "info"
+                  }
+                  size={18}
+                  className="text-current"
+                />
+                <BaseDialog.Title className="min-w-0 flex-1 text-base font-semibold">
+                  {title}
+                </BaseDialog.Title>
+              </div>
+              {message && (
+                <BaseDialog.Description className="text-sm opacity-65">
+                  {message}
+                </BaseDialog.Description>
+              )}
+              {errorMessage && (
+                <p
+                  role="alert"
+                  className="rounded-lg border border-current/15 bg-current/5 p-3 text-sm"
+                >
+                  {errorMessage}
+                </p>
+              )}
+              {inputDialog && (
+                <Input
+                  ref={inputRef}
+                  disableDebounce
+                  value={inputValue}
+                  onChange={(event) => setInputValue(event.target.value)}
+                  placeholder={inputPlaceholder}
+                  aria-label={inputPlaceholder || title}
+                  maxLength={inputMaxLength}
+                  disabled={isProcessing}
+                  onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void handleConfirm();
+                    }
+                  }}
+                />
+              )}
+              <div className="flex justify-end gap-2">
+                <BaseDialog.Close
+                  render={<Button variant="ghost" ref={cancelRef} />}
+                  disabled={isProcessing}
+                >
+                  {cancelLabel}
+                </BaseDialog.Close>
+                <Button
+                  onClick={() => void handleConfirm()}
+                  disabled={isProcessing || (inputDialog && !inputValue.trim())}
+                  variant={
+                    confirmStyle === "error" || type === "delete"
+                      ? "error"
+                      : "ghost"
+                  }
+                >
+                  {isProcessing ? (
+                    <>
+                      <Icon
+                        name="loading-2"
+                        size={14}
+                        className="animate-spin"
+                      />
+                      Processing…
+                    </>
+                  ) : (
+                    confirmLabel
+                  )}
+                </Button>
+              </div>
+            </SettingsScrollArea>
+          </BaseDialog.Popup>
+        </BaseDialog.Viewport>
+      </BaseDialog.Portal>
+    </BaseDialog.Root>
   );
 };
-
 export default Dialog;

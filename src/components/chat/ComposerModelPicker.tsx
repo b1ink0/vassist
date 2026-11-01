@@ -7,7 +7,6 @@ import {
   getAvailableAIProviders,
   isRemoteAIProvider,
   getProviderDisplayName,
-  thinkingEffortOptions,
 } from "../../config/aiConfig";
 import {
   useAIConfig,
@@ -18,6 +17,7 @@ import { useDesktopComposerModel } from "../../hooks/useDesktopComposerModel";
 import { isAndroid, isDesktop, isInputWindow } from "../../utils/PlatformUtils";
 import { ComposerMenu } from "./ComposerMenu";
 import { Select } from "../ui";
+import ThinkingControl from "../ui/ThinkingControl";
 
 import { useEmbedHost } from "../../embed/EmbedHostContext";
 import {
@@ -30,13 +30,6 @@ import { Icon } from "../icons";
 import { dispatchOpenSettingsCommand } from "../../embed/hostCommands";
 
 const providers = getAvailableAIProviders({ isAndroid, isDesktop });
-const thinkingOptions = [
-  { value: "off", label: "Off" },
-  ...thinkingEffortOptions.map((option) => ({
-    ...option,
-    value: option.value || "auto",
-  })),
-];
 
 export function ComposerModelPicker({
   isLightBackground,
@@ -198,44 +191,10 @@ export function ComposerModelPicker({
             />
           )}
 
-          <fieldset className="flex min-w-0 flex-col gap-2 border-t border-current/10 px-1 py-2">
-            <legend className="sr-only">Thinking effort</legend>
-            <div className="flex items-center justify-between px-1 text-xs">
-              <span className="font-medium">Thinking</span>
-              <span className="opacity-50">
-                {current.thinkingEnabled ? "More depth" : "Direct response"}
-              </span>
-            </div>
-            <div className="flex min-w-0 items-center gap-0.5 rounded-xl bg-current/5 p-0.5">
-              {thinkingOptions.map((option) => {
-                return (
-                  <label
-                    key={option.value}
-                    className="min-w-0 flex-1 cursor-pointer text-center"
-                  >
-                    <input
-                      type="radio"
-                      name="composer-thinking-effort"
-                      aria-label={
-                        option.label === "Off"
-                          ? "Thinking off"
-                          : option.label === "Auto"
-                            ? "Thinking auto"
-                            : option.label + " thinking effort"
-                      }
-                      value={option.value}
-                      checked={selectedEffort === option.value}
-                      onChange={() => update("thinking", option.value)}
-                      className="peer sr-only"
-                    />
-                    <span className="block rounded-lg py-1.5 text-[10px] font-medium opacity-55 transition-all hover:bg-current/10 peer-checked:bg-current/15 peer-checked:opacity-100 peer-focus-visible:outline peer-focus-visible:outline-1 peer-focus-visible:outline-offset-2">
-                      {option.label === "Medium" ? "Med" : option.label}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
+          <ThinkingControl
+            value={selectedEffort}
+            onChange={(value) => update("thinking", value)}
+          />
         </div>
       </ComposerMenu>
     </div>

@@ -1,3 +1,5 @@
+import SettingsListItem from "../shared/SettingsListItem";
+import SettingsScrollArea from "../shared/SettingsScrollArea";
 import { useEffect, useMemo, useState } from "react";
 import type { ElectronLlamaServerAPI } from "../../../types/electron";
 import { Button, Select } from "../../ui";
@@ -59,6 +61,8 @@ interface RuntimeStatus {
   installedBackends?: string[];
   build?: string;
   platformKey?: string;
+  recommendedBuild?: string;
+  installing?: boolean;
 }
 
 interface RuntimeProgress {
@@ -80,13 +84,6 @@ interface LlamaServerRuntimeManagerProps {
   selectorLabel?: string;
   testIdPrefix?: string;
 }
-
-const fallbackPlatform = () =>
-  navigator.userAgent.includes("Mac")
-    ? "mac-arm64"
-    : navigator.userAgent.includes("Linux")
-      ? "linux-x64"
-      : "win-x64";
 
 const LlamaServerRuntimeManager = ({
   api,
@@ -110,8 +107,10 @@ const LlamaServerRuntimeManager = ({
   const [progress, setProgress] = useState<RuntimeProgress | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [latestBuild, setLatestBuild] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState("");
 
   const refreshStatus = () => {
+    setStatusError("");
     const request = api?.getStatus?.();
     return request
       ?.then((status) => {
@@ -119,7 +118,13 @@ const LlamaServerRuntimeManager = ({
           setRuntimeStatus(status as RuntimeStatus);
         }
       })
-      .catch(() => {});
+      .catch((error) =>
+        setStatusError(
+          error instanceof Error
+            ? error.message
+            : "Unable to read runtime status",
+        ),
+      );
   };
 
   useEffect(() => {
@@ -184,9 +189,9 @@ const LlamaServerRuntimeManager = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshTrigger]);
 
-  const platformKey = runtimeStatus?.platformKey ?? fallbackPlatform();
+  const platformKey = runtimeStatus?.platformKey;
   const runtimePacks = useMemo(
-    () => packs[platformKey] ?? [],
+    () => (platformKey ? (packs[platformKey] ?? []) : []),
     [packs, platformKey],
   );
   const backendOptions = useMemo(() => {
@@ -224,12 +229,36 @@ const LlamaServerRuntimeManager = ({
   };
 
   return (
-    <div className="space-y-2">
-      <label className="mb-1 block text-xs font-medium text-white/90">
-        {selectorLabel} ({runtimeStatus?.build ?? "pin pending"})
+    <div className="flex flex-col gap-2">
+      <label className="pb-1 block text-xs font-medium vassist-text-primary">
+        {selectorLabel}
+        {runtimeStatus?.build ? ` (${runtimeStatus.build})` : ""}
       </label>
+      {(statusError || !platformKey) && (
+        <div
+          className="flex items-center justify-between gap-2 text-xs vassist-text-secondary"
+          role={statusError ? "alert" : "status"}
+        >
+          <span>
+            {statusError ||
+              (api?.getStatus
+                ? "Reading runtime availability…"
+                : "Runtime management is unavailable in this host.")}
+          </span>
+          {api?.getStatus && (
+            <Button variant="ghost" onClick={() => void refreshStatus()}>
+              Refresh
+            </Button>
+          )}
+        </div>
+      )}
+      {platformKey && runtimePacks.length === 0 && (
+        <p className="text-xs vassist-text-secondary">
+          No runtime packs are available for {platformKey}.
+        </p>
+      )}
       {runtimeChannel && onRuntimeChannelChange && (
-        <div className="space-y-1">
+        <div className="flex flex-col gap-1">
           <Select
             data-testid={`${testIdPrefix}-version-select`}
             value={runtimeChannel}
@@ -240,7 +269,7 @@ const LlamaServerRuntimeManager = ({
             options={[
               {
                 value: "pinned",
-                label: `Recommended (b11570)${runtimeStatus?.build === "b11570" ? " · installed" : ""}`,
+                label: `Recommended${runtimeStatus?.recommendedBuild ? " (" + runtimeStatus.recommendedBuild + ")" : ""}${runtimeStatus?.recommendedBuild && runtimeStatus.build === runtimeStatus.recommendedBuild ? " · installed" : ""}`,
               },
               {
                 value: "latest",
@@ -248,7 +277,7 @@ const LlamaServerRuntimeManager = ({
               },
             ]}
           />
-          <p className="text-[11px] text-white/50">
+          <p className="text-[11px] vassist-text-muted">
             Latest uses the newest official release and may be less tested.
           </p>
         </div>
@@ -263,68 +292,51 @@ const LlamaServerRuntimeManager = ({
         />
       )}
 
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2">
         {runtimePacks.map((pack) => {
           const installed = runtimeStatus?.installedBackends?.includes(pack.id);
           const installedForSelectedBuild =
             installed &&
             (!runtimeChannel ||
               (runtimeChannel === "pinned"
-                ? runtimeStatus?.build === "b11570"
+                ? !runtimeStatus?.recommendedBuild ||
+                  runtimeStatus.build === runtimeStatus.recommendedBuild
                 : !latestBuild || runtimeStatus?.build === latestBuild));
           const installingThis = installing === pack.id;
           const isActive =
             installed && showBackendSelector && selectedBackend === pack.id;
           return (
-            <div
+            <SettingsListItem
               key={pack.id}
-              className={cn(
-                "rounded-lg border bg-white/5 p-2 transition-colors md:p-3",
-                installingThis ? "border-white/30" : "border-white/10",
-              )}
-            >
-              <div className="mb-1.5 flex items-center justify-between">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="truncate text-sm font-medium text-white/90">
-                    {pack.title}
-                  </span>
+              title={
+                <span className="flex items-center gap-2">
+                  {pack.title}
                   {isActive && (
-                    <span className="flex-shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-medium text-white/70">
+                    <span className="rounded bg-current/10 px-1.5 py-0.5 text-[10px]">
                       Active
                     </span>
                   )}
-                </div>
-              </div>
-
-              {installingThis ? (
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs">
-                    <span className="truncate text-white/70">
-                      {progress?.status || "Downloading..."}
-                    </span>
-                    <span className="text-white/70">
-                      {progress ? `${Math.round(progress.percent)}%` : ""}
-                    </span>
-                  </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                    <div
-                      className="h-full bg-white/40 transition-all duration-300"
-                      style={{ width: `${progress?.percent ?? 0}%` }}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-xs text-white/50">
-                    {installedForSelectedBuild
-                      ? "Installed"
-                      : installed
-                        ? `Installed ${runtimeStatus?.build}; update available`
-                        : `Download ${pack.size}`}
-                  </span>
+                </span>
+              }
+              selected={Boolean(isActive)}
+              description={
+                installingThis
+                  ? undefined
+                  : installedForSelectedBuild
+                    ? "Installed"
+                    : installed
+                      ? "Installed " +
+                        runtimeStatus?.build +
+                        "; update available"
+                      : "Download " + pack.size
+              }
+              actions={
+                installingThis ? undefined : (
                   <div className="flex flex-shrink-0 gap-1">
                     {installedForSelectedBuild ? (
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         type="button"
                         onClick={() => {
                           if (onRequestDeleteBackend)
@@ -335,23 +347,47 @@ const LlamaServerRuntimeManager = ({
                           !onRequestDeleteBackend && !api?.deleteBackend
                         }
                         data-testid={`${testIdPrefix}-delete-${pack.id}`}
-                        className="flex flex-shrink-0 items-center gap-1 rounded bg-white/10 px-2 py-1 text-xs font-medium text-white/80 transition-colors hover:bg-white/20 disabled:opacity-40"
+                        className="shrink-0"
                       >
                         <Icon name="trash" size={11} />
                         <span>Delete</span>
-                      </button>
+                      </Button>
                     ) : (
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         type="button"
                         onClick={() => void install(pack.id)}
-                        disabled={Boolean(installing)}
+                        disabled={
+                          Boolean(installing || runtimeStatus?.installing) ||
+                          !api?.install
+                        }
                         data-testid={`${testIdPrefix}-download-${pack.id}`}
-                        className="flex flex-shrink-0 items-center gap-1 rounded bg-white/10 px-2 py-1 text-xs font-medium text-white/90 transition-colors hover:bg-white/20 disabled:opacity-40"
+                        className="shrink-0"
                       >
                         <Icon name="download" size={11} />
                         <span>{installed ? "Update" : "Download"}</span>
-                      </button>
+                      </Button>
                     )}
+                  </div>
+                )
+              }
+            >
+              {installingThis && (
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="truncate vassist-text-secondary">
+                      {progress?.status || "Downloading..."}
+                    </span>
+                    <span className="vassist-text-secondary">
+                      {progress ? `${Math.round(progress.percent)}%` : ""}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-current/10">
+                    <div
+                      className="h-full bg-current/40 transition-all duration-300"
+                      style={{ width: `${progress?.percent ?? 0}%` }}
+                    />
                   </div>
                 </div>
               )}
@@ -361,18 +397,18 @@ const LlamaServerRuntimeManager = ({
                   target="_blank"
                   rel="noreferrer noopener"
                   className={cn(
-                    "mt-1.5 inline-block text-[11px] underline opacity-75 hover:opacity-100",
+                    "pt-1.5 inline-block text-[11px] underline opacity-75 hover:opacity-100",
                     isLightBackground ? "text-black/70" : "glass-text",
                   )}
                 >
                   {pack.requiresLink.label}
                 </a>
               )}
-            </div>
+            </SettingsListItem>
           );
         })}
         {(logs.length > 0 || progress) && (
-          <div className="max-h-24 overflow-y-auto whitespace-pre-wrap rounded bg-black/30 p-2 font-mono text-[10px] text-white/60">
+          <SettingsScrollArea className="max-h-24 overflow-y-auto whitespace-pre-wrap rounded bg-black/30 p-2 font-mono text-[10px] vassist-text-muted">
             {(progress
               ? [
                   `[progress] ${progress.status} ${Math.round(progress.percent)}%`,
@@ -383,7 +419,7 @@ const LlamaServerRuntimeManager = ({
               .map((line, index) => (
                 <div key={`${index}-${line.slice(0, 10)}`}>{line}</div>
               ))}
-          </div>
+          </SettingsScrollArea>
         )}
       </div>
       {pendingDelete && (
@@ -393,12 +429,12 @@ const LlamaServerRuntimeManager = ({
           message={`Delete the installed ${pendingDelete} runtime?`}
           isLightBackground={isLightBackground}
           onCancel={() => setPendingDelete(null)}
+          onConfirmComplete={() => setPendingDelete(null)}
           onConfirm={async () => {
             if (!api?.deleteBackend)
               throw new Error("Runtime deletion is unavailable");
             await api.deleteBackend(pendingDelete);
             refreshStatus();
-            setPendingDelete(null);
           }}
         />
       )}

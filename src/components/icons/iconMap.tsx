@@ -1,6 +1,5 @@
 /**
- * Icon Map - Heroicons (Professional Icon Library by Tailwind)
- * Maps icon names to Heroicons solid (filled) components
+ * Icon Map
  */
 
 import * as HeroIconsSolid from "@heroicons/react/24/solid";
@@ -11,18 +10,19 @@ import {
   LuAudioLines,
   LuScreenShare,
   LuScreenShareOff,
-  LuPanelLeftOpen,
-  LuPanelLeftClose,
   LuEllipsis,
-  LuShield,
   LuMonitor,
 } from "react-icons/lu";
 import { HiDotsHorizontal } from "react-icons/hi";
 
-import { BsHeadsetVr, BsIncognito } from "react-icons/bs";
+import { BsHeadsetVr, BsIncognito, BsFillLayersFill } from "react-icons/bs";
 import { MdViewInAr } from "react-icons/md";
 import { PiSlidersHorizontal } from "react-icons/pi";
-import { TbLayoutSidebarFilled, TbLayoutSidebar } from "react-icons/tb";
+import {
+  TbLayoutSidebarFilled,
+  TbLayoutSidebar,
+  TbPrompt,
+} from "react-icons/tb";
 
 export const iconMap = {
   "sidebar-open": TbLayoutSidebarFilled,
@@ -185,6 +185,8 @@ export const iconMap = {
   "sticker-border": HeroIconsSolid.Square2StackIcon,
   parallax: HeroIconsSolid.ArrowsRightLeftIcon,
   "avatar-shadow": HeroIconsSolid.Square3Stack3DIcon,
+  layers: BsFillLayersFill,
+  prompt: TbPrompt,
 };
 
 export default iconMap;

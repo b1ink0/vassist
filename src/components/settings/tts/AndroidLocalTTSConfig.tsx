@@ -1,5 +1,6 @@
 import AndroidTtsPackDownloader from "./AndroidTtsPackDownloader";
 import type { AndroidAPI } from "../../../types/android";
+import RangeSlider from "../../ui/RangeSlider";
 
 interface AndroidLocalTTSConfigProps {
   androidAPI: AndroidAPI | null;
@@ -26,7 +27,7 @@ const AndroidLocalTTSConfig = ({
   onRequestDeleteDialog,
   externalDeleteTick,
 }: AndroidLocalTTSConfigProps) => (
-  <div className="space-y-4">
+  <div className="flex flex-col gap-4">
     <AndroidTtsPackDownloader
       androidAPI={androidAPI}
       isLightBackground={isLightBackground}
@@ -37,22 +38,23 @@ const AndroidLocalTTSConfig = ({
       onRequestDeleteDialog={onRequestDeleteDialog}
       externalDeleteTick={externalDeleteTick}
     />
-    <div className="space-y-4 p-2 md:p-4 rounded-lg bg-white/5 border border-white/10">
-      <h4 className="text-sm font-semibold text-white/90">Android Local TTS</h4>
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">Speed</label>
-        <input
-          type="range"
+    <div className="flex flex-col gap-4 settings-section">
+      <h4 className="settings-group-heading">Android Local TTS</h4>
+      <div className="flex flex-col gap-2">
+        <label className="block text-sm font-medium vassist-text-primary">
+          Speed
+        </label>
+        <RangeSlider
+          aria-label="Speed"
           min="0.5"
           max="2.0"
           step="0.1"
           value={speed}
-          onChange={(event) => onSpeedChange(Number(event.target.value))}
-          className="w-full"
+          onValueChange={(nextValue) => onSpeedChange(nextValue)}
         />
-        <span className="text-xs text-white/60">{speed}x</span>
+        <span className="text-xs vassist-text-muted">{speed}x</span>
       </div>
-      <p className="text-xs text-white/50">
+      <p className="text-xs vassist-text-muted">
         Offline voices running locally on your device (CPU via sherpa-onnx)
       </p>
     </div>

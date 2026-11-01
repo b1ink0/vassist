@@ -1,4 +1,5 @@
 import type * as React from "react";
+import type { SettingsPageId } from "../config/settingsNavigation";
 import { createStore } from "zustand/vanilla";
 import { devtools } from "zustand/middleware";
 import defaultChatService, {
@@ -110,6 +111,7 @@ export interface AppStoreState {
   isVoiceMode: boolean;
   isSpeaking: boolean;
   isSettingsPanelOpen: boolean;
+  settingsPage: SettingsPageId;
   isQuickPanelOpen: boolean;
   isHistoryPanelOpen: boolean;
   playingMessageIndex: number | null;
@@ -148,6 +150,7 @@ export interface AppStoreState {
   setIsVoiceMode: React.Dispatch<React.SetStateAction<boolean>>;
   setIsSpeaking: React.Dispatch<React.SetStateAction<boolean>>;
   setIsSettingsPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  setSettingsPage: (page: SettingsPageId) => void;
   setIsQuickPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setIsHistoryPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setPlayingMessageIndex: React.Dispatch<React.SetStateAction<number | null>>;
@@ -492,6 +495,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
           isVoiceMode: false,
           isSpeaking: false,
           isSettingsPanelOpen: false,
+          settingsPage: "appearance",
           isQuickPanelOpen: false,
           isHistoryPanelOpen: false,
           playingMessageIndex: null,
@@ -603,6 +607,7 @@ export const createAppStore = (dependencies: AppStoreDependencies = {}) => {
               ),
             }));
           },
+          setSettingsPage: (settingsPage) => set({ settingsPage }),
           setIsQuickPanelOpen: (value) => {
             set((state) => ({
               isQuickPanelOpen: resolveSetStateAction(

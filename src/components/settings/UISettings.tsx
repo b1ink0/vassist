@@ -5,14 +5,9 @@
  * opening Settings does not mount the complete UI configuration tree.
  */
 
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useRef,
-  useState,
-  type ChangeEvent,
-} from "react";
+import SettingsScrollArea from "./shared/SettingsScrollArea";
+import SettingsLoading from "./shared/SettingsLoading";
+import { lazy, Suspense, useRef, useState, type ChangeEvent } from "react";
 import {
   useConfigUIActions,
   useUIConfig,
@@ -24,7 +19,6 @@ import { isAndroid, isDesktop, isExtension } from "../../utils/PlatformUtils";
 import appDataBackupService, {
   type BackupSelection,
 } from "../../services/storage/AppDataBackupService";
-import { TabBar } from "../ui";
 import Icon from "../icons/Icon";
 import DesktopModeSettings from "./DesktopModeSettings";
 
@@ -43,6 +37,11 @@ const ToolsTab = lazy(() =>
     default: Component,
   })),
 );
+const HelpSettings = lazy(() =>
+  import("./UISettingsTabs").then(({ HelpSettings }) => ({
+    default: HelpSettings,
+  })),
+);
 const MoreTab = lazy(() =>
   import("./UISettingsTabs").then(({ MoreTab: Component }) => ({
     default: Component,
@@ -50,7 +49,7 @@ const MoreTab = lazy(() =>
 );
 
 interface UISettingsProps {
-  requestedSubTab?: import("../../embed/config").VAssistSettingsSubTabId | null;
+  page?: "display" | "chat" | "mode" | "tools" | "data" | undefined;
   isLightBackground?: boolean;
   onRequestResetSetupDialog?: (onConfirm: () => Promise<void> | void) => void;
   onRequestSettingsErrorDialog?: (message: string) => void;
@@ -70,11 +69,9 @@ const DEFAULT_BACKUP_SELECTION: BackupSelection = {
   otherFiles: true,
 };
 
-type UITab = "display" | "chat" | "mode" | "tools";
-
 const UISettings = ({
   isLightBackground = false,
-  requestedSubTab,
+  page = "display",
   onRequestResetSetupDialog,
   onRequestSettingsErrorDialog,
 }: UISettingsProps) => {
@@ -82,15 +79,7 @@ const UISettings = ({
   const { updateUIConfig } = useConfigUIActions();
   const desktopAPI = useDesktopApi();
   const { resetSetup } = useSetup();
-  const [activeSubTab, setActiveSubTab] = useState<UITab>("display");
-  useEffect(() => {
-    if (
-      requestedSubTab === "ui.mode" &&
-      isDesktop &&
-      desktopAPI?.window?.setDesktopMode
-    )
-      setActiveSubTab("mode");
-  }, [requestedSubTab, desktopAPI]);
+  const activeSubTab = page;
   const [isResetting, setIsResetting] = useState(false);
   const [useSelectiveBackup, setUseSelectiveBackup] = useState(false);
   const [backupSelection, setBackupSelection] = useState<BackupSelection>(
@@ -99,44 +88,8 @@ const UISettings = ({
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupStatus, setBackupStatus] = useState("");
   const backupImportInputRef = useRef<HTMLInputElement | null>(null);
-  const [subTabIndicatorStyle, setSubTabIndicatorStyle] = useState({
-    left: 0,
-    width: 0,
-  });
-  const subTabsRef = useRef<Record<UITab, HTMLButtonElement | null>>({
-    display: null,
-    chat: null,
-    mode: null,
-    tools: null,
-  });
-
   const allowPositionSelection = !isAndroid && !isDesktop;
   const showModeTab = isDesktop && !!desktopAPI?.window?.setDesktopMode;
-
-  useEffect(() => {
-    const updateSubTabIndicator = () => {
-      const activeTabElement = subTabsRef.current[activeSubTab];
-      if (!activeTabElement) return;
-
-      setSubTabIndicatorStyle({
-        left: activeTabElement.offsetLeft,
-        width: activeTabElement.offsetWidth,
-      });
-    };
-
-    updateSubTabIndicator();
-    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-    const handleResize = () => {
-      if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(updateSubTabIndicator, 150);
-    };
-
-    window.addEventListener("resize", handleResize);
-    return () => {
-      if (resizeTimer) clearTimeout(resizeTimer);
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [activeSubTab]);
 
   const handleResetSetup = async () => {
     if (isResetting) return;
@@ -231,43 +184,22 @@ const UISettings = ({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="relative">
-        <div
-          className="absolute bottom-0 z-10 h-0.5 bg-white transition-all duration-300 ease-out"
-          style={{
-            left: `${subTabIndicatorStyle.left}px`,
-            width: `${subTabIndicatorStyle.width}px`,
-          }}
-        />
-        <TabBar
-          tabs={[
-            { id: "display", label: "Display" },
-            { id: "chat", label: "Chat" },
-            ...(showModeTab ? [{ id: "mode", label: "Mode" }] : []),
-            { id: "tools", label: "Tools" },
-          ]}
-          activeTab={activeSubTab}
-          onTabChange={(tabId) => setActiveSubTab(tabId as UITab)}
-          size="compact"
-          ariaLabel="UI settings"
-          tabsRef={subTabsRef}
-        />
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <div className="h-full overflow-y-auto scrollbar-glass px-4 py-3 md:px-6 md:py-4">
-          <Suspense
-            fallback={
-              <div className="flex min-h-[220px] items-center justify-center">
-                <Icon
-                  name="loading-2"
-                  size={28}
-                  className="animate-spin text-white/75"
-                />
-              </div>
-            }
-          >
+    <div
+      className={page ? "flex flex-col gap-5" : "flex h-full min-h-0 flex-col"}
+    >
+      <div
+        className={
+          page ? "flex flex-col gap-5" : "min-h-0 flex-1 overflow-hidden"
+        }
+      >
+        <SettingsScrollArea
+          className={
+            page
+              ? "flex flex-col gap-5"
+              : "h-full overflow-y-auto scrollbar-glass px-4 py-3 md:px-6 md:py-4"
+          }
+        >
+          <Suspense fallback={<SettingsLoading />}>
             {activeSubTab === "display" && (
               <DisplayTab
                 {...sharedProps}
@@ -285,30 +217,41 @@ const UISettings = ({
             {activeSubTab === "mode" && showModeTab && (
               <DesktopModeSettings isLightBackground={isLightBackground} />
             )}
-            {activeSubTab === "tools" && (
-              <div className="space-y-6">
-                <ToolsTab {...sharedProps} />
-                <div className="border-t border-white/10 pt-6">
-                  <MoreTab
-                    {...sharedProps}
-                    setUseSelectiveBackup={(checked) =>
-                      setUseSelectiveBackup(checked)
-                    }
-                    useSelectiveBackup={useSelectiveBackup}
-                    backupSelection={backupSelection}
-                    updateBackupSelection={updateBackupSelection}
-                    backupBusy={backupBusy}
-                    backupStatus={backupStatus}
-                    backupImportInputRef={backupImportInputRef}
-                    onExportBackup={() => void handleExportBackup()}
-                    onImportButtonClick={handleImportButtonClick}
-                    onImportBackup={handleImportBackup}
-                  />
-                </div>
+            {(activeSubTab === "tools" || activeSubTab === "data") && (
+              <div className="flex min-w-0 flex-col gap-4">
+                {activeSubTab === "tools" && <ToolsTab {...sharedProps} />}
+                {(!page || activeSubTab === "data") && (
+                  <div className="flex flex-col gap-5">
+                    <HelpSettings
+                      {...sharedProps}
+                      isResetting={isResetting}
+                      onResetSetup={() => {
+                        if (onRequestResetSetupDialog)
+                          onRequestResetSetupDialog(handleResetSetup);
+                        else void handleResetSetup();
+                      }}
+                    />
+                    <MoreTab
+                      {...sharedProps}
+                      setUseSelectiveBackup={(checked) =>
+                        setUseSelectiveBackup(checked)
+                      }
+                      useSelectiveBackup={useSelectiveBackup}
+                      backupSelection={backupSelection}
+                      updateBackupSelection={updateBackupSelection}
+                      backupBusy={backupBusy}
+                      backupStatus={backupStatus}
+                      backupImportInputRef={backupImportInputRef}
+                      onExportBackup={() => void handleExportBackup()}
+                      onImportButtonClick={handleImportButtonClick}
+                      onImportBackup={handleImportBackup}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </Suspense>
-        </div>
+        </SettingsScrollArea>
       </div>
     </div>
   );

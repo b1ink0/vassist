@@ -12,8 +12,9 @@ import {
 } from "react";
 import { Icon } from "../icons";
 import { cn } from "../../utils/cn";
-import { Button, SettingsRow, Card } from "../ui";
+import { Button, SettingsRow } from "../ui";
 import Toggle from "./Toggle";
+import SettingsGroup from "../settings/shared/SettingsGroup";
 
 type ShortcutKey = "openChat" | "toggleMode" | "toggleVisibility";
 
@@ -177,7 +178,7 @@ const ShortcutInput = ({
           "glass-input",
           isLightBackground && "glass-input-dark",
           "flex-1 cursor-pointer transition-all",
-          isRecording && "ring-1 ring-white/20",
+          isRecording && "shadow-[inset_0_0_0_1px_#8886]",
           disabled && "opacity-50 cursor-not-allowed",
         )}
       >
@@ -185,10 +186,10 @@ const ShortcutInput = ({
           className={cn(
             "text-sm",
             isRecording
-              ? "text-white/90"
+              ? "vassist-text-primary"
               : value
-                ? "text-white"
-                : "text-white/40",
+                ? "vassist-text-primary"
+                : "vassist-text-muted",
           )}
         >
           {isRecording ? "Press keys..." : formatKeyCombo(value) || placeholder}
@@ -203,8 +204,8 @@ const ShortcutInput = ({
           className={cn(
             "p-2 transition-colors",
             isLightBackground
-              ? "hover:bg-black/20 text-white/60 hover:text-white"
-              : "hover:bg-white/10 text-white/60 hover:text-white",
+              ? "hover:bg-black/20 vassist-text-muted hover:vassist-text-primary"
+              : "hover:bg-current/10 vassist-text-muted hover:vassist-text-primary",
           )}
           title="Clear shortcut"
         >
@@ -290,7 +291,7 @@ const ShortcutsConfig = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-4">
       {/* Enable/Disable Toggle */}
       <SettingsRow
         label="Enable Keyboard Shortcuts"
@@ -304,20 +305,20 @@ const ShortcutsConfig = ({
       </SettingsRow>
 
       {/* Shortcut Inputs */}
-      <div className="space-y-4 border-t border-white/10 pt-4">
-        <h4 className="text-sm font-semibold text-white mb-3">
-          Shortcut Bindings
-        </h4>
+      <div className="flex flex-col gap-3">
+        <h4 className="settings-group-heading">Shortcut Bindings</h4>
 
         {/* Open Chat Shortcut */}
-        <div className="space-y-2">
-          <label className="text-sm text-white/80 font-medium flex items-center gap-2">
-            <Icon name="message-circle" size={14} className="text-blue-400" />
-            Open Chat
-          </label>
-          <p className="text-xs text-white/50 mb-2">
-            Shortcut to open the chat interface
-          </p>
+        <SettingsRow
+          label={
+            <span className="flex items-center gap-2">
+              <Icon name="message-circle" size={14} className="text-current" />
+              Open Chat
+            </span>
+          }
+          description={<>Shortcut to open the chat interface</>}
+          layout="stacked"
+        >
           <ShortcutInput
             value={localShortcuts.openChat}
             onChange={(value) => handleShortcutChange("openChat", value)}
@@ -326,17 +327,19 @@ const ShortcutsConfig = ({
             isLightBackground={isLightBackground}
             testId="shortcut-input-open-chat"
           />
-        </div>
+        </SettingsRow>
 
         {/* Toggle Mode Shortcut */}
-        <div className="space-y-2">
-          <label className="text-sm text-white/80 font-medium flex items-center gap-2">
-            <Icon name="eye" size={14} className="text-purple-400" />
-            Toggle Avatar
-          </label>
-          <p className="text-xs text-white/50 mb-2">
-            Shortcut to toggle avatar visibility (show/hide)
-          </p>
+        <SettingsRow
+          label={
+            <span className="flex items-center gap-2">
+              <Icon name="eye" size={14} className="text-current" />
+              Toggle Avatar
+            </span>
+          }
+          description={<>Shortcut to toggle avatar visibility (show/hide)</>}
+          layout="stacked"
+        >
           <ShortcutInput
             value={localShortcuts.toggleMode}
             onChange={(value) => handleShortcutChange("toggleMode", value)}
@@ -345,17 +348,23 @@ const ShortcutsConfig = ({
             isLightBackground={isLightBackground}
             testId="shortcut-input-toggle-avatar"
           />
-        </div>
+        </SettingsRow>
 
         {/* Toggle App Visibility Shortcut */}
-        <div className="space-y-2">
-          <label className="text-sm text-white/80 font-medium flex items-center gap-2">
-            <Icon name="eye-off" size={14} className="text-cyan-400" />
-            Toggle App Visibility
-          </label>
-          <p className="text-xs text-white/50 mb-2">
-            Fully hide/unhide the desktop app (same intent as tray Show/Hide)
-          </p>
+        <SettingsRow
+          label={
+            <span className="flex items-center gap-2">
+              <Icon name="eye-off" size={14} className="text-current" />
+              Toggle App Visibility
+            </span>
+          }
+          description={
+            <>
+              Fully hide/unhide the desktop app (same intent as tray Show/Hide)
+            </>
+          }
+          layout="stacked"
+        >
           <ShortcutInput
             value={localShortcuts.toggleVisibility}
             onChange={(value) =>
@@ -366,45 +375,37 @@ const ShortcutsConfig = ({
             isLightBackground={isLightBackground}
             testId="shortcut-input-toggle-visibility"
           />
-        </div>
+        </SettingsRow>
       </div>
 
       {/* Conflict Warning */}
       {conflict && (
-        <Card
-          variant="elevated"
-          padding="none"
-          className="p-3 border-red-500/30 bg-red-900/10 flex items-start gap-2"
-        >
+        <SettingsGroup className="p-3 border-red-500/30 bg-red-900/10 flex items-start gap-2">
           <Icon
             name="alert"
             size={16}
-            className="text-red-400 flex-shrink-0 mt-0.5"
+            className="text-red-400 flex-shrink-0 pt-0.5"
           />
           <div>
             <p className="text-sm text-red-100 font-medium">
               Shortcut Conflict
             </p>
-            <p className="text-xs text-red-200/80 mt-1">{conflict}</p>
+            <p className="text-xs text-red-200/80 pt-1">{conflict}</p>
           </div>
-        </Card>
+        </SettingsGroup>
       )}
 
       {/* Info Box */}
-      <Card
-        variant="elevated"
-        padding="none"
-        className="p-3 border-blue-500/20 bg-blue-500/10"
-      >
+      <SettingsGroup className="p-3 ">
         <div className="flex items-start gap-2">
           <Icon
             name="idea"
             size={14}
-            className="text-blue-300 flex-shrink-0 mt-0.5"
+            className="text-current flex-shrink-0 pt-0.5"
           />
-          <div className="text-xs text-blue-200/90">
-            <p className="font-semibold mb-1">Tips</p>
-            <ul className="space-y-0.5">
+          <div className="text-xs vassist-text-muted">
+            <p className="font-semibold pb-1">Tips</p>
+            <ul className="flex flex-col gap-0.5">
               <li>
                 Use modifier keys (Ctrl, Alt, Shift, Meta) to avoid conflicts
               </li>
@@ -416,7 +417,7 @@ const ShortcutsConfig = ({
             </ul>
           </div>
         </div>
-      </Card>
+      </SettingsGroup>
     </div>
   );
 };

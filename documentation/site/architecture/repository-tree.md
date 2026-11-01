@@ -5,11 +5,11 @@ VAssist repository tree and file metrics.
 ## Totals
 
 - Directories: 208
-- Files: 800
-- Text files counted for metrics: 656
-- Total text lines: 199768
-- Code files counted for metrics: 520
-- Total code lines: 174523
+- Files: 813
+- Text files counted for metrics: 669
+- Total text lines: 200964
+- Code files counted for metrics: 533
+- Total code lines: 175704
 
 ## Line Counts by File Type
 
@@ -17,17 +17,17 @@ VAssist repository tree and file metrics.
 | ------------ | ----------------------- | ----: | ----: |
 | Batch Script | .bat                    |     1 |    94 |
 | C and C++    | .c, .cc, .cpp, .h, .hpp |     7 |  2003 |
-| CSS          | .css, .scss, .less      |     7 |  3384 |
+| CSS          | .css, .scss, .less      |     8 |  3775 |
 | HTML         | .html                   |     5 |   191 |
 | Java         | .java                   |     4 |   215 |
 | JavaScript   | .js, .mjs, .cjs         |     1 |    32 |
 | Kotlin       | .kt                     |    22 | 11438 |
 | Shell Script | (no extension)          |     5 |   654 |
-| TSX          | .tsx                    |   146 | 61627 |
-| TypeScript   | .ts, .mts, .cts         |   322 | 94885 |
+| TSX          | .tsx                    |   156 | 62107 |
+| TypeScript   | .ts, .mts, .cts         |   324 | 95195 |
 | Gradle       | .gradle                 |     7 |   579 |
 | JSON         | .json                   |    19 |   642 |
-| Markdown     | .md                     |    40 |  7242 |
+| Markdown     | .md                     |    40 |  7257 |
 | Other Text   | mixed                   |    40 | 11717 |
 | Plain Text   | (no extension)          |    12 |  4264 |
 | Properties   | .properties             |     2 |    29 |
@@ -46,7 +46,7 @@ VAssist repository tree and file metrics.
 - licenses/: 1 directories, 1 files
 - packages/: 5 directories, 16 files
 - public/: 14 directories, 74 files
-- src/: 66 directories, 349 files
+- src/: 66 directories, 362 files
 - tests/: 9 directories, 57 files
 - tools/: 4 directories, 13 files
 - .gitignore: file
@@ -721,7 +721,13 @@ vassist/
 │   │   │   │   └── STTTTSModelManager.tsx
 │   │   │   ├── shared/
 │   │   │   │   ├── ModelDownloader.tsx
-│   │   │   │   └── RemoteModelPicker.tsx
+│   │   │   │   ├── RemoteModelPicker.tsx
+│   │   │   │   ├── SettingsDisclosure.tsx
+│   │   │   │   ├── SettingsExpander.tsx
+│   │   │   │   ├── SettingsGroup.tsx
+│   │   │   │   ├── SettingsListItem.tsx
+│   │   │   │   ├── SettingsLoading.tsx
+│   │   │   │   └── SettingsScrollArea.tsx
 │   │   │   ├── stt/
 │   │   │   │   ├── AndroidLocalSTTConfig.tsx
 │   │   │   │   ├── ChromeAISTTConfig.tsx
@@ -741,8 +747,11 @@ vassist/
 │   │   │   ├── BackgroundSettings.tsx
 │   │   │   ├── DesktopBackgroundSettings.tsx
 │   │   │   ├── DesktopModeSettings.tsx
+│   │   │   ├── EmotePlaybackSettings.tsx
 │   │   │   ├── LLMSettings.tsx
+│   │   │   ├── SettingsLayout.tsx
 │   │   │   ├── SettingsSubTabContent.tsx
+│   │   │   ├── SettingsThemeContext.ts
 │   │   │   ├── StageSettings.tsx
 │   │   │   ├── STTSettings.tsx
 │   │   │   ├── ThreeDSettings.tsx
@@ -775,9 +784,11 @@ vassist/
 │   │   │   ├── Card.tsx
 │   │   │   ├── index.ts
 │   │   │   ├── Input.tsx
+│   │   │   ├── RangeSlider.tsx
 │   │   │   ├── Select.tsx
 │   │   │   ├── SettingsRow.tsx
 │   │   │   ├── TabBar.tsx
+│   │   │   ├── ThinkingControl.tsx
 │   │   │   └── Tooltip.tsx
 │   │   ├── xr/
 │   │   │   ├── SpatialHtmlPanel.tsx
@@ -803,6 +814,7 @@ vassist/
 │   │   ├── promptConfig.ts
 │   │   ├── sceneConfig.ts
 │   │   ├── serviceEndpoints.ts
+│   │   ├── settingsNavigation.ts
 │   │   ├── stageConfig.ts
 │   │   └── uiConfig.ts
 │   ├── contexts/
@@ -938,6 +950,7 @@ vassist/
 │   │   └── useDesktopStore.ts
 │   ├── styles/
 │   │   ├── markdown.css
+│   │   ├── settings.css
 │   │   ├── streaming-animations.css
 │   │   └── ui-effects.css
 │   ├── testing/

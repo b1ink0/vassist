@@ -877,11 +877,23 @@ const ChatContainer = ({
    * Auto-focuses input when chat is cleared (new chat created).
    */
   useEffect(() => {
-    if (messages.length === 0 && isVisible) {
+    if (
+      messages.length === 0 &&
+      isVisible &&
+      !isSettingsPanelOpen &&
+      !isHistoryPanelOpen &&
+      !isQuickPanelOpen
+    ) {
       const event = new CustomEvent("focusChatInput");
       window.dispatchEvent(event);
     }
-  }, [messages.length, isVisible]);
+  }, [
+    messages.length,
+    isVisible,
+    isSettingsPanelOpen,
+    isHistoryPanelOpen,
+    isQuickPanelOpen,
+  ]);
 
   /**
    * Calculates container position based on button or model position.
@@ -2603,7 +2615,7 @@ const ChatContainer = ({
       androidChatTop -
       androidChatInputHeight +
       40 -
-      (isSettingsPanelOpen || isHistoryPanelOpen ? 0 : androidKeyboardHeight),
+      (isHistoryPanelOpen ? 0 : androidKeyboardHeight),
   );
   const historyDialogs = (
     <Suspense fallback={null}>

@@ -1,3 +1,5 @@
+import SettingsListItem from "../shared/SettingsListItem";
+import SettingsScrollArea from "../shared/SettingsScrollArea";
 import { useCallback, useEffect, useState } from "react";
 import { Icon } from "../../icons";
 import Dialog from "../../common/Dialog";
@@ -81,76 +83,62 @@ const ModelCard = ({
   onDownload,
   onDelete,
 }: ModelCardProps) => (
-  <div
-    className={`p-2 md:p-3 rounded-lg bg-white/5 border transition-colors ${
-      downloading ? "border-white/30" : "border-white/10"
-    }`}
-  >
-    <div className="flex items-center justify-between mb-1.5">
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="text-sm font-medium text-white/90 truncate">
+  <SettingsListItem
+    title={
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="truncate" title={item.title}>
           {item.title}
         </span>
         {item.badge && (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-white/10 text-white/50 flex-shrink-0 truncate max-w-[45%]">
-            {item.badge}
-          </span>
+          <span className="shrink-0 text-[10px] opacity-60">{item.badge}</span>
         )}
-        {item.installed && (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-white/10 text-white/70 flex-shrink-0">
-            Installed
-          </span>
-        )}
-      </div>
-    </div>
-
-    {downloading && progress ? (
-      <div className="space-y-1.5">
-        <div className="flex justify-between text-xs">
-          <span className="text-white/70">{progress.status}</span>
-          <span className="text-white/70">{progress.percent}%</span>
+      </span>
+    }
+    description={
+      item.disabledReason ??
+      (item.installed
+        ? "Installed" +
+          (item.installedSize ? " · " + formatBytes(item.installedSize) : "")
+        : "Download " + item.sizeLabel)
+    }
+    actions={
+      !downloading && (
+        <button
+          type="button"
+          onClick={() =>
+            item.installed ? onDelete(item.id) : onDownload(item.id)
+          }
+          disabled={
+            item.installed
+              ? anyDownloading
+              : anyDownloading || Boolean(item.disabledReason)
+          }
+          className="flex shrink-0 items-center gap-1 rounded-lg bg-current/5 px-2 py-1 text-xs hover:bg-current/10 disabled:opacity-40"
+        >
+          <Icon name={item.installed ? "trash" : "download"} size={12} />
+          {item.installed ? "Delete" : "Download"}
+        </button>
+      )
+    }
+  >
+    {downloading && progress && (
+      <div className="flex flex-col gap-2">
+        <div className="flex justify-between gap-2 text-xs">
+          <span>{progress.status}</span>
+          <span>{progress.percent}%</span>
         </div>
-        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+        <div className="h-1.5 overflow-hidden rounded-full bg-current/10">
           <div
-            className="h-full bg-white/40 transition-all duration-300"
-            style={{ width: `${progress.percent}%` }}
+            className="h-full bg-current/50 transition-all duration-300"
+            style={{ width: progress.percent + "%" }}
           />
         </div>
       </div>
-    ) : (
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-white/50 truncate">
-          {item.disabledReason ??
-            (item.installed && item.installedSize
-              ? `Installed (${formatBytes(item.installedSize)})`
-              : `Download ${item.sizeLabel}`)}
-        </span>
-        {item.installed ? (
-          <button
-            onClick={() => onDelete(item.id)}
-            disabled={anyDownloading}
-            className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white/80 text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0 disabled:opacity-40"
-          >
-            <Icon name="trash" size={11} />
-            <span>Delete</span>
-          </button>
-        ) : (
-          <button
-            onClick={() => onDownload(item.id)}
-            disabled={anyDownloading || Boolean(item.disabledReason)}
-            className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white/90 text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0 disabled:opacity-40"
-          >
-            <Icon name="download" size={11} />
-            <span>Download</span>
-          </button>
-        )}
-      </div>
     )}
-
     {item.footerNote && (
-      <p className="text-[10px] text-white/40 mt-1.5">{item.footerNote}</p>
+      <p className="text-xs vassist-text-muted">{item.footerNote}</p>
     )}
-  </div>
+  </SettingsListItem>
 );
 
 /**
@@ -325,7 +313,6 @@ const WhisperModelDownloader = ({
   const confirmDelete = () => {
     if (!androidAPI || !pendingDeleteId) return;
     const variantId = pendingDeleteId;
-    setPendingDeleteId(null);
 
     try {
       let resultJson: string | undefined;
@@ -356,10 +343,11 @@ const WhisperModelDownloader = ({
         setTimeout(() => setSuccessMessage(""), 3000);
         loadStatus();
       } else {
-        setError(result?.error || "Delete failed");
+        throw new Error(result?.error || "Delete failed");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+      throw err;
     }
   };
 
@@ -417,19 +405,17 @@ const WhisperModelDownloader = ({
   const pendingItem = buildItems().find((i) => i.id === pendingDeleteId);
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <Icon name="microphone" size={16} className="text-white/70" />
-        <h4 className="text-sm font-semibold text-white/90">
-          On-Device Models
-        </h4>
+        <Icon name="microphone" size={16} className="vassist-text-secondary" />
+        <h4 className="settings-group-heading">On-Device Models</h4>
       </div>
 
-      <p className="text-xs text-white/50 px-0.5">
+      <p className="text-xs vassist-text-muted px-0.5">
         Download only the models you need. Nothing is bundled with the app.
       </p>
 
-      <div className="max-h-56 space-y-2 overflow-y-auto rounded-lg border border-white/10 bg-black/10 p-2 scrollbar-glass">
+      <SettingsScrollArea className="max-h-56 flex flex-col gap-2 overflow-y-auto rounded-lg border border-current/10 bg-black/10 p-2 scrollbar-glass">
         {buildItems().map((item) => (
           <ModelCard
             key={item.id}
@@ -441,10 +427,10 @@ const WhisperModelDownloader = ({
             onDelete={requestDelete}
           />
         ))}
-      </div>
+      </SettingsScrollArea>
 
       {successMessage && (
-        <p className="text-xs text-white/60 px-0.5">{successMessage}</p>
+        <p className="text-xs vassist-text-muted px-0.5">{successMessage}</p>
       )}
 
       {error && <p className="text-xs text-red-300/80 px-0.5">{error}</p>}
@@ -456,6 +442,7 @@ const WhisperModelDownloader = ({
           message="This will free up storage on your device."
           confirmLabel="Delete"
           onConfirm={confirmDelete}
+          onConfirmComplete={() => setPendingDeleteId(null)}
           onCancel={() => setPendingDeleteId(null)}
         />
       )}

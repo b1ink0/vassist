@@ -322,7 +322,7 @@
   outline: none;
   background: var(--vassist-surface-elevated);
   border-color: var(--vassist-border-strong-color);
-  box-shadow: 0 0 0 2px var(--vassist-focus-ring-color);
+  box-shadow: inset 0 0 0 1px rgba(150, 150, 150, 0.45);
 }
 
 /* Dark input variant (for light backgrounds) */
@@ -346,7 +346,7 @@
   outline: none;
   background: var(--vassist-dark-glass-elevated);
   border-color: var(--vassist-dark-glass-border-strong);
-  box-shadow: 0 0 0 2px var(--vassist-inverse-focus-ring-color);
+  box-shadow: inset 0 0 0 1px rgba(150, 150, 150, 0.45);
 }
 
 /* Text with enhanced readability */
@@ -1264,8 +1264,8 @@
   box-shadow: none;
 }
 .remote-model-field:has(.remote-model-input:focus-visible) {
-  outline: 1px solid currentColor;
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(150, 150, 150, 0.45);
 }
 .quick-access-indicator {
   display: block;

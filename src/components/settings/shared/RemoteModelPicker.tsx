@@ -5,6 +5,7 @@ import { useEmbedHost } from "../../../embed/EmbedHostContext";
 import { resolveConfiguredPortalContainer } from "../../../embed/portalContainers";
 import AIServiceProxy from "../../../services/proxies/AIServiceProxy";
 import { cn } from "../../../utils/cn";
+import { useSettingsTheme } from "../SettingsThemeContext";
 import { resolvePortalContainer } from "../../../utils/resolvePortalContainer";
 import { Icon } from "../../icons";
 import {
@@ -44,6 +45,7 @@ const RemoteModelPicker = ({
   loadModels: loadModelsOverride,
 }: RemoteModelPickerProps) => {
   const { embedConfig } = useEmbedHost();
+  const settingsTheme = useSettingsTheme();
   const [portalAnchor, setPortalAnchor] = useState<HTMLDivElement | null>(null);
   const [models, setModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -255,6 +257,8 @@ const RemoteModelPicker = ({
                   isLightBackground
                     ? "vassist-popup-surface-inverse"
                     : "vassist-popup-surface",
+                  settingsTheme &&
+                    "settings-control-popup settings-" + settingsTheme,
                 )}
               >
                 <ScrollArea.Root className="flex min-h-0 flex-col overflow-hidden">

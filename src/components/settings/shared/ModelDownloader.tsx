@@ -1,7 +1,8 @@
+import SettingsListItem from "./SettingsListItem";
 import { useState, useEffect, useCallback } from "react";
 import { Icon } from "../../icons";
 import Dialog from "../../common/Dialog";
-import { Button, Card } from "../../ui";
+import { Button } from "../../ui";
 import SttTtsEventService from "../../../services/audio/SttTtsEventService";
 
 interface ModelStatus {
@@ -159,7 +160,6 @@ const ModelDownloader = ({
 
   const confirmDelete = async () => {
     if (!androidAPI) return;
-    setShowDeleteDialog(false);
 
     try {
       const result = JSON.parse(deleteFn()) as {
@@ -171,67 +171,65 @@ const ModelDownloader = ({
         setTimeout(() => setSuccess(""), 3000);
         loadStatus();
       } else {
-        setError(result?.error || "Delete failed");
+        throw new Error(result?.error || "Delete failed");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+      throw err;
     }
   };
 
   if (!status) return null;
 
   return (
-    <Card className="p-2 md:p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <Icon name="download" size={16} className="text-white/70" />
-        <h4 className="text-sm font-semibold text-white/90">{title}</h4>
-      </div>
-
+    <SettingsListItem
+      title={title}
+      description={status.downloaded ? "Installed" : downloadSize}
+      actions={
+        status.downloaded ? (
+          <Button
+            onClick={handleDelete}
+            variant={isLightBackground ? "dark" : "default"}
+            size="sm"
+          >
+            <Icon name="trash" size={12} />
+            <span>Delete Model</span>
+          </Button>
+        ) : (
+          <Button
+            onClick={handleDownload}
+            disabled={downloading}
+            variant={isLightBackground ? "dark" : "default"}
+            size="sm"
+          >
+            {downloading ? (
+              <>
+                <Icon name="loading-2" size={12} className="animate-spin" />
+                <span>Downloading...</span>
+              </>
+            ) : (
+              <>
+                <Icon name="download" size={12} />
+                <span>Download Model ({downloadSize})</span>
+              </>
+            )}
+          </Button>
+        )
+      }
+    >
       {progress && (
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <div className="flex justify-between text-xs">
-            <span className="text-white/70">{progress.status}</span>
-            <span className="text-white/70">{progress.percent}%</span>
+            <span className="vassist-text-secondary">{progress.status}</span>
+            <span className="vassist-text-secondary">{progress.percent}%</span>
           </div>
-          <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+          <div className="w-full h-2 bg-current/10 rounded-full overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-white/40 to-white/60 transition-all duration-300"
               style={{ width: `${progress.percent}%` }}
             />
           </div>
         </div>
-      )}
-
-      {status.downloaded ? (
-        <Button
-          onClick={handleDelete}
-          variant={isLightBackground ? "dark" : "default"}
-          size="sm"
-          className="w-full"
-        >
-          <Icon name="trash" size={12} />
-          <span>Delete Model</span>
-        </Button>
-      ) : (
-        <Button
-          onClick={handleDownload}
-          disabled={downloading}
-          variant={isLightBackground ? "dark" : "default"}
-          size="sm"
-          className="w-full"
-        >
-          {downloading ? (
-            <>
-              <Icon name="loading-2" size={12} className="animate-spin" />
-              <span>Downloading...</span>
-            </>
-          ) : (
-            <>
-              <Icon name="download" size={12} />
-              <span>Download Model ({downloadSize})</span>
-            </>
-          )}
-        </Button>
       )}
 
       {success && (
@@ -257,10 +255,11 @@ const ModelDownloader = ({
           confirmStyle="error"
           isLightBackground={isLightBackground}
           onConfirm={confirmDelete}
+          onConfirmComplete={() => setShowDeleteDialog(false)}
           onCancel={() => setShowDeleteDialog(false)}
         />
       )}
-    </Card>
+    </SettingsListItem>
   );
 };
 

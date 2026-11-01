@@ -1322,6 +1322,7 @@ export function createLlamaServerManager({
   function getStatus() {
     return {
       build: runtimeBuild,
+      recommendedBuild: RUNTIME_MANIFEST.build,
       platformKey: getPlatformKey(),
       installedBackends: Object.entries(RUNTIME_MANIFEST.targets)
         .flatMap(([platformKey, targetEntry]) =>

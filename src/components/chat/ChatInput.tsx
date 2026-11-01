@@ -697,7 +697,14 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
     );
 
     useEffect(() => {
-      if (effectiveIsVisible && textareaRef.current && !isVoiceMode) {
+      if (
+        effectiveIsVisible &&
+        textareaRef.current &&
+        !isVoiceMode &&
+        !isSettingsPanelOpen &&
+        !isHistoryPanelOpen &&
+        !isQuickPanelOpen
+      ) {
         textareaRef.current.focus();
         adjustTextareaHeight();
         Logger.log("ChatInput", "Focused textarea");
@@ -706,7 +713,14 @@ const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(
         setAttachedAudios([]);
         setMessage("");
       }
-    }, [effectiveIsVisible, isVoiceMode, setMessage]);
+    }, [
+      effectiveIsVisible,
+      isVoiceMode,
+      setMessage,
+      isSettingsPanelOpen,
+      isHistoryPanelOpen,
+      isQuickPanelOpen,
+    ]);
 
     useEffect(() => {
       adjustTextareaHeight();

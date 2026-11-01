@@ -6,6 +6,7 @@ import { useEmbedHost } from "../../embed/EmbedHostContext";
 import { useVAssistReactCustomizations } from "../../embed/reactHostCustomizations";
 import { useUIConfig } from "../../hooks/config/useConfigUI";
 import Logger from "../../services/common/LoggerService";
+import { useSettingsTheme } from "../settings/SettingsThemeContext";
 
 type IconName = keyof typeof iconMap;
 type IconContext = "toolbar" | "chat" | "general";
@@ -44,6 +45,7 @@ const Icon = ({
   const { embedConfig, hostId } = useEmbedHost();
   const reactCustomizations = useVAssistReactCustomizations(hostId);
   const uiConfig = useUIConfig();
+  const settingsTheme = useSettingsTheme();
 
   const enableColored = Boolean(uiConfig?.enableColoredIcons);
   const toolbarOnly = Boolean(uiConfig?.enableColoredIconsToolbarOnly);
@@ -51,7 +53,10 @@ const Icon = ({
   const shouldUseColor =
     enableColored && (!toolbarOnly || context === "toolbar");
 
-  const iconColor = getIconColor(name, shouldUseColor);
+  const iconColor =
+    settingsTheme && !shouldUseColor
+      ? "text-current"
+      : getIconColor(name, shouldUseColor);
 
   const hasCustomColor = className.includes("text-");
   const finalClassName = hasCustomColor

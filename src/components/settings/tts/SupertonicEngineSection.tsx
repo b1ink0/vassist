@@ -1,7 +1,9 @@
+import SettingsScrollArea from "../shared/SettingsScrollArea";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../../icons";
 import { useDesktopApi } from "../../../hooks/useDesktopStore";
 import { Button, Select } from "../../ui";
+import SettingsRow from "../../ui/SettingsRow";
 
 interface SetupLogMessage {
   message?: string;
@@ -177,13 +179,13 @@ const SupertonicEngineSection = ({
   };
 
   return (
-    <div className="space-y-3 p-3 rounded-lg bg-white/5 border border-white/10 mt-3">
+    <div className="flex flex-col gap-3 pt-3 settings-section">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-white/90">
+          <p className="text-sm font-medium vassist-text-primary">
             Supertonic 3 Local Voice Engine
           </p>
-          <p className="text-[10px] text-white/50 mt-0.5">
+          <p className="text-[10px] vassist-text-muted pt-0.5">
             Lightning-fast fixed-voice TTS · 31 languages · runs on CPU (~400 MB
             one-time download)
           </p>
@@ -197,7 +199,7 @@ const SupertonicEngineSection = ({
 
       {/* Install section */}
       {(isInstalled !== true || isSetupRunning) && (
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           {!isSetupRunning ? (
             <Button
               onClick={handleInstall}
@@ -226,14 +228,14 @@ const SupertonicEngineSection = ({
                 </Button>
               </div>
               {logs.length > 0 && (
-                <div
+                <SettingsScrollArea
                   ref={logContainerRef}
-                  className="max-h-32 overflow-y-auto p-2 rounded bg-black/30 font-mono text-[10px] text-white/60 whitespace-pre-wrap"
+                  className="max-h-32 overflow-y-auto p-2 rounded bg-black/30 font-mono text-[10px] vassist-text-muted whitespace-pre-wrap"
                 >
                   {logs.slice(-30).map((line, index) => (
                     <div key={`${index}-${line.slice(0, 10)}`}>{line}</div>
                   ))}
-                </div>
+                </SettingsScrollArea>
               )}
             </>
           )}
@@ -259,11 +261,8 @@ const SupertonicEngineSection = ({
 
       {/* Voice / language / quality pickers — only meaningful once installed */}
       {engine === "supertonic" && isInstalled === true && (
-        <div className="space-y-3 pt-1 border-t border-white/10">
-          <div>
-            <label className="block text-xs font-medium text-white/90 mb-1">
-              Voice
-            </label>
+        <div className="flex flex-col gap-3 pt-1">
+          <SettingsRow label="Voice" layout="stacked">
             <Select
               data-testid="supertonic-voice-select"
               variant={isLightBackground ? "dark" : "default"}
@@ -271,11 +270,8 @@ const SupertonicEngineSection = ({
               onChange={(e) => onChange({ supertonicVoice: e.target.value })}
               options={SUPERTONIC_VOICES}
             />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-white/90 mb-1">
-              Language
-            </label>
+          </SettingsRow>
+          <SettingsRow label="Language" layout="stacked">
             <Select
               data-testid="supertonic-lang-select"
               variant={isLightBackground ? "dark" : "default"}
@@ -283,11 +279,8 @@ const SupertonicEngineSection = ({
               onChange={(e) => onChange({ supertonicLang: e.target.value })}
               options={SUPERTONIC_LANGUAGES}
             />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-white/90 mb-1">
-              Quality
-            </label>
+          </SettingsRow>
+          <SettingsRow label="Quality" layout="stacked">
             <Select
               data-testid="supertonic-steps-select"
               variant={isLightBackground ? "dark" : "default"}
@@ -297,7 +290,7 @@ const SupertonicEngineSection = ({
               }
               options={SUPERTONIC_STEPS}
             />
-          </div>
+          </SettingsRow>
         </div>
       )}
     </div>

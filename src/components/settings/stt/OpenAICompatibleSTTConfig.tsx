@@ -44,7 +44,7 @@ const OpenAICompatibleSTTConfig = ({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {/* Endpoint URL */}
       <SettingsRow
         label="Endpoint URL *"
@@ -93,10 +93,7 @@ const OpenAICompatibleSTTConfig = ({
       </SettingsRow>
 
       {/* Language */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">
-          Language
-        </label>
+      <SettingsRow label="Language" layout="stacked">
         <Select
           value={config.language || "auto"}
           onChange={(e) => handleFieldChange("language", e.target.value)}
@@ -114,7 +111,7 @@ const OpenAICompatibleSTTConfig = ({
             { value: "ko", label: "Korean" },
           ]}
         />
-      </div>
+      </SettingsRow>
     </div>
   );
 };

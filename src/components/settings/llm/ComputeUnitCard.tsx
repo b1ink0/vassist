@@ -68,11 +68,11 @@ const ComputeUnitCard = ({
       .filter((name): name is string => Boolean(name));
 
   return (
-    <div className="space-y-2 p-3 rounded-lg bg-white/5 border border-white/10">
+    <div className="flex flex-col gap-2 settings-section">
       <div className="flex items-center gap-2">
-        <Icon name="stats" size={14} className="text-white/70" />
-        <h4 className="text-sm font-semibold text-white/90">Compute Unit</h4>
-        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-white/10 text-white/50">
+        <Icon name="stats" size={14} className="vassist-text-secondary" />
+        <h4 className="settings-group-heading">Compute Unit</h4>
+        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-current/10 vassist-text-muted">
           Snapdragon
         </span>
       </div>
@@ -86,14 +86,14 @@ const ComputeUnitCard = ({
         className="min-h-[32px]"
       />
 
-      <p className="text-xs text-white/50">{activeHint}</p>
+      <p className="text-xs vassist-text-muted">{activeHint}</p>
 
       {backends && (
         <div className="flex flex-wrap gap-1 pt-1">
           {parseBackends(backends).map((name) => (
             <span
               key={name}
-              className="px-1.5 py-0.5 rounded text-[10px] bg-white/10 text-white/60"
+              className="px-1.5 py-0.5 rounded text-[10px] bg-current/10 vassist-text-muted"
             >
               {name}
             </span>
@@ -101,7 +101,7 @@ const ComputeUnitCard = ({
         </div>
       )}
 
-      <p className="text-[10px] text-white/40">
+      <p className="text-[10px] vassist-text-muted">
         Applies on the next message (model reloads automatically).
       </p>
     </div>

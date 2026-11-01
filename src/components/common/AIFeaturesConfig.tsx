@@ -11,7 +11,8 @@ import StreamingContainer from "./StreamingContainer";
 import StreamingText from "./StreamingText";
 import { TranslationLanguages } from "../../config/aiConfig";
 import { cn } from "../../utils/cn";
-import { Button, Card, SettingsRow } from "../ui";
+import { Button, Select, SettingsRow } from "../ui";
+import SettingsGroup from "../settings/shared/SettingsGroup";
 
 type TestStatus = "idle" | "loading" | "success" | "error";
 
@@ -109,7 +110,7 @@ const TestResult = ({ status, message }: TestResultState) => {
 
   return (
     <StreamingContainer speed="fast" active={!!message}>
-      <div className={cn("mt-2 rounded-lg p-2 text-sm", bgClass)}>
+      <div className={cn("pt-2 rounded-lg p-2 text-sm", bgClass)}>
         <span className={textClass} style={{ whiteSpace: "pre-wrap" }}>
           {status === "loading" ? (
             <StreamingText
@@ -301,10 +302,10 @@ const AIFeaturesConfig = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       {/* Chrome AI Flags Warning - Only show for Chrome < 138 */}
       {isChromeAI && needsFlags && (
-        <div className="space-y-3 p-2 md:p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+        <div className="flex flex-col gap-3 p-2 md:p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
           <div className="flex items-center gap-2">
             <span className="text-lg">ℹ️</span>
             <h4 className="text-sm font-semibold text-blue-300">
@@ -315,7 +316,7 @@ const AIFeaturesConfig = ({
             To use AI Features with Chrome AI, you need to enable these
             additional flags:
           </p>
-          <div className="space-y-2 text-xs">
+          <div className="flex flex-col gap-2 text-xs">
             <div className="flex items-center justify-between p-2 rounded bg-blue-500/10">
               <code className="text-blue-200">translation-api</code>
               <button
@@ -373,7 +374,7 @@ const AIFeaturesConfig = ({
             <p className="text-xs text-blue-200">
               <span className="font-semibold">Instructions:</span>
             </p>
-            <ol className="list-decimal list-inside text-xs text-blue-200 space-y-1 mt-1">
+            <ol className="list-decimal list-inside text-xs text-blue-200 flex flex-col gap-1 pt-1">
               <li>Click "Copy Flag URL" buttons above to copy each flag URL</li>
               <li>Paste each URL in your Chrome address bar and press Enter</li>
               <li>
@@ -388,8 +389,8 @@ const AIFeaturesConfig = ({
       )}
 
       {/* Translator */}
-      <div className="space-y-3" data-testid="ai-feature-translator-section">
-        <Card variant="default">
+      <SettingsGroup data-testid="ai-feature-translator-section">
+        <React.Fragment>
           <SettingsRow label="Translator">
             <Toggle
               id="translator-enabled"
@@ -397,45 +398,42 @@ const AIFeaturesConfig = ({
               onChange={(checked) => onFeatureChange?.("translator", checked)}
             />
           </SettingsRow>
-        </Card>
+        </React.Fragment>
         {features.translator?.enabled !== false && (
-          <div className="ml-7 space-y-3">
-            <p className="text-xs text-white/50">
+          <div className="p-3 flex flex-col gap-3">
+            <p className="text-xs vassist-text-muted">
               Translate text between multiple languages
             </p>
 
             {/* Target Language Selection */}
-            <div className="space-y-1.5">
+            <div className="flex flex-col gap-1.5">
               <label
                 htmlFor="translator-target-lang"
-                className="block text-xs font-medium text-white/70"
+                className="block text-xs font-medium vassist-text-secondary"
               >
                 Default Translation Language
               </label>
-              <select
+              <Select
                 id="translator-target-lang"
+                aria-label="Default translation language"
                 value={targetLanguage}
-                onChange={(e) => handleTargetLanguageChange(e.target.value)}
-                className="w-full px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white text-xs"
-              >
-                {TranslationLanguages.map((lang) => (
-                  <option
-                    key={lang.code}
-                    value={lang.code}
-                    className="bg-gray-900 text-white"
-                  >
-                    {lang.name}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-white/40">
+                onChange={(event) =>
+                  handleTargetLanguageChange(event.target.value)
+                }
+                variant={isLightBackground ? "dark" : "default"}
+                options={TranslationLanguages.map((lang) => ({
+                  value: lang.code,
+                  label: lang.name,
+                }))}
+              />
+              <p className="text-xs vassist-text-muted">
                 Text will be translated to this language when testing
               </p>
             </div>
 
             {showTesting && (
               <>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="flex gap-2">
                   <Button
                     data-testid="ai-feature-translator-test"
                     variant={isLightBackground ? "dark" : "default"}
@@ -468,14 +466,11 @@ const AIFeaturesConfig = ({
             )}
           </div>
         )}
-      </div>
+      </SettingsGroup>
 
       {/* Language Detector */}
-      <div
-        className="space-y-3"
-        data-testid="ai-feature-language-detector-section"
-      >
-        <Card variant="default">
+      <SettingsGroup data-testid="ai-feature-language-detector-section">
+        <React.Fragment>
           <SettingsRow label="Language Detector">
             <Toggle
               id="language-detector-enabled"
@@ -485,19 +480,19 @@ const AIFeaturesConfig = ({
               }
             />
           </SettingsRow>
-        </Card>
+        </React.Fragment>
         {features.languageDetector?.enabled !== false && (
-          <div className="ml-7 space-y-2">
-            <p className="text-xs text-white/50">
+          <div className="p-3 flex flex-col gap-2">
+            <p className="text-xs vassist-text-muted">
               Automatically detect the language of text with confidence scores
             </p>
 
             {showTesting && (
               <>
-                <div className="space-y-1.5">
+                <div className="flex flex-col gap-1.5">
                   <label
                     htmlFor="language-detector-input"
-                    className="block text-xs font-medium text-white/70"
+                    className="block text-xs font-medium vassist-text-secondary"
                   >
                     Test Text
                   </label>
@@ -507,11 +502,11 @@ const AIFeaturesConfig = ({
                     value={languageDetectorInput}
                     onChange={(e) => setLanguageDetectorInput(e.target.value)}
                     placeholder="Enter text to detect language..."
-                    className="w-full px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white text-xs"
+                    className="w-full px-3 py-1.5 rounded-lg bg-current/5 border border-current/10 vassist-text-primary text-xs"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="flex gap-2">
                   <Button
                     data-testid="ai-feature-language-detector-test"
                     variant={isLightBackground ? "dark" : "default"}
@@ -544,11 +539,11 @@ const AIFeaturesConfig = ({
             )}
           </div>
         )}
-      </div>
+      </SettingsGroup>
 
       {/* Summarizer */}
-      <div className="space-y-3" data-testid="ai-feature-summarizer-section">
-        <Card variant="default">
+      <SettingsGroup data-testid="ai-feature-summarizer-section">
+        <React.Fragment>
           <SettingsRow label="Summarizer">
             <Toggle
               id="summarizer-enabled"
@@ -556,16 +551,16 @@ const AIFeaturesConfig = ({
               onChange={(checked) => onFeatureChange?.("summarizer", checked)}
             />
           </SettingsRow>
-        </Card>
+        </React.Fragment>
         {features.summarizer?.enabled !== false && (
-          <div className="ml-7 space-y-3">
-            <p className="text-xs text-white/50">
+          <div className="p-3 flex flex-col gap-3">
+            <p className="text-xs vassist-text-muted">
               Generate different types of summaries from long text
             </p>
 
             {showTesting && (
               <>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="flex gap-2">
                   <Button
                     data-testid="ai-feature-summarizer-test"
                     variant={isLightBackground ? "dark" : "default"}
@@ -598,11 +593,11 @@ const AIFeaturesConfig = ({
             )}
           </div>
         )}
-      </div>
+      </SettingsGroup>
 
       {/* Rewriter */}
-      <div className="space-y-3" data-testid="ai-feature-rewriter-section">
-        <Card variant="default">
+      <SettingsGroup data-testid="ai-feature-rewriter-section">
+        <React.Fragment>
           <SettingsRow label="Text Rewriter">
             <Toggle
               id="rewriter-enabled"
@@ -610,16 +605,16 @@ const AIFeaturesConfig = ({
               onChange={(checked) => onFeatureChange?.("rewriter", checked)}
             />
           </SettingsRow>
-        </Card>
+        </React.Fragment>
         {features.rewriter?.enabled !== false && (
-          <div className="ml-7 space-y-3">
-            <p className="text-xs text-white/50">
+          <div className="p-3 flex flex-col gap-3">
+            <p className="text-xs vassist-text-muted">
               Rewrite text in different tones and styles
             </p>
 
             {showTesting && (
               <>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="flex gap-2">
                   <Button
                     data-testid="ai-feature-rewriter-test"
                     variant={isLightBackground ? "dark" : "default"}
@@ -650,11 +645,11 @@ const AIFeaturesConfig = ({
             )}
           </div>
         )}
-      </div>
+      </SettingsGroup>
 
       {/* Writer */}
-      <div className="space-y-3" data-testid="ai-feature-writer-section">
-        <Card variant="default">
+      <SettingsGroup data-testid="ai-feature-writer-section">
+        <React.Fragment>
           <SettingsRow label="Content Writer">
             <Toggle
               id="writer-enabled"
@@ -662,16 +657,16 @@ const AIFeaturesConfig = ({
               onChange={(checked) => onFeatureChange?.("writer", checked)}
             />
           </SettingsRow>
-        </Card>
+        </React.Fragment>
         {features.writer?.enabled !== false && (
-          <div className="ml-7 space-y-3">
-            <p className="text-xs text-white/50">
+          <div className="p-3 flex flex-col gap-3">
+            <p className="text-xs vassist-text-muted">
               Generate new content from prompts with different tones and lengths
             </p>
 
             {showTesting && (
               <>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="flex gap-2">
                   <Button
                     data-testid="ai-feature-writer-test"
                     variant={isLightBackground ? "dark" : "default"}
@@ -702,7 +697,7 @@ const AIFeaturesConfig = ({
             )}
           </div>
         )}
-      </div>
+      </SettingsGroup>
     </div>
   );
 };

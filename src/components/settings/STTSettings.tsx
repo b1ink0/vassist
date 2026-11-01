@@ -27,7 +27,8 @@ import DesktopSTTConfig from "./stt/DesktopSTTConfig";
 import AndroidLocalSTTConfig from "./stt/AndroidLocalSTTConfig";
 import Toggle from "../common/Toggle";
 import { Icon } from "../icons";
-import { Button, Input, Select, Card, SettingsRow } from "../ui";
+import { Button, Input, Select, SettingsRow } from "../ui";
+import SettingsGroup from "./shared/SettingsGroup";
 
 interface STTSettingsProps {
   isLightBackground?: boolean;
@@ -228,8 +229,8 @@ const STTSettings = ({
   const renderRemoteProfileBar = (
     provider: STTRemoteProviderProfile["provider"],
   ) => (
-    <div className="space-y-2">
-      <label className="block text-sm font-medium text-white/90">
+    <div className="flex flex-col gap-2">
+      <label className="block text-sm font-medium vassist-text-primary">
         Saved Backends
       </label>
       <Input
@@ -240,7 +241,7 @@ const STTSettings = ({
         variant={isLightBackground ? "dark" : "default"}
         size="xs"
       />
-      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+      <div className="flex flex-wrap items-center gap-2 [&>button:first-child]:min-w-0 [&>button:first-child]:flex-1">
         <Select
           value={selectedProfileId}
           onChange={(event) =>
@@ -334,13 +335,9 @@ const STTSettings = ({
   }, []);
 
   return (
-    <div className="space-y-6">
-      <h3 className="text-base font-semibold text-white mb-4">
-        STT Configuration
-      </h3>
-
+    <div className="flex min-w-0 flex-col gap-4">
       {/* Enable STT Toggle */}
-      <Card variant="default">
+      <section className="settings-section">
         <SettingsRow label="Enable Speech-to-Text" targetId="stt.enabled">
           <Toggle
             id="enable-stt"
@@ -349,10 +346,10 @@ const STTSettings = ({
             onChange={(checked) => updateSTTConfig("enabled", checked)}
           />
         </SettingsRow>
-      </Card>
+      </section>
 
       {/* Provider Selection */}
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2">
         <SettingsRow
           label="Provider"
           targetId="stt.provider.select"
@@ -370,7 +367,7 @@ const STTSettings = ({
           />
         </SettingsRow>
         {isAndroid && (
-          <p className="text-xs text-white/50">
+          <p className="text-xs vassist-text-muted">
             Using native Android STT via local Whisper model
           </p>
         )}
@@ -405,7 +402,7 @@ const STTSettings = ({
           {/* Desktop Local STT Configuration */}
           {sttConfig.provider === STTProviders.DESKTOP_LOCAL && isDesktop && (
             <>
-              <h4 className="text-sm font-semibold text-white/90">
+              <h4 className="settings-group-heading">
                 Desktop Local STT (Whisper)
               </h4>
               <DesktopSTTConfig
@@ -473,15 +470,12 @@ const STTSettings = ({
       )}
 
       {/* Actions */}
-      <div className="space-y-3 pt-4">
+      <SettingsGroup className="gap-3 p-3">
         {/* Microphone Selector (Desktop mode only) */}
         {isDesktop &&
           sttConfig.provider === STTProviders.DESKTOP_LOCAL &&
           devices.length > 0 && (
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-white/90">
-                Microphone
-              </label>
+            <SettingsRow label="Microphone" layout="stacked">
               <Select
                 value={selectedDeviceId}
                 onChange={(e) => setSelectedDeviceId(e.target.value)}
@@ -491,7 +485,7 @@ const STTSettings = ({
                   label: d.label || `Microphone ${d.deviceId.substring(0, 8)}`,
                 }))}
               />
-            </div>
+            </SettingsRow>
           )}
 
         <Button
@@ -501,7 +495,7 @@ const STTSettings = ({
         >
           Test Recording (3s)
         </Button>
-      </div>
+      </SettingsGroup>
     </div>
   );
 };

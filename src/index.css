@@ -96,6 +96,7 @@
 @import "./styles/ui-effects.css";
 @import "./styles/markdown.css";
 @import "./styles/streaming-animations.css";
+@import "./styles/settings.css";
 
 :root {
   --vassist-font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;

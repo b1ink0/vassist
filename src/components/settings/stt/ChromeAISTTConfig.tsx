@@ -9,6 +9,8 @@ import { ChromeAILanguages } from "../../../config/aiConfig";
 import StatusMessage from "../../common/StatusMessage";
 import Logger from "../../../services/common/LoggerService";
 import { Button, Select } from "../../ui";
+import SettingsDisclosure from "../shared/SettingsDisclosure";
+import SettingsRow from "../../ui/SettingsRow";
 
 interface ChromeAISTTConfigShape {
   outputLanguage?: string;
@@ -59,14 +61,14 @@ const ChromeAISTTConfig = ({
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {/* Info Banner */}
-      <div className="mt-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+      <div className="pt-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
         <div className="flex items-start gap-2">
           <Icon
             name="ai"
             size={18}
-            className="text-blue-400 flex-shrink-0 mt-0.5"
+            className="text-blue-400 flex-shrink-0 pt-0.5"
           />
           <p className="text-xs text-blue-300">
             <span className="font-semibold">Chrome Built-in AI Multimodal</span>{" "}
@@ -77,15 +79,15 @@ const ChromeAISTTConfig = ({
       </div>
 
       {/* Availability Status */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">
+      <div className="flex flex-col gap-2">
+        <label className="block text-sm font-medium vassist-text-primary">
           Status
         </label>
-        <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+        <div className="settings-section">
           {!chromeAiStatus || chromeAiStatus.checking ? (
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-              <span className="text-xs text-white/70">
+              <span className="text-xs vassist-text-secondary">
                 {!chromeAiStatus ? "Checking availability..." : "Rechecking..."}
               </span>
             </div>
@@ -94,13 +96,15 @@ const ChromeAISTTConfig = ({
               <StatusMessage
                 message={chromeAiStatus.message}
                 isLightBackground={isLightBackground}
-                className="mb-2"
+                className="pb-2"
               />
-              <p className="text-xs text-white/60">{chromeAiStatus.details}</p>
+              <p className="text-xs vassist-text-muted">
+                {chromeAiStatus.details}
+              </p>
 
               {/* Download Progress */}
               {chromeAiStatus.downloading && (
-                <div className="mt-3 space-y-2">
+                <div className="pt-3 flex flex-col gap-2">
                   <div className="p-2 rounded bg-yellow-500/10 border border-yellow-500/20">
                     <p className="text-xs text-yellow-300">
                       Download in progress. For real-time progress, visit{" "}
@@ -125,7 +129,7 @@ const ChromeAISTTConfig = ({
                   <Button
                     onClick={onStartDownload}
                     variant={isLightBackground ? "dark" : "default"}
-                    className="mt-3 text-xs w-full flex items-center justify-center gap-2"
+                    className="pt-3 text-xs w-full flex items-center justify-center gap-2"
                   >
                     <Icon name="download" size={14} />
                     <span>Start Model Download</span>
@@ -137,7 +141,7 @@ const ChromeAISTTConfig = ({
                 <button
                   onClick={onCheckStatus}
                   disabled={chromeAiStatus.checking}
-                  className="mt-2 text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 disabled:opacity-50"
+                  className="pt-2 text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 disabled:opacity-50"
                 >
                   <Icon
                     name="refresh"
@@ -155,10 +159,11 @@ const ChromeAISTTConfig = ({
       </div>
 
       {/* Output Language */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-white/90">
-          Output Language
-        </label>
+      <SettingsRow
+        label="Output Language"
+        description="Language for transcription output. Chrome AI currently supports: English, Spanish, and Japanese."
+        layout="stacked"
+      >
         <Select
           value={
             config.outputLanguage ||
@@ -178,25 +183,19 @@ const ChromeAISTTConfig = ({
             label: `${lang.name} (${lang.code})`,
           }))}
         />
-        <p className="text-xs text-white/50">
-          Language for transcription output. Chrome AI currently supports:
-          English, Spanish, and Japanese.
-        </p>
-      </div>
+      </SettingsRow>
 
       {/* Required Flags */}
-      <details className="group">
-        <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
-          <span>Required Chrome Flags</span>
-          <Icon
-            name="arrow-down"
-            size={14}
-            className="group-open:rotate-180 transition-transform"
-          />
-        </summary>
-        <div className="mt-2 p-3 rounded-lg bg-white/5 border border-white/10 space-y-2 text-xs">
+      <SettingsDisclosure
+        title={
+          <>
+            <span>Required Chrome Flags</span>
+          </>
+        }
+      >
+        <div className="pt-2 flex flex-col gap-2 text-xs settings-section">
           <div className="flex items-center justify-between">
-            <code className="text-white/70">
+            <code className="vassist-text-secondary">
               optimization-guide-on-device-model
             </code>
             <button
@@ -211,7 +210,7 @@ const ChromeAISTTConfig = ({
             </button>
           </div>
           <div className="flex items-center justify-between">
-            <code className="text-white/70">
+            <code className="vassist-text-secondary">
               prompt-api-for-gemini-nano-multimodal-input
             </code>
             <button
@@ -225,13 +224,13 @@ const ChromeAISTTConfig = ({
               Copy
             </button>
           </div>
-          <p className="text-white/50 mt-2">
+          <p className="vassist-text-muted pt-2">
             Enable these flags and restart Chrome, then visit{" "}
             <code className="text-blue-300">chrome://components</code> to
             download Gemini Nano
           </p>
         </div>
-      </details>
+      </SettingsDisclosure>
     </div>
   );
 };

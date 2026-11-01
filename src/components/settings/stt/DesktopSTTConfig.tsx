@@ -1,3 +1,4 @@
+import SettingsScrollArea from "../shared/SettingsScrollArea";
 import Dialog from "../../common/Dialog";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../../icons";
@@ -5,6 +6,8 @@ import { useDesktopApi } from "../../../hooks/useDesktopStore";
 import { cn } from "../../../utils/cn";
 import { Button, Input, Select } from "../../ui";
 import { DEFAULT_ENDPOINTS } from "../../../config/serviceEndpoints";
+import SettingsDisclosure from "../shared/SettingsDisclosure";
+import SettingsRow from "../../ui/SettingsRow";
 
 interface DesktopSTTConfigShape {
   endpoint?: string;
@@ -363,16 +366,16 @@ const DesktopSTTConfig = ({
   const canManageSetup = Boolean(whisperSetup);
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       {/* Info Banner */}
-      <div className="p-3 rounded-lg bg-white/10 border border-white/20">
+      <div className="p-3 rounded-lg bg-current/10 border border-current/20">
         <div className="flex items-start gap-2">
           <Icon
             name="microphone"
             size={18}
-            className="text-white/90 shrink-0 mt-0.5"
+            className="vassist-text-primary shrink-0 pt-0.5"
           />
-          <p className="text-xs text-white/90">
+          <p className="text-xs vassist-text-primary">
             <span className="font-semibold">Desktop Local STT</span> - On-device
             speech recognition using Whisper via Electron!
           </p>
@@ -380,15 +383,15 @@ const DesktopSTTConfig = ({
       </div>
 
       {/* Status */}
-      <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-        <div className="flex items-center gap-2 mb-2">
+      <div className="settings-section">
+        <div className="flex items-center gap-2 pb-2">
           <div
             className={cn(
               "w-2 h-2 rounded-full",
               isSelectedEngineInstalled ? "bg-green-400" : "bg-yellow-400",
             )}
           ></div>
-          <span className="text-sm font-semibold text-white/90">
+          <span className="text-sm font-semibold vassist-text-primary">
             {config.engine === "whispercpp"
               ? isWhisperCppInstalled
                 ? "whisper.cpp runtime is ready"
@@ -398,7 +401,7 @@ const DesktopSTTConfig = ({
                 : "faster-whisper setup required"}
           </span>
         </div>
-        <p className="text-xs text-white/60">
+        <p className="text-xs vassist-text-muted">
           Model: faster-whisper {config.model || "tiny"} • Local speech
           recognition
         </p>
@@ -406,7 +409,7 @@ const DesktopSTTConfig = ({
 
       {/* Setup actions */}
       {config.engine !== "whispercpp" && canManageSetup && (
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <div className="flex gap-2">
             <Button
               onClick={handleStartSetup}
@@ -465,11 +468,11 @@ const DesktopSTTConfig = ({
             setupError ||
             setupComplete ||
             logs.length > 0) && (
-            <div className="space-y-2">
-              <label className="block text-xs font-medium text-white/80">
+            <div className="flex flex-col gap-2">
+              <label className="block text-xs font-medium vassist-text-primary">
                 Setup Log
               </label>
-              <div
+              <SettingsScrollArea
                 ref={logsContainerRef}
                 className={cn(
                   "glass-input h-40 overflow-y-auto p-2 font-mono text-[11px] whitespace-pre-wrap",
@@ -477,11 +480,11 @@ const DesktopSTTConfig = ({
                 )}
               >
                 {logs.map((log, index) => (
-                  <div key={index} className="text-white/80">
+                  <div key={index} className="vassist-text-primary">
                     {log}
                   </div>
                 ))}
-              </div>
+              </SettingsScrollArea>
 
               {setupComplete && (
                 <div className="p-2 bg-green-500/10 border border-green-500/30 rounded-lg">
@@ -500,7 +503,7 @@ const DesktopSTTConfig = ({
                     <Icon name="alert-circle" size={14} />
                     <span className="text-xs font-medium">Setup failed</span>
                   </div>
-                  <p className="text-xs text-red-300/80 mt-1">{setupError}</p>
+                  <p className="text-xs text-red-300/80 pt-1">{setupError}</p>
                 </div>
               )}
             </div>
@@ -509,11 +512,12 @@ const DesktopSTTConfig = ({
       )}
 
       {/* Engine selection and runtime setup are available in both setup and settings. */}
-      <div className="space-y-3 p-3 rounded-lg bg-white/5 border border-white/10">
-        <div>
-          <label className="block text-xs font-medium text-white/90 mb-1">
-            STT Engine
-          </label>
+      <div className="flex flex-col gap-3 settings-section">
+        <SettingsRow
+          label="STT Engine"
+          description="Both engines can be installed side by side — this selects which one serves speech-to-text."
+          layout="stacked"
+        >
           <Select
             value={config.engine || "python"}
             onChange={(e) => {
@@ -534,17 +538,13 @@ const DesktopSTTConfig = ({
               },
             ]}
           />
-          <p className="text-[10px] text-white/50 mt-1">
-            Both engines can be installed side by side — this selects which one
-            serves speech-to-text.
-          </p>
-        </div>
+        </SettingsRow>
 
         {config.engine === "whispercpp" && (
-          <div className="space-y-4 pt-1">
+          <div className="flex flex-col gap-4 pt-1">
             {/* Runtime variants — same card language as the Android STT downloader */}
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-white/80">
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-medium vassist-text-primary">
                 Runtime{cppStatus?.running ? " (server running)" : ""}
               </p>
               {(cppStatus?.variants ?? []).map((variant) => {
@@ -554,17 +554,19 @@ const DesktopSTTConfig = ({
                   <div
                     key={variant.id}
                     className={cn(
-                      "p-2 md:p-3 rounded-lg bg-white/5 border transition-colors",
-                      installingThis ? "border-white/30" : "border-white/10",
+                      "p-2 md:p-3 rounded-lg bg-current/5 border transition-colors",
+                      installingThis
+                        ? "border-current/30"
+                        : "border-current/10",
                     )}
                   >
-                    <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center justify-between pb-1.5">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-sm font-medium text-white/90 truncate">
+                        <span className="text-sm font-medium vassist-text-primary truncate">
                           {variant.label}
                         </span>
                         {variant.id === config.whisperCppVariant && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-white/10 text-white/70 flex-shrink-0">
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-current/10 vassist-text-secondary flex-shrink-0">
                             Active
                           </span>
                         )}
@@ -572,25 +574,25 @@ const DesktopSTTConfig = ({
                     </div>
 
                     {installingThis ? (
-                      <div className="space-y-1.5">
+                      <div className="flex flex-col gap-1.5">
                         <div className="flex justify-between text-xs">
-                          <span className="text-white/70">
+                          <span className="vassist-text-secondary">
                             {cppProgress.replace(/\s*\d+%$/, "")}
                           </span>
-                          <span className="text-white/70">
+                          <span className="vassist-text-secondary">
                             {cppProgressPct != null ? `${cppProgressPct}%` : ""}
                           </span>
                         </div>
-                        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                        <div className="w-full h-1.5 bg-current/10 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-white/40 transition-all duration-300"
+                            className="h-full bg-current/40 transition-all duration-300"
                             style={{ width: `${cppProgressPct ?? 0}%` }}
                           />
                         </div>
                       </div>
                     ) : (
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-white/50 truncate">
+                        <span className="text-xs vassist-text-muted truncate">
                           {variant.installed
                             ? "Installed"
                             : `Download ${variant.sizeHint}`}
@@ -602,7 +604,7 @@ const DesktopSTTConfig = ({
                                 onClick={() => {
                                   onChange({ whisperCppVariant: variant.id });
                                 }}
-                                className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white/90 text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0"
+                                className="px-2 py-1 rounded bg-current/10 hover:bg-current/20 vassist-text-primary text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0"
                               >
                                 <Icon name="check" size={11} />
                                 <span>Use</span>
@@ -627,7 +629,7 @@ const DesktopSTTConfig = ({
                               }
                             }}
                             disabled={cppInstalling}
-                            className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white/90 text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0 disabled:opacity-40"
+                            className="px-2 py-1 rounded bg-current/10 hover:bg-current/20 vassist-text-primary text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0 disabled:opacity-40"
                           >
                             <Icon name="download" size={11} />
                             <span>
@@ -641,34 +643,34 @@ const DesktopSTTConfig = ({
                 );
               })}
               {(cppLog.length > 0 || cppProgress) && (
-                <div className="max-h-24 overflow-y-auto p-2 rounded bg-black/30 font-mono text-[10px] text-white/60 whitespace-pre-wrap">
+                <SettingsScrollArea className="max-h-24 overflow-y-auto p-2 rounded bg-black/30 font-mono text-[10px] vassist-text-muted whitespace-pre-wrap">
                   {cppLog.slice(-12).map((line, index) => (
                     <div key={`${index}-${line.slice(0, 8)}`}>{line}</div>
                   ))}
-                </div>
+                </SettingsScrollArea>
               )}
             </div>
 
             {/* GGML models */}
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-white/80">Models</p>
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-medium vassist-text-primary">Models</p>
               {(cppStatus?.models ?? []).map((model) => {
                 const progress = downloadingModels[model.id];
                 return (
                   <div
                     key={model.id}
                     className={cn(
-                      "p-2 md:p-3 rounded-lg bg-white/5 border transition-colors",
-                      progress ? "border-white/30" : "border-white/10",
+                      "p-2 md:p-3 rounded-lg bg-current/5 border transition-colors",
+                      progress ? "border-current/30" : "border-current/10",
                     )}
                   >
-                    <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center justify-between pb-1.5">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-sm font-medium text-white/90 truncate">
+                        <span className="text-sm font-medium vassist-text-primary truncate">
                           {model.label}
                         </span>
                         {model.active && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-white/10 text-white/70 flex-shrink-0">
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-current/10 vassist-text-secondary flex-shrink-0">
                             Active
                           </span>
                         )}
@@ -676,20 +678,20 @@ const DesktopSTTConfig = ({
                     </div>
 
                     {progress ? (
-                      <div className="space-y-1.5">
+                      <div className="flex flex-col gap-1.5">
                         <div className="flex justify-between text-xs">
-                          <span className="text-white/70">
+                          <span className="vassist-text-secondary">
                             {progress.replace(/\s*\d+%$/, "")}
                           </span>
-                          <span className="text-white/70">
+                          <span className="vassist-text-secondary">
                             {modelProgressPct[model.id] != null
                               ? `${modelProgressPct[model.id]}%`
                               : ""}
                           </span>
                         </div>
-                        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                        <div className="w-full h-1.5 bg-current/10 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-white/40 transition-all duration-300"
+                            className="h-full bg-current/40 transition-all duration-300"
                             style={{
                               width: `${modelProgressPct[model.id] ?? 0}%`,
                             }}
@@ -698,7 +700,7 @@ const DesktopSTTConfig = ({
                       </div>
                     ) : (
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-white/50 truncate">
+                        <span className="text-xs vassist-text-muted truncate">
                           {model.downloaded
                             ? `Installed (${(model.sizeBytes / 1024 / 1024).toFixed(0)} MB)`
                             : `Download ${model.sizeHint}`}
@@ -716,7 +718,7 @@ const DesktopSTTConfig = ({
                                 }
                               }}
                               data-testid={`stt-cpp-model-delete-${model.id}`}
-                              className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white/80 text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0"
+                              className="px-2 py-1 rounded bg-current/10 hover:bg-current/20 vassist-text-primary text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0"
                             >
                               <Icon name="trash" size={11} />
                               <span>Delete</span>
@@ -728,7 +730,7 @@ const DesktopSTTConfig = ({
                                   modelId: model.id,
                                 })
                               }
-                              className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white/90 text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0"
+                              className="px-2 py-1 rounded bg-current/10 hover:bg-current/20 vassist-text-primary text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0"
                             >
                               <Icon name="download" size={11} />
                               <span>Download</span>
@@ -746,12 +748,13 @@ const DesktopSTTConfig = ({
       </div>
 
       {/* Core model settings */}
-      <div className="space-y-3 p-3 rounded-lg bg-white/5 border border-white/10">
+      <div className="flex flex-col gap-3 settings-section">
         {config.engine !== "whispercpp" && (
-          <div>
-            <label className="block text-xs font-medium text-white/90 mb-1">
-              Whisper Model
-            </label>
+          <SettingsRow
+            label="Whisper Model"
+            description="Pick multilingual tiny/base for multi-language STT, or *.en for English-only."
+            layout="stacked"
+          >
             <Select
               value={config.model || "tiny"}
               onChange={(e) => handleChange("model", e.target.value)}
@@ -769,17 +772,10 @@ const DesktopSTTConfig = ({
                 { value: "base.en", label: "base.en (English-only, ~140MB)" },
               ]}
             />
-            <p className="text-[10px] text-white/50 mt-1">
-              Pick multilingual tiny/base for multi-language STT, or *.en for
-              English-only.
-            </p>
-          </div>
+          </SettingsRow>
         )}
 
-        <div>
-          <label className="block text-xs font-medium text-white/90 mb-1">
-            Language
-          </label>
+        <SettingsRow label="Language" layout="stacked">
           <Select
             value={config.language || "auto"}
             onChange={(e) => handleChange("language", e.target.value)}
@@ -797,24 +793,23 @@ const DesktopSTTConfig = ({
               { value: "ko", label: "Korean" },
             ]}
           />
-        </div>
+        </SettingsRow>
       </div>
 
       {/* Advanced Config */}
-      <details className="group">
-        <summary className="cursor-pointer text-sm font-medium text-white/90 flex items-center justify-between p-2 rounded hover:bg-white/5">
-          <span>Advanced Settings</span>
-          <Icon
-            name="arrow-down"
-            size={14}
-            className="group-open:rotate-180 transition-transform"
-          />
-        </summary>
-        <div className="mt-2 space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-white/90 mb-1">
-              Endpoint URL
-            </label>
+      <SettingsDisclosure
+        title={
+          <>
+            <span>Advanced Settings</span>
+          </>
+        }
+      >
+        <div className="pt-2 flex flex-col gap-3">
+          <SettingsRow
+            label="Endpoint URL"
+            description="Local AI server endpoint"
+            layout="stacked"
+          >
             <Input
               type="text"
               value={config.endpoint || DEFAULT_ENDPOINTS.desktopLocal}
@@ -822,15 +817,13 @@ const DesktopSTTConfig = ({
               placeholder={DEFAULT_ENDPOINTS.desktopLocal}
               variant={isLightBackground ? "dark" : "default"}
             />
-            <p className="text-[10px] text-white/50 mt-1">
-              Local AI server endpoint
-            </p>
-          </div>
+          </SettingsRow>
 
-          <div>
-            <label className="block text-xs font-medium text-white/90 mb-1">
-              Threads ({config.threads || 4})
-            </label>
+          <SettingsRow
+            label={<>Threads ({config.threads || 4})</>}
+            description="CPU threads for processing"
+            layout="stacked"
+          >
             <Input
               type="number"
               min="1"
@@ -841,12 +834,9 @@ const DesktopSTTConfig = ({
               }
               variant={isLightBackground ? "dark" : "default"}
             />
-            <p className="text-[10px] text-white/50 mt-1">
-              CPU threads for processing
-            </p>
-          </div>
+          </SettingsRow>
         </div>
-      </details>
+      </SettingsDisclosure>
       {pendingDelete && (
         <Dialog
           type="delete"
@@ -854,6 +844,7 @@ const DesktopSTTConfig = ({
           message={`Delete the installed ${pendingDelete} model?`}
           isLightBackground={isLightBackground}
           onCancel={() => setPendingDelete(null)}
+          onConfirmComplete={() => setPendingDelete(null)}
           onConfirm={async () => {
             if (!whisperCpp?.deleteModel)
               throw new Error("Model deletion is unavailable");
@@ -863,7 +854,6 @@ const DesktopSTTConfig = ({
             if (!result.deleted)
               throw new Error("The model could not be deleted");
             refreshCppStatus();
-            setPendingDelete(null);
           }}
         />
       )}

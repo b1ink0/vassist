@@ -41,7 +41,7 @@ const OpenAISTTConfig = ({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {/* API Key */}
       <SettingsRow
         label="API Key *"
